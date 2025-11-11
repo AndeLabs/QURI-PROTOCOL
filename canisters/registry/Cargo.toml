@@ -19,6 +19,7 @@ ic-stable-structures.workspace = true
 # Internal
 quri-types = { path = "../../libs/quri-types" }
 quri-utils = { path = "../../libs/quri-utils" }
+runes-utils = { path = "../../libs/runes-utils" }
 
 # Serialization
 serde.workspace = true
