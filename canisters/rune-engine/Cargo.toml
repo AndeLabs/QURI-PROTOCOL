@@ -36,4 +36,4 @@ sha2.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
-proptest.workspace = true
+# proptest.workspace = true  # Requires rustc 1.82+, temporarily disabled

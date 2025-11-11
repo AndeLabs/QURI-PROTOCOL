@@ -402,12 +402,23 @@ impl EtchingOrchestrator {
 
     /// Generate unique process ID
     fn generate_process_id(&self, caller: &Principal, etching: &RuneEtching) -> String {
+        let timestamp = ic_cdk::api::time();
+        self.generate_process_id_with_time(caller, etching, timestamp)
+    }
+
+    /// Generate unique process ID with specific timestamp (testable)
+    fn generate_process_id_with_time(
+        &self,
+        caller: &Principal,
+        etching: &RuneEtching,
+        timestamp: u64,
+    ) -> String {
         use sha2::{Digest, Sha256};
 
         let mut hasher = Sha256::new();
         hasher.update(caller.as_slice());
         hasher.update(etching.rune_name.as_bytes());
-        hasher.update(&ic_cdk::api::time().to_le_bytes());
+        hasher.update(&timestamp.to_le_bytes());
 
         let hash = hasher.finalize();
         format!("etch_{}", hex::encode(&hash[..16]))
@@ -438,8 +449,17 @@ mod tests {
             terms: None,
         };
 
-        let id1 = orchestrator.generate_process_id(&caller, &etching);
+        let timestamp = 1_000_000_000u64;
+        let id1 = orchestrator.generate_process_id_with_time(&caller, &etching, timestamp);
         assert!(id1.starts_with("etch_"));
         assert_eq!(id1.len(), 5 + 32); // "etch_" + 32 hex chars
+
+        // Different timestamp = different ID
+        let id2 = orchestrator.generate_process_id_with_time(&caller, &etching, timestamp + 1);
+        assert_ne!(id1, id2);
+
+        // Same inputs = same ID
+        let id3 = orchestrator.generate_process_id_with_time(&caller, &etching, timestamp);
+        assert_eq!(id1, id3);
     }
 }
