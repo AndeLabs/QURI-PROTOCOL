@@ -7,7 +7,7 @@ use serde::Serialize;
 mod storable_impl;
 
 /// Bitcoin network types
-#[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+#[derive(CandidType, Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum BitcoinNetwork {
     Mainnet,
     Testnet,
