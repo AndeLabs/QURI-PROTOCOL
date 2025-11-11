@@ -6,6 +6,12 @@ use std::cell::RefCell;
 
 use quri_types::{RegistryEntry, RuneId, RuneMetadata};
 
+mod indexer;
+mod parser;
+mod bitcoin_client;
+
+pub use indexer::{IndexedRune, IndexerConfig, IndexerStats, RuneIdentifier};
+
 // Type aliases
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type RegistryStorage = StableBTreeMap<RuneId, RegistryEntry, Memory>;
@@ -182,6 +188,65 @@ fn get_stats() -> RegistryStats {
 pub struct RegistryStats {
     pub total_runes: u64,
     pub total_volume_24h: u64,
+}
+
+// ============================================================================
+// Indexer APIs
+// ============================================================================
+
+/// Initialize the Bitcoin Runes indexer
+#[update]
+fn init_indexer(config: IndexerConfig) {
+    indexer::init_indexer(config);
+}
+
+/// Get an indexed Rune by identifier
+#[query]
+fn get_indexed_rune(id: RuneIdentifier) -> Option<IndexedRune> {
+    indexer::get_rune(&id)
+}
+
+/// List indexed Runes with pagination
+#[query]
+fn list_indexed_runes(offset: u64, limit: u64) -> Vec<IndexedRune> {
+    indexer::list_runes(offset, limit)
+}
+
+/// Search indexed Runes by name or symbol
+#[query]
+fn search_indexed_runes(query: String) -> Vec<IndexedRune> {
+    indexer::search_runes(query)
+}
+
+/// Get indexer statistics
+#[query]
+fn get_indexer_stats() -> IndexerStats {
+    indexer::get_stats()
+}
+
+/// Manual indexing trigger (for testing/admin)
+#[update]
+async fn index_block_range(start: u64, end: u64) -> Result<u64, String> {
+    let config = indexer::get_config()
+        .ok_or("Indexer not initialized".to_string())?;
+
+    let mut indexed_count = 0u64;
+
+    for height in start..=end {
+        // Fetch block transactions
+        let txs = bitcoin_client::mock_fetch_transactions(height);
+
+        // Parse for runestones
+        let runes = parser::parse_block_for_runestones(txs, height, 0);
+
+        // Store each found rune
+        for rune in runes {
+            indexer::store_rune(rune)?;
+            indexed_count += 1;
+        }
+    }
+
+    Ok(indexed_count)
 }
 
 ic_cdk::export_candid!();
