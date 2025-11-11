@@ -330,7 +330,7 @@ fn check_permission(action: PermissionType) -> bool {
 
 /// Get user statistics
 #[query]
-fn get_user_stats(principal: Principal) -> UserStats {
+fn get_user_stats(_principal: Principal) -> UserStats {
     // In production, this would aggregate data from multiple canisters
     UserStats {
         runes_created: 0,

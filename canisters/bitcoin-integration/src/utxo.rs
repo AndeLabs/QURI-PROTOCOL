@@ -4,7 +4,7 @@ use quri_types::RuneEtching;
 use crate::bitcoin_api;
 
 /// Get UTXOs needed for a Rune etching transaction
-pub async fn get_utxos_for_etching(etching: &RuneEtching) -> Result<Vec<Utxo>, String> {
+pub async fn get_utxos_for_etching(_etching: &RuneEtching) -> Result<Vec<Utxo>, String> {
     // Get the canister's Bitcoin address
     let address = get_canister_address().await?;
 

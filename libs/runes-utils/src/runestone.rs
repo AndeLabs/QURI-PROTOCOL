@@ -1,9 +1,9 @@
 // 🎓 LECCIÓN: Imports y Módulos
 // Importamos Tag desde crate (el root del package runes-utils)
 // porque lo re-exportamos en lib.rs con `pub use tag::Tag;`
-use crate::{EtchingSpec, Runestone, RunesError, Result, Terms, Edict, RuneId, Tag};
+use crate::{Runestone, RunesError, Result, Tag};
 use quri_types::RuneEtching;
-use quri_utils::encoding::{encode_leb128, decode_leb128};
+use quri_utils::encoding::encode_leb128;
 
 /// Build runestone for etching
 pub fn build_etching_runestone(etching: &RuneEtching) -> Result<Vec<u8>> {
@@ -98,6 +98,7 @@ fn encode_rune_name(name: &str) -> Result<u128> {
 }
 
 /// Decode a rune name from an integer
+#[allow(dead_code)]
 fn decode_rune_name(mut value: u128) -> String {
     value += 1;
     let mut name = String::new();
@@ -116,7 +117,7 @@ pub fn parse_runestone(data: &[u8]) -> Result<Runestone> {
     // Parse LEB128 integers from data
     let integers = parse_leb128_sequence(data)?;
 
-    let mut runestone = Runestone {
+    let runestone = Runestone {
         edicts: Vec::new(),
         etching: None,
         mint: None,
@@ -139,7 +140,7 @@ pub fn parse_runestone(data: &[u8]) -> Result<Runestone> {
             break;
         }
 
-        let value = integers[i + 1];
+        let _value = integers[i + 1];
 
         // Convertir el u128 a Tag si es válido
         if let Some(tag) = Tag::from_u128(tag_value) {

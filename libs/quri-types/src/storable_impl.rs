@@ -59,8 +59,7 @@ use ic_stable_structures::Storable;
 use std::borrow::Cow;
 
 use crate::{
-    RegistryEntry, RuneId, RuneMetadata, UserSession, BondingCurve,
-    SessionPermissions, MintTerms
+    RegistryEntry, RuneId, RuneMetadata, UserSession
 };
 
 // ========================================================================
