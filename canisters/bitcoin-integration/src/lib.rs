@@ -1,5 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk_macros::{init, query, update};
+use std::cell::RefCell;
+use std::str::FromStr;
 
 mod bitcoin_api;
 mod ckbtc;
@@ -19,8 +21,6 @@ pub struct Config {
 thread_local! {
     static CONFIG: RefCell<Option<Config>> = RefCell::new(None);
 }
-
-use std::cell::RefCell;
 
 #[init]
 fn init(network: BitcoinNetwork, ckbtc_ledger_id: Principal) {
@@ -63,34 +63,103 @@ async fn get_fee_estimates() -> Result<FeeEstimates, String> {
         .map_err(|e| format!("Failed to get fee estimates: {:?}", e))
 }
 
-/// Etch a new Rune on Bitcoin L1
+/// Select UTXOs for a specific amount
 #[update]
-async fn etch_rune(etching: RuneEtching) -> Result<String, String> {
-    // Validate the etching parameters
+async fn select_utxos(
+    amount_needed: u64,
+    fee_rate: u64,
+) -> Result<utxo::UtxoSelection, String> {
+    let network = get_network()?;
+    utxo::select_utxos_for_etching(network, amount_needed, fee_rate)
+        .await
+        .map_err(|e| format!("Failed to select UTXOs: {}", e))
+}
+
+/// Build and sign a complete etching transaction
+#[update]
+async fn build_and_sign_etching_tx(
+    etching: RuneEtching,
+    utxo_selection: utxo::UtxoSelection,
+) -> Result<Vec<u8>, String> {
+    // Validate etching parameters
     validate_etching(&etching)?;
 
-    // Build the runestone (OP_RETURN output)
-    let runestone = runes_utils::build_runestone(&etching)
-        .map_err(|e| format!("Failed to build runestone: {}", e))?;
+    let network = get_network()?;
 
-    // Get network from config (TODO: make configurable)
-    let network = BitcoinNetwork::Testnet;
+    // Get canister's P2TR address for change
+    let address_info = get_p2tr_address().await?;
+    let change_address = bitcoin::Address::from_str(&address_info.address)
+        .map_err(|e| format!("Invalid address: {}", e))?
+        .require_network(convert_network(network))
+        .map_err(|e| format!("Address network mismatch: {}", e))?;
 
-    // Select UTXOs for fee payment
-    let selection = utxo::select_utxos_for_etching(network, 10000, 2)
+    // Build transaction using the selected UTXO
+    if utxo_selection.selected.is_empty() {
+        return Err("No UTXOs selected".to_string());
+    }
+
+    let utxo = &utxo_selection.selected[0];
+
+    // Construct script_pubkey from the change address (P2TR)
+    let script_pubkey = change_address.script_pubkey();
+
+    let prev_output = transaction::PreviousOutput {
+        outpoint: bitcoin::OutPoint {
+            txid: bitcoin::Txid::from_str(&hex::encode(&utxo.outpoint.txid))
+                .map_err(|e| format!("Invalid txid: {}", e))?,
+            vout: utxo.outpoint.vout,
+        },
+        amount: utxo.value,
+        script_pubkey,
+    };
+
+    let fee_rate = 2; // sats/vbyte
+    let tx_data = transaction::build_etching_transaction(
+        &etching,
+        prev_output,
+        &change_address,
+        fee_rate,
+    )?;
+
+    // Sign transaction with threshold Schnorr
+    let derivation_path = address_info.derivation_path;
+    let signature = schnorr::sign_message(tx_data.sighash, derivation_path)
         .await
-        .map_err(|e| format!("Failed to select UTXOs: {}", e))?;
+        .map_err(|e| format!("Failed to sign transaction: {}", e))?;
 
-    // TODO: Build transaction, sign, and broadcast
-    // This requires integrating the transaction module properly
+    // Finalize transaction with signature
+    let signed_tx = transaction::finalize_transaction(
+        tx_data.unsigned_tx,
+        tx_data.input_index,
+        &signature,
+    )?;
 
-    // Broadcast to Bitcoin network
-    // let txid = bitcoin_api::broadcast_transaction(&signed_tx, network)
-    //     .await
-    //     .map_err(|e| format!("Failed to broadcast transaction: {:?}", e))?;
+    // Serialize transaction to bytes
+    use bitcoin::consensus::Encodable;
+    let mut tx_bytes = Vec::new();
+    signed_tx
+        .consensus_encode(&mut tx_bytes)
+        .map_err(|e| format!("Failed to encode transaction: {}", e))?;
 
-    // Placeholder until full integration
-    Ok("placeholder_txid".to_string())
+    Ok(tx_bytes)
+}
+
+/// Broadcast a signed Bitcoin transaction
+#[update]
+async fn broadcast_transaction(tx_bytes: Vec<u8>) -> Result<String, String> {
+    let network = get_network()?;
+    bitcoin_api::broadcast_transaction(&tx_bytes, network)
+        .await
+        .map_err(|e| format!("Failed to broadcast transaction: {}", e))
+}
+
+/// Get current Bitcoin block height
+#[update]
+async fn get_block_height() -> Result<u64, String> {
+    let network = get_network()?;
+    bitcoin_api::get_block_height(network)
+        .await
+        .map_err(|e| format!("Failed to get block height: {}", e))
 }
 
 /// Get balance of ckBTC for a specific principal
@@ -123,6 +192,14 @@ fn validate_etching(etching: &RuneEtching) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn convert_network(network: BitcoinNetwork) -> bitcoin::Network {
+    match network {
+        BitcoinNetwork::Mainnet => bitcoin::Network::Bitcoin,
+        BitcoinNetwork::Testnet => bitcoin::Network::Testnet,
+        BitcoinNetwork::Regtest => bitcoin::Network::Regtest,
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

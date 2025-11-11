@@ -1,16 +1,30 @@
-use candid::Principal;
+use candid::{CandidType, Deserialize, Principal};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
-use quri_types::{RuneConfig, RuneId, RuneMetadata};
+use quri_types::{RuneConfig, RuneEtching, RuneId, RuneMetadata};
 
-// Type aliases for stable structures
+mod errors;
+mod etching_flow;
+mod state;
+mod validators;
+
+use errors::{EtchingError, EtchingResult};
+use etching_flow::{EtchingConfig, EtchingOrchestrator};
+use state::EtchingProcess;
+
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type RuneStorage = StableBTreeMap<RuneId, RuneMetadata, Memory>;
 
-// Thread-local storage
+/// Canister configuration
+#[derive(Clone, Debug, CandidType, Deserialize)]
+pub struct CanisterConfig {
+    pub bitcoin_integration_id: Principal,
+    pub registry_id: Principal,
+}
+
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
@@ -20,11 +34,24 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
         )
     );
+
+    static ETCHING_CONFIG: RefCell<Option<EtchingConfig>> = RefCell::new(None);
+
+    static CANISTER_CONFIG: RefCell<Option<CanisterConfig>> = RefCell::new(None);
 }
 
 #[init]
 fn init() {
     ic_cdk::println!("Rune Engine canister initialized");
+
+    // Initialize state storage
+    let state_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)));
+    state::init_state_storage(state_memory);
+
+    // Set default config
+    ETCHING_CONFIG.with(|c| {
+        *c.borrow_mut() = Some(EtchingConfig::default());
+    });
 }
 
 #[pre_upgrade]
@@ -35,113 +62,178 @@ fn pre_upgrade() {
 #[post_upgrade]
 fn post_upgrade() {
     ic_cdk::println!("Upgrade completed");
+
+    // Reinitialize state storage
+    let state_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)));
+    state::init_state_storage(state_memory);
 }
 
-/// Creates a new Rune with the specified configuration
+// ============================================================================
+// Etching APIs
+// ============================================================================
+
+/// Create a new Rune (main entry point)
 #[update]
-async fn create_rune(config: RuneConfig) -> Result<RuneId, String> {
-    // Validate caller
+async fn create_rune(etching: RuneEtching) -> Result<String, String> {
     let caller = ic_cdk::caller();
+
+    // Validate caller
     if caller == Principal::anonymous() {
         return Err("Anonymous principals cannot create runes".to_string());
     }
 
-    // Validate configuration
-    validate_rune_config(&config)?;
+    // Get config
+    let config = ETCHING_CONFIG
+        .with(|c| c.borrow().clone())
+        .ok_or("Etching config not initialized")?;
 
-    // Generate unique Rune ID
-    let rune_id = generate_rune_id(&config);
+    // Execute etching flow
+    let orchestrator = EtchingOrchestrator::new(config);
+    match orchestrator.execute_etching(caller, etching).await {
+        Ok(process) => Ok(process.id),
+        Err(e) => Err(e.user_message()),
+    }
+}
 
-    // Create metadata
-    let metadata = RuneMetadata {
-        id: rune_id.clone(),
-        name: config.name.clone(),
-        symbol: config.symbol.clone(),
-        divisibility: config.divisibility,
-        creator: caller,
-        created_at: ic_cdk::api::time(),
-        total_supply: config.total_supply,
-        premine: config.premine,
+/// Get etching process status
+#[query]
+fn get_etching_status(process_id: String) -> Option<EtchingProcessView> {
+    state::get_process(&process_id).map(|p| EtchingProcessView {
+        id: p.id,
+        rune_name: p.rune_name,
+        state: format!("{:?}", p.state),
+        created_at: p.created_at,
+        updated_at: p.updated_at,
+        retry_count: p.retry_count,
+        txid: p.txid,
+    })
+}
+
+/// Get all etching processes for caller
+#[query]
+fn get_my_etchings() -> Vec<EtchingProcessView> {
+    let caller = ic_cdk::caller();
+    state::get_caller_processes(caller)
+        .into_iter()
+        .map(|p| EtchingProcessView {
+            id: p.id,
+            rune_name: p.rune_name,
+            state: format!("{:?}", p.state),
+            created_at: p.created_at,
+            updated_at: p.updated_at,
+            retry_count: p.retry_count,
+            txid: p.txid,
+        })
+        .collect()
+}
+
+/// Update etching configuration (admin only)
+#[update]
+fn update_etching_config(config: EtchingConfigView) -> Result<(), String> {
+    // TODO: Add proper admin authorization
+    let caller = ic_cdk::caller();
+    if caller == Principal::anonymous() {
+        return Err("Unauthorized".to_string());
+    }
+
+    let etching_config = EtchingConfig {
+        network: config.network,
+        fee_rate: config.fee_rate,
+        required_confirmations: config.required_confirmations,
+        enable_retries: config.enable_retries,
     };
 
-    // Store in stable memory
-    RUNES.with(|runes| {
-        runes.borrow_mut().insert(rune_id.clone(), metadata);
+    ETCHING_CONFIG.with(|c| {
+        *c.borrow_mut() = Some(etching_config);
     });
-
-    // TODO: Call bitcoin-integration canister to etch on Bitcoin L1
-
-    Ok(rune_id)
-}
-
-/// Retrieves metadata for a specific Rune
-#[query]
-fn get_rune(rune_id: RuneId) -> Option<RuneMetadata> {
-    RUNES.with(|runes| {
-        runes.borrow().get(&rune_id)
-    })
-}
-
-/// Lists all Runes with pagination
-#[query]
-fn list_runes(offset: u64, limit: u64) -> Vec<RuneMetadata> {
-    RUNES.with(|runes| {
-        runes
-            .borrow()
-            .iter()
-            .skip(offset as usize)
-            .take(limit as usize)
-            .map(|(_, metadata)| metadata)
-            .collect()
-    })
-}
-
-/// Returns the total count of Runes
-#[query]
-fn rune_count() -> u64 {
-    RUNES.with(|runes| runes.borrow().len())
-}
-
-// Helper functions
-
-fn validate_rune_config(config: &RuneConfig) -> Result<(), String> {
-    // Validate name (A-Z, 1-26 characters)
-    if config.name.is_empty() || config.name.len() > 26 {
-        return Err("Rune name must be 1-26 characters".to_string());
-    }
-
-    if !config.name.chars().all(|c| c.is_ascii_uppercase()) {
-        return Err("Rune name must contain only A-Z characters".to_string());
-    }
-
-    // Validate divisibility (0-38)
-    if config.divisibility > 38 {
-        return Err("Divisibility must be between 0 and 38".to_string());
-    }
-
-    // Validate supply
-    if config.total_supply == 0 {
-        return Err("Total supply must be greater than 0".to_string());
-    }
-
-    if config.premine > config.total_supply {
-        return Err("Premine cannot exceed total supply".to_string());
-    }
 
     Ok(())
 }
 
-fn generate_rune_id(config: &RuneConfig) -> RuneId {
-    // For now, use a simple hash of name and timestamp
-    // In production, this should be the actual Bitcoin transaction ID
-    let timestamp = ic_cdk::api::time();
-    RuneId {
-        block: 0, // Will be set after Bitcoin confirmation
-        tx: 0,    // Will be set after Bitcoin confirmation
-        name: config.name.clone(),
-        timestamp,
+/// Configure canister IDs (admin only, usually called after deployment)
+#[update]
+fn configure_canisters(
+    bitcoin_integration_id: Principal,
+    registry_id: Principal,
+) -> Result<(), String> {
+    // TODO: Add proper admin authorization
+    let caller = ic_cdk::caller();
+    if caller == Principal::anonymous() {
+        return Err("Unauthorized".to_string());
     }
+
+    let config = CanisterConfig {
+        bitcoin_integration_id,
+        registry_id,
+    };
+
+    CANISTER_CONFIG.with(|c| {
+        *c.borrow_mut() = Some(config);
+    });
+
+    ic_cdk::println!(
+        "Configured canisters: BTC={}, Registry={}",
+        bitcoin_integration_id,
+        registry_id
+    );
+
+    Ok(())
 }
 
-// Candid interface export
+// ============================================================================
+// Helper functions (internal)
+// ============================================================================
+
+pub(crate) fn get_bitcoin_integration_id() -> Result<Principal, String> {
+    CANISTER_CONFIG.with(|c| {
+        c.borrow()
+            .as_ref()
+            .map(|config| config.bitcoin_integration_id)
+            .ok_or("Canister configuration not set".to_string())
+    })
+}
+
+pub(crate) fn get_registry_id() -> Result<Principal, String> {
+    CANISTER_CONFIG.with(|c| {
+        c.borrow()
+            .as_ref()
+            .map(|config| config.registry_id)
+            .ok_or("Canister configuration not set".to_string())
+    })
+}
+
+// ============================================================================
+// Maintenance APIs
+// ============================================================================
+
+/// Cleanup old completed/failed processes
+#[update]
+fn cleanup_old_processes(age_days: u64) -> u64 {
+    let age_nanos = age_days * 24 * 60 * 60 * 1_000_000_000;
+    state::cleanup_old_processes(age_nanos)
+}
+
+// ============================================================================
+// View Types (for Candid interface)
+// ============================================================================
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct EtchingProcessView {
+    pub id: String,
+    pub rune_name: String,
+    pub state: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+    pub retry_count: u32,
+    pub txid: Option<String>,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct EtchingConfigView {
+    pub network: quri_types::BitcoinNetwork,
+    pub fee_rate: u64,
+    pub required_confirmations: u32,
+    pub enable_retries: bool,
+}
+
 ic_cdk::export_candid!();
