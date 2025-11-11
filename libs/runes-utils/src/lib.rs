@@ -1,5 +1,10 @@
+// 🎓 MÓDULOS PÚBLICOS
 pub mod runestone;
 pub mod etching;
+pub mod tag;  // Módulo Tag exportado públicamente
+
+// Re-exportar Tag para fácil acceso
+pub use tag::Tag;
 
 use quri_types::RuneEtching;
 use thiserror::Error;

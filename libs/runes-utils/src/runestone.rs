@@ -1,39 +1,27 @@
-use crate::{EtchingSpec, Runestone, RunesError, Result, Terms, Edict, RuneId};
+// 🎓 LECCIÓN: Imports y Módulos
+// Importamos Tag desde crate (el root del package runes-utils)
+// porque lo re-exportamos en lib.rs con `pub use tag::Tag;`
+use crate::{EtchingSpec, Runestone, RunesError, Result, Terms, Edict, RuneId, Tag};
 use quri_types::RuneEtching;
 use quri_utils::encoding::{encode_leb128, decode_leb128};
-
-/// Runestone field tags
-#[repr(u128)]
-enum Tag {
-    Body = 0,
-    Divisibility = 1,
-    Spacers = 2,
-    Symbol = 3,
-    Premine = 4,
-    Amount = 5,
-    Cap = 6,
-    HeightStart = 7,
-    HeightEnd = 8,
-    OffsetStart = 9,
-    OffsetEnd = 10,
-    Mint = 11,
-    Pointer = 12,
-    Rune = 13,
-}
 
 /// Build runestone for etching
 pub fn build_etching_runestone(etching: &RuneEtching) -> Result<Vec<u8>> {
     let mut integers: Vec<u128> = Vec::new();
 
+    // 🎓 CONCEPTO: Encoding de tags
+    // Cada campo se codifica como: [tag, value]
+    // Ejemplo: divisibility=8 → [1, 8]
+
     // Add divisibility
     if etching.divisibility > 0 {
-        integers.push(Tag::Divisibility as u128);
+        integers.push(Tag::Divisibility.as_u128());  // ✅ Usar método
         integers.push(etching.divisibility as u128);
     }
 
     // Add symbol
     if !etching.symbol.is_empty() {
-        integers.push(Tag::Symbol as u128);
+        integers.push(Tag::Symbol.as_u128());
         // Take first character as symbol
         if let Some(c) = etching.symbol.chars().next() {
             integers.push(c as u128);
@@ -42,43 +30,43 @@ pub fn build_etching_runestone(etching: &RuneEtching) -> Result<Vec<u8>> {
 
     // Add premine
     if etching.premine > 0 {
-        integers.push(Tag::Premine as u128);
+        integers.push(Tag::Premine.as_u128());
         integers.push(etching.premine as u128);
     }
 
     // Add rune name
-    integers.push(Tag::Rune as u128);
+    integers.push(Tag::Rune.as_u128());
     integers.push(encode_rune_name(&etching.rune_name)?);
 
     // Add mint terms if present
     if let Some(terms) = &etching.terms {
         if terms.amount > 0 {
-            integers.push(Tag::Amount as u128);
+            integers.push(Tag::Amount.as_u128());
             integers.push(terms.amount as u128);
         }
 
         if terms.cap > 0 {
-            integers.push(Tag::Cap as u128);
+            integers.push(Tag::Cap.as_u128());
             integers.push(terms.cap as u128);
         }
 
         if let Some(height_start) = terms.height_start {
-            integers.push(Tag::HeightStart as u128);
+            integers.push(Tag::HeightStart.as_u128());
             integers.push(height_start as u128);
         }
 
         if let Some(height_end) = terms.height_end {
-            integers.push(Tag::HeightEnd as u128);
+            integers.push(Tag::HeightEnd.as_u128());
             integers.push(height_end as u128);
         }
 
         if let Some(offset_start) = terms.offset_start {
-            integers.push(Tag::OffsetStart as u128);
+            integers.push(Tag::OffsetStart.as_u128());
             integers.push(offset_start as u128);
         }
 
         if let Some(offset_end) = terms.offset_end {
-            integers.push(Tag::OffsetEnd as u128);
+            integers.push(Tag::OffsetEnd.as_u128());
             integers.push(offset_end as u128);
         }
     }
@@ -137,11 +125,13 @@ pub fn parse_runestone(data: &[u8]) -> Result<Runestone> {
 
     // Parse fields
     let mut i = 0;
+    // 🎓 CONCEPTO: Parsing de runestone
+    // Leemos pares [tag, value] hasta encontrar Body (0)
     while i < integers.len() {
-        let tag = integers[i];
+        let tag_value = integers[i];
 
-        if tag == Tag::Body as u128 {
-            // Parse edicts
+        // Body marca el inicio de edicts (transferencias)
+        if tag_value == Tag::Body.as_u128() {
             break;
         }
 
@@ -151,17 +141,20 @@ pub fn parse_runestone(data: &[u8]) -> Result<Runestone> {
 
         let value = integers[i + 1];
 
-        match tag {
-            t if t == Tag::Divisibility as u128 => {
-                // Handle divisibility
+        // Convertir el u128 a Tag si es válido
+        if let Some(tag) = Tag::from_u128(tag_value) {
+            match tag {
+                Tag::Divisibility => {
+                    // Handle divisibility
+                }
+                Tag::Symbol => {
+                    // Handle symbol
+                }
+                Tag::Premine => {
+                    // Handle premine
+                }
+                _ => {}
             }
-            t if t == Tag::Symbol as u128 => {
-                // Handle symbol
-            }
-            t if t == Tag::Premine as u128 => {
-                // Handle premine
-            }
-            _ => {}
         }
 
         i += 2;

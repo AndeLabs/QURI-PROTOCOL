@@ -9,6 +9,7 @@ repository.workspace = true
 [dependencies]
 # ICP
 candid.workspace = true
+ic-stable-structures.workspace = true
 
 # Serialization
 serde.workspace = true
