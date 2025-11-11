@@ -4,6 +4,7 @@ use ic_cdk_macros::{init, query, update};
 mod bitcoin_api;
 mod ckbtc;
 mod schnorr;
+mod transaction;
 mod utxo;
 
 use bitcoin_utils::address::derive_p2tr_address;
