@@ -1,0 +1,38 @@
+[package]
+name = "rune-engine"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# ICP
+candid.workspace = true
+ic-cdk.workspace = true
+ic-cdk-macros.workspace = true
+ic-cdk-timers.workspace = true
+ic-stable-structures.workspace = true
+
+# Internal
+quri-types = { path = "../../libs/quri-types" }
+quri-utils = { path = "../../libs/quri-utils" }
+runes-utils = { path = "../../libs/runes-utils" }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+serde_bytes.workspace = true
+
+# Error Handling
+thiserror.workspace = true
+
+# Utilities
+hex.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true
+proptest.workspace = true

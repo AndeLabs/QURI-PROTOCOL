@@ -1,0 +1,49 @@
+type RuneId = record {
+    block : nat64;
+    tx : nat64;
+    name : text;
+    timestamp : nat64;
+};
+
+type RuneMetadata = record {
+    id : RuneId;
+    name : text;
+    symbol : text;
+    divisibility : nat8;
+    creator : principal;
+    created_at : nat64;
+    total_supply : nat64;
+    premine : nat64;
+};
+
+type BondingCurve = record {
+    initial_price : nat64;
+    target_market_cap : nat64;
+    current_supply : nat64;
+    graduated_to_amm : bool;
+};
+
+type RegistryEntry = record {
+    rune_id : RuneId;
+    metadata : RuneMetadata;
+    bonding_curve : opt BondingCurve;
+    trading_volume_24h : nat64;
+    holder_count : nat64;
+};
+
+type RegistryStats = record {
+    total_runes : nat64;
+    total_volume_24h : nat64;
+};
+
+service : {
+    "register_rune" : (RuneMetadata) -> (variant { Ok : null; Err : text });
+    "get_rune" : (RuneId) -> (opt RegistryEntry) query;
+    "list_runes" : (nat64, nat64) -> (vec RegistryEntry) query;
+    "search_runes" : (text) -> (vec RegistryEntry) query;
+    "get_trending" : (nat64) -> (vec RegistryEntry) query;
+    "update_volume" : (RuneId, nat64) -> (variant { Ok : null; Err : text });
+    "update_holder_count" : (RuneId, nat64) -> (variant { Ok : null; Err : text });
+    "total_runes" : () -> (nat64) query;
+    "get_stats" : () -> (RegistryStats) query;
+}

@@ -1,0 +1,31 @@
+[package]
+name = "registry"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# ICP
+candid.workspace = true
+ic-cdk.workspace = true
+ic-cdk-macros.workspace = true
+ic-stable-structures.workspace = true
+
+# Internal
+quri-types = { path = "../../libs/quri-types" }
+quri-utils = { path = "../../libs/quri-utils" }
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Error Handling
+thiserror.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true

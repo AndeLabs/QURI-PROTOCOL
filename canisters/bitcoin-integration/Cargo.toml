@@ -1,0 +1,44 @@
+[package]
+name = "bitcoin-integration"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+# ICP
+candid.workspace = true
+ic-cdk.workspace = true
+ic-cdk-macros.workspace = true
+ic-stable-structures.workspace = true
+ic-ledger-types.workspace = true
+
+# Internal
+quri-types = { path = "../../libs/quri-types" }
+bitcoin-utils = { path = "../../libs/bitcoin-utils" }
+runes-utils = { path = "../../libs/runes-utils" }
+schnorr-signatures = { path = "../../libs/schnorr-signatures" }
+
+# Bitcoin
+bitcoin.workspace = true
+secp256k1.workspace = true
+
+# Crypto
+sha2.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_bytes.workspace = true
+
+# Error Handling
+thiserror.workspace = true
+
+# Utilities
+hex.workspace = true
+
+[dev-dependencies]
+mockall.workspace = true

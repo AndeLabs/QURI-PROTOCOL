@@ -1,0 +1,25 @@
+[package]
+name = "runes-utils"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[dependencies]
+# Internal
+quri-types = { path = "../quri-types" }
+quri-utils = { path = "../quri-utils" }
+bitcoin-utils = { path = "../bitcoin-utils" }
+
+# Utilities
+hex.workspace = true
+
+# Error Handling
+thiserror.workspace = true
+
+# Serialization
+serde.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
