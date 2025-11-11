@@ -1,8 +1,7 @@
-use candid::Principal;
 use ic_cdk::api::management_canister::bitcoin::{
     bitcoin_get_balance, bitcoin_get_current_fee_percentiles, bitcoin_get_utxos,
     bitcoin_send_transaction, BitcoinNetwork as ICPBitcoinNetwork, GetBalanceRequest,
-    GetCurrentFeePercentilesRequest, GetUtxosRequest, MillisatoshiPerByte, SendTransactionRequest,
+    GetCurrentFeePercentilesRequest, GetUtxosRequest, SendTransactionRequest,
     Utxo,
 };
 use quri_types::BitcoinNetwork;

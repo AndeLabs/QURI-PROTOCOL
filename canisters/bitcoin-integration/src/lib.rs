@@ -7,7 +7,7 @@ mod schnorr;
 mod utxo;
 
 use bitcoin_utils::address::derive_p2tr_address;
-use quri_types::{BitcoinAddress, BitcoinNetwork, RuneEtching, Transaction};
+use quri_types::{BitcoinAddress, BitcoinNetwork, RuneEtching};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Config {
