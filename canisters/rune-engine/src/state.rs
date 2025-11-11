@@ -104,16 +104,51 @@ impl EtchingProcess {
         }
     }
 
+    /// Create new process with specific timestamp (for testing)
+    #[cfg(test)]
+    pub fn new_for_test(
+        id: String,
+        caller: candid::Principal,
+        rune_name: String,
+        timestamp: u64,
+    ) -> Self {
+        Self {
+            id,
+            caller,
+            rune_name,
+            state: EtchingState::Validating,
+            created_at: timestamp,
+            updated_at: timestamp,
+            retry_count: 0,
+            fee_paid: None,
+            txid: None,
+        }
+    }
+
     /// Update state and timestamp
     pub fn update_state(&mut self, new_state: EtchingState) {
         self.state = new_state;
         self.updated_at = ic_cdk::api::time();
     }
 
+    /// Update state with specific timestamp (for testing)
+    #[cfg(test)]
+    pub fn update_state_for_test(&mut self, new_state: EtchingState, timestamp: u64) {
+        self.state = new_state;
+        self.updated_at = timestamp;
+    }
+
     /// Increment retry counter
     pub fn increment_retry(&mut self) {
         self.retry_count += 1;
         self.updated_at = ic_cdk::api::time();
+    }
+
+    /// Increment retry counter with specific timestamp (for testing)
+    #[cfg(test)]
+    pub fn increment_retry_for_test(&mut self, timestamp: u64) {
+        self.retry_count += 1;
+        self.updated_at = timestamp;
     }
 
     /// Check if process has exceeded retry limit
@@ -242,14 +277,19 @@ mod tests {
     #[test]
     fn test_process_retry_tracking() {
         let caller = candid::Principal::from_text("aaaaa-aa").unwrap();
-        let mut process = EtchingProcess::new("test-1".to_string(), caller, "TEST".to_string());
+        let mut process = EtchingProcess::new_for_test(
+            "test-1".to_string(),
+            caller,
+            "TEST".to_string(),
+            1_000_000,
+        );
 
         assert_eq!(process.retry_count, 0);
         assert!(!process.has_exceeded_retries(3));
 
-        process.increment_retry();
-        process.increment_retry();
-        process.increment_retry();
+        process.increment_retry_for_test(1_001_000);
+        process.increment_retry_for_test(1_002_000);
+        process.increment_retry_for_test(1_003_000);
 
         assert_eq!(process.retry_count, 3);
         assert!(process.has_exceeded_retries(3));

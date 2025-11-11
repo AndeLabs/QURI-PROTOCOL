@@ -262,4 +262,267 @@ mod tests {
         assert!(EtchingValidator::validate_balance(100_000, 50_000).is_ok());
         assert!(EtchingValidator::validate_balance(50_000, 100_000).is_err());
     }
+
+    // ========================================================================
+    // Advanced Tests - Edge Cases
+    // ========================================================================
+
+    #[test]
+    fn test_name_edge_cases() {
+        // Minimum length (1 char after spacer logic)
+        assert!(EtchingValidator::validate_name("AB").is_ok());
+
+        // Maximum length (26 chars)
+        assert!(EtchingValidator::validate_name("ABCDEFGHIJKLMNOPQRSTUVWXYZ").is_ok());
+
+        // Too long
+        assert!(EtchingValidator::validate_name("ABCDEFGHIJKLMNOPQRSTUVWXYZA").is_err());
+
+        // Empty string
+        assert!(EtchingValidator::validate_name("").is_err());
+
+        // Only spacer
+        assert!(EtchingValidator::validate_name("•").is_err());
+
+        // Trailing spacer
+        assert!(EtchingValidator::validate_name("BITCOIN•").is_err());
+
+        // Multiple spacers correctly spaced
+        assert!(EtchingValidator::validate_name("A•B•C•D").is_ok());
+    }
+
+    #[test]
+    fn test_symbol_edge_cases() {
+        // Empty string
+        assert!(EtchingValidator::validate_symbol("").is_err());
+
+        // Single char
+        assert!(EtchingValidator::validate_symbol("A").is_ok());
+
+        // Four chars (max)
+        assert!(EtchingValidator::validate_symbol("ABCD").is_ok());
+
+        // Five chars (too long)
+        assert!(EtchingValidator::validate_symbol("ABCDE").is_err());
+
+        // Special characters
+        assert!(EtchingValidator::validate_symbol("AB@").is_err());
+        assert!(EtchingValidator::validate_symbol("AB•C").is_err());
+    }
+
+    #[test]
+    fn test_divisibility_boundary() {
+        // Valid boundaries
+        assert!(EtchingValidator::validate_divisibility(0).is_ok());
+        assert!(EtchingValidator::validate_divisibility(18).is_ok());
+
+        // Invalid boundaries
+        assert!(EtchingValidator::validate_divisibility(19).is_err());
+        assert!(EtchingValidator::validate_divisibility(255).is_err());
+    }
+
+    #[test]
+    fn test_supply_with_premine_only() {
+        let etching = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: 1_000_000,
+            terms: None,
+        };
+
+        assert!(EtchingValidator::validate_supply(&etching).is_ok());
+    }
+
+    #[test]
+    fn test_supply_with_mint_terms() {
+        use quri_types::MintTerms;
+
+        let etching = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: 1_000_000,
+            terms: Some(MintTerms {
+                amount: 100,
+                cap: 10_000,
+                height_start: None,
+                height_end: None,
+                offset_start: None,
+                offset_end: None,
+            }),
+        };
+
+        assert!(EtchingValidator::validate_supply(&etching).is_ok());
+    }
+
+    #[test]
+    fn test_supply_zero_premine_no_terms() {
+        let etching = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: 0,
+            terms: None,
+        };
+
+        // Should fail - must have either premine or mint terms
+        assert!(EtchingValidator::validate_supply(&etching).is_err());
+    }
+
+    #[test]
+    fn test_supply_overflow_protection() {
+        use quri_types::MintTerms;
+
+        let etching = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: u64::MAX,
+            terms: Some(MintTerms {
+                amount: u64::MAX,
+                cap: u64::MAX,
+                height_start: None,
+                height_end: None,
+                offset_start: None,
+                offset_end: None,
+            }),
+        };
+
+        // Should not panic, should use saturating arithmetic
+        let result = EtchingValidator::validate_supply(&etching);
+        assert!(result.is_ok() || result.is_err()); // Just ensure it doesn't panic
+    }
+
+    #[test]
+    fn test_mint_terms_validation() {
+        use quri_types::MintTerms;
+
+        // Valid terms
+        let etching = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: 1000,
+            terms: Some(MintTerms {
+                amount: 100,
+                cap: 1000,
+                height_start: None,
+                height_end: None,
+                offset_start: None,
+                offset_end: None,
+            }),
+        };
+        assert!(EtchingValidator::validate_mint_terms(&etching).is_ok());
+
+        // Zero amount
+        let etching_zero_amount = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: 1000,
+            terms: Some(MintTerms {
+                amount: 0,
+                cap: 1000,
+                height_start: None,
+                height_end: None,
+                offset_start: None,
+                offset_end: None,
+            }),
+        };
+        assert!(EtchingValidator::validate_mint_terms(&etching_zero_amount).is_err());
+
+        // Zero cap
+        let etching_zero_cap = RuneEtching {
+            rune_name: "TEST".to_string(),
+            symbol: "TST".to_string(),
+            divisibility: 8,
+            premine: 1000,
+            terms: Some(MintTerms {
+                amount: 100,
+                cap: 0,
+                height_start: None,
+                height_end: None,
+                offset_start: None,
+                offset_end: None,
+            }),
+        };
+        assert!(EtchingValidator::validate_mint_terms(&etching_zero_cap).is_err());
+    }
+
+    #[test]
+    fn test_complete_etching_validation() {
+        use quri_types::MintTerms;
+
+        // Valid complete etching
+        let valid_etching = RuneEtching {
+            rune_name: "SATOSHI•NAKAMOTO".to_string(),
+            symbol: "SATS".to_string(),
+            divisibility: 8,
+            premine: 21_000_000,
+            terms: Some(MintTerms {
+                amount: 50,
+                cap: 100_000,
+                height_start: None,
+                height_end: None,
+                offset_start: None,
+                offset_end: None,
+            }),
+        };
+        assert!(EtchingValidator::validate_etching(&valid_etching).is_ok());
+
+        // Invalid name
+        let invalid_name = RuneEtching {
+            rune_name: "bitcoin".to_string(), // lowercase
+            symbol: "BTC".to_string(),
+            divisibility: 8,
+            premine: 1000,
+            terms: None,
+        };
+        assert!(EtchingValidator::validate_etching(&invalid_name).is_err());
+
+        // Invalid symbol
+        let invalid_symbol = RuneEtching {
+            rune_name: "BITCOIN".to_string(),
+            symbol: "TOOLONG".to_string(), // > 4 chars
+            divisibility: 8,
+            premine: 1000,
+            terms: None,
+        };
+        assert!(EtchingValidator::validate_etching(&invalid_symbol).is_err());
+
+        // Invalid divisibility
+        let invalid_divisibility = RuneEtching {
+            rune_name: "BITCOIN".to_string(),
+            symbol: "BTC".to_string(),
+            divisibility: 20, // > 18
+            premine: 1000,
+            terms: None,
+        };
+        assert!(EtchingValidator::validate_etching(&invalid_divisibility).is_err());
+    }
+
+    #[test]
+    fn test_fee_boundaries() {
+        // Minimum valid fee
+        assert!(EtchingValidator::validate_fee(MIN_ETCHING_FEE).is_ok());
+
+        // Just below minimum
+        assert!(EtchingValidator::validate_fee(MIN_ETCHING_FEE - 1).is_err());
+
+        // Maximum valid fee
+        assert!(EtchingValidator::validate_fee(MAX_ETCHING_FEE).is_ok());
+
+        // Just above maximum
+        assert!(EtchingValidator::validate_fee(MAX_ETCHING_FEE + 1).is_err());
+    }
+
+    #[test]
+    fn test_balance_exact_match() {
+        // Exact balance needed
+        assert!(EtchingValidator::validate_balance(100_000, 100_000).is_ok());
+
+        // One sat short
+        assert!(EtchingValidator::validate_balance(99_999, 100_000).is_err());
+    }
 }
