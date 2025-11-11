@@ -1,0 +1,40 @@
+type BitcoinNetwork = variant {
+    Mainnet;
+    Testnet;
+    Regtest;
+};
+
+type BitcoinAddress = record {
+    address : text;
+    derivation_path : vec blob;
+};
+
+type FeeEstimates = record {
+    slow : nat64;
+    medium : nat64;
+    fast : nat64;
+};
+
+type RuneEtching = record {
+    rune_name : text;
+    symbol : text;
+    divisibility : nat8;
+    premine : nat64;
+    terms : opt MintTerms;
+};
+
+type MintTerms = record {
+    amount : nat64;
+    cap : nat64;
+    height_start : opt nat64;
+    height_end : opt nat64;
+    offset_start : opt nat64;
+    offset_end : opt nat64;
+};
+
+service : (BitcoinNetwork, principal) -> {
+    "get_p2tr_address" : () -> (variant { Ok : BitcoinAddress; Err : text });
+    "get_fee_estimates" : () -> (variant { Ok : FeeEstimates; Err : text });
+    "etch_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
+    "get_ckbtc_balance" : (principal) -> (variant { Ok : nat64; Err : text }) query;
+}

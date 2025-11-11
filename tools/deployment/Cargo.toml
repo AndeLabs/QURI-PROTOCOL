@@ -1,0 +1,20 @@
+[package]
+name = "deployment"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "deploy"
+path = "src/main.rs"
+
+[dependencies]
+# Utilities
+anyhow.workspace = true
+thiserror.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true

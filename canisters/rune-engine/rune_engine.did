@@ -1,0 +1,42 @@
+type RuneId = record {
+    block : nat64;
+    tx : nat64;
+    name : text;
+    timestamp : nat64;
+};
+
+type RuneConfig = record {
+    name : text;
+    symbol : text;
+    divisibility : nat8;
+    total_supply : nat64;
+    premine : nat64;
+    terms : opt MintTerms;
+};
+
+type MintTerms = record {
+    amount : nat64;
+    cap : nat64;
+    height_start : opt nat64;
+    height_end : opt nat64;
+    offset_start : opt nat64;
+    offset_end : opt nat64;
+};
+
+type RuneMetadata = record {
+    id : RuneId;
+    name : text;
+    symbol : text;
+    divisibility : nat8;
+    creator : principal;
+    created_at : nat64;
+    total_supply : nat64;
+    premine : nat64;
+};
+
+service : {
+    "create_rune" : (RuneConfig) -> (variant { Ok : RuneId; Err : text });
+    "get_rune" : (RuneId) -> (opt RuneMetadata) query;
+    "list_runes" : (nat64, nat64) -> (vec RuneMetadata) query;
+    "rune_count" : () -> (nat64) query;
+}
