@@ -1,3 +1,4 @@
+use candid::{CandidType, Deserialize};
 use ic_cdk::api::management_canister::bitcoin::{
     GetUtxosResponse, Outpoint, Utxo as ICPUtxo,
 };
@@ -13,6 +14,7 @@ pub struct UtxoWithMetadata {
 }
 
 /// Result of UTXO selection
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct UtxoSelection {
     pub selected: Vec<ICPUtxo>,
     pub total_value: u64,
