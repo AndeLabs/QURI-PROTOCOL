@@ -1,16 +1,206 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
+use ic_stable_structures::storable::Bound;
 use std::cell::RefCell;
+use std::borrow::Cow;
 
 use quri_types::{SessionPermissions, UserSession};
+
+// ========================================================================
+// 🎓 LECCIÓN 3: Storable para Tipos Locales
+// ========================================================================
+//
+// RateLimitData es un tipo definido en este canister, no en quri-types.
+// Aún así necesitamos implementar Storable para poder usarlo en
+// StableBTreeMap.
+//
+// ## Estructura de RateLimitData
+//
+// ```rust
+// struct RateLimitData {
+//     requests: u32,      // 4 bytes
+//     window_start: u64,  // 8 bytes
+// }
+// ```
+//
+// Total: 12 bytes fijos
+//
+// ## Decisión: Bounded vs Unbounded?
+//
+// Este es un EXCELENTE candidato para Bounded porque:
+// - ✅ Tamaño fijo y conocido
+// - ✅ Pequeño (12 bytes)
+// - ✅ No contiene tipos variables (String, Vec)
+//
+// Ventajas de usar Bounded aquí:
+// - 🚀 Acceso más rápido
+// - 💾 Menos overhead de memoria
+// - 🎯 Más eficiente para actualizaciones frecuentes
+//
+// ## Implementación Manual vs Candid
+//
+// Para tipos pequeños y fijos, podemos serializar manualmente
+// (más eficiente) o usar Candid (más flexible).
+//
+// Vamos a usar serialización manual para demostrar ambos enfoques.
+//
+// ========================================================================
+
+/// Datos de rate limiting por principal
+///
+/// Almacena:
+/// - Número de requests en la ventana actual
+/// - Timestamp del inicio de la ventana
+///
+/// ## Por Qué Este Diseño?
+///
+/// **Sliding Window** es más justo que contadores simples:
+/// - Resetea cada hora
+/// - Evita "burst" abuse
+/// - Simple de implementar
+///
+/// ## Alternativas Consideradas
+///
+/// 1. **Token Bucket**: Más complejo pero más flexible
+/// 2. **Leaky Bucket**: Constante pero puede bloquear legítimos
+/// 3. **Fixed Window**: Simple pero vulnerable a "boundary abuse"
+///
+/// Elegimos Sliding Window por balance simplicidad/efectividad.
+#[derive(CandidType, Deserialize, Clone, Debug)]
+struct RateLimitData {
+    /// Número de requests en la ventana actual
+    requests: u32,
+
+    /// Timestamp (nanoseconds) del inicio de la ventana
+    window_start: u64,
+}
+
+// 🎓 IMPLEMENTACIÓN: Storable con Bounded
+//
+// Esta es la implementación más eficiente para tipos pequeños y fijos.
+impl Storable for RateLimitData {
+    /// Serializa RateLimitData a bytes
+    ///
+    /// ## Formato Manual
+    ///
+    /// Convertimos directamente a bytes sin overhead de Candid:
+    /// - bytes[0..4]: requests (u32, little-endian)
+    /// - bytes[4..12]: window_start (u64, little-endian)
+    ///
+    /// Total: 12 bytes exactos
+    ///
+    /// ## Por Qué Little-Endian?
+    ///
+    /// - Es el estándar en la mayoría de sistemas modernos
+    /// - Compatible con Bitcoin (también usa little-endian)
+    /// - Rust lo hace eficientemente con to_le_bytes()
+    fn to_bytes(&self) -> Cow<[u8]> {
+        let mut bytes = Vec::with_capacity(12);
+
+        // Serializar requests (u32 = 4 bytes)
+        bytes.extend_from_slice(&self.requests.to_le_bytes());
+
+        // Serializar window_start (u64 = 8 bytes)
+        bytes.extend_from_slice(&self.window_start.to_le_bytes());
+
+        Cow::Owned(bytes)
+    }
+
+    /// Deserializa bytes a RateLimitData
+    ///
+    /// ## Error Handling
+    ///
+    /// Usamos unwrap() aquí porque:
+    /// 1. Sabemos que siempre son 12 bytes (Bounded)
+    /// 2. StableBTreeMap garantiza consistencia
+    /// 3. Si falla = bug crítico que queremos detectar
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        // Extraer requests (primeros 4 bytes)
+        let requests = u32::from_le_bytes(
+            bytes[0..4]
+                .try_into()
+                .expect("RateLimitData: invalid requests bytes"),
+        );
+
+        // Extraer window_start (siguientes 8 bytes)
+        let window_start = u64::from_le_bytes(
+            bytes[4..12]
+                .try_into()
+                .expect("RateLimitData: invalid window_start bytes"),
+        );
+
+        Self {
+            requests,
+            window_start,
+        }
+    }
+
+    /// Define límite como Bounded
+    ///
+    /// ## Bounded Configuration
+    ///
+    /// - max_size: 12 bytes (4 + 8)
+    /// - is_fixed_size: true (siempre 12 bytes)
+    ///
+    /// ## Beneficios
+    ///
+    /// StableBTreeMap puede:
+    /// - Preasignar espacio exacto
+    /// - Acceso O(1) sin overhead
+    /// - Verificar corrupción de datos
+    const BOUND: Bound = Bound::Bounded {
+        max_size: 12,        // u32 + u64
+        is_fixed_size: true, // Siempre el mismo tamaño
+    };
+}
+
+// ========================================================================
+// 🎓 COMPARACIÓN: Manual vs Candid Serialization
+// ========================================================================
+//
+// ### OPCIÓN 1: Manual (actual)
+// ```rust
+// fn to_bytes(&self) -> Cow<[u8]> {
+//     let mut bytes = Vec::with_capacity(12);
+//     bytes.extend_from_slice(&self.requests.to_le_bytes());
+//     bytes.extend_from_slice(&self.window_start.to_le_bytes());
+//     Cow::Owned(bytes)
+// }
+// ```
+// ✅ Pros: Rápido, tamaño mínimo (12 bytes)
+// ❌ Cons: Menos flexible si cambia el struct
+//
+// ### OPCIÓN 2: Candid
+// ```rust
+// fn to_bytes(&self) -> Cow<[u8]> {
+//     Cow::Owned(candid::encode_one(self).unwrap())
+// }
+// ```
+// ✅ Pros: Flexible, puede evolucionar
+// ❌ Cons: Overhead (~30 bytes en lugar de 12)
+//
+// ### CUÁNDO USAR CADA UNO?
+//
+// **Manual**: Tipos pequeños, inmutables, hot path (mucho acceso)
+// **Candid**: Tipos complejos, que pueden evolucionar, cold path
+//
+// Para RateLimitData: Manual es perfecto ✅
+// ========================================================================
 
 // Type aliases
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type SessionStorage = StableBTreeMap<Principal, UserSession, Memory>;
 type RateLimitStorage = StableBTreeMap<Principal, RateLimitData, Memory>;
 
+// 🎓 LECCIÓN: Memory Manager Pattern
+//
+// Usamos MemoryId different para cada estructura:
+// - SESSIONS usa MemoryId(0)
+// - RATE_LIMITS usa MemoryId(1)
+//
+// Esto previene conflictos y corrupción de datos.
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
@@ -26,12 +216,6 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))
         )
     );
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug)]
-struct RateLimitData {
-    requests: u32,
-    window_start: u64,
 }
 
 const MAX_REQUESTS_PER_HOUR: u32 = 100;

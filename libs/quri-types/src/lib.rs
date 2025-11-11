@@ -1,6 +1,11 @@
 use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 
+// 🎓 MÓDULO: Implementaciones de Storable trait
+// Este módulo contiene las implementaciones del trait Storable
+// para permitir que nuestros tipos se guarden en Stable Memory
+mod storable_impl;
+
 /// Bitcoin network types
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
 pub enum BitcoinNetwork {
