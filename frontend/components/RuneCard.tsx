@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import Image from 'next/image';
 import { Sparkles, User, Layers, Heart, Share2 } from 'lucide-react';
+import { VerificationBadge } from './RuneVerification';
 
 /**
  * Museum-grade Rune Card Component
@@ -169,6 +170,9 @@ export function RuneCard({
           </p>
         </div>
 
+        {/* On-Chain Verification Badge */}
+        <VerificationBadge runeId={rune.id} />
+
         {rune.description && (
           <p className="text-museum-charcoal text-sm leading-relaxed line-clamp-2">
             {rune.description}
@@ -253,6 +257,9 @@ export function RuneCardCompact({
           {rune.name}
         </h4>
         <p className="text-sm text-museum-dark-gray font-mono">{rune.symbol}</p>
+        <div className="mt-2">
+          <VerificationBadge runeId={rune.id} />
+        </div>
       </div>
 
       <div className="text-right flex-shrink-0">
