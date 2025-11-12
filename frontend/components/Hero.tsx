@@ -35,6 +35,12 @@ export function Hero() {
             </div>
             <div className="flex items-center gap-6">
               <Link
+                href="/dashboard"
+                className="text-museum-dark-gray hover:text-museum-black transition-colors text-sm font-medium"
+              >
+                Dashboard
+              </Link>
+              <Link
                 href="/gallery"
                 className="text-museum-dark-gray hover:text-museum-black transition-colors text-sm font-medium"
               >
@@ -102,21 +108,21 @@ export function Hero() {
             {/* CTA Buttons - Minimal Style */}
             <RevealOnScroll animation="slide-up" delay={300}>
               <div className="flex flex-col sm:flex-row gap-4">
-                <Button
-                  size="lg"
-                  onClick={handleAuthClick}
-                  isLoading={isLoading}
-                  className="bg-museum-black hover:bg-museum-charcoal text-museum-white px-8 py-4 text-lg group"
-                >
-                  {isConnected ? 'Create Your Rune' : 'Get Started'}
-                  <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
-                </Button>
+                <Link href="/dashboard">
+                  <Button
+                    size="lg"
+                    className="bg-museum-black hover:bg-museum-charcoal text-museum-white px-8 py-4 text-lg group w-full sm:w-auto"
+                  >
+                    Launch App
+                    <ArrowRight className="ml-2 w-5 h-5 group-hover:translate-x-1 transition-transform" />
+                  </Button>
+                </Link>
 
                 <Link href="/gallery">
                   <Button
                     variant="outline"
                     size="lg"
-                    className="border-2 border-museum-charcoal text-museum-charcoal hover:bg-museum-charcoal hover:text-museum-white px-8 py-4 text-lg"
+                    className="border-2 border-museum-charcoal text-museum-charcoal hover:bg-museum-charcoal hover:text-museum-white px-8 py-4 text-lg w-full sm:w-auto"
                   >
                     View Gallery
                   </Button>
