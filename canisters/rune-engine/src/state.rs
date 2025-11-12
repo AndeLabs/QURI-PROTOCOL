@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize};
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::VirtualMemory;
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
@@ -158,8 +158,12 @@ impl EtchingProcess {
 }
 
 /// Global state manager
+type ProcessStorage = RefCell<Option<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>>>;
+
 thread_local! {
-    static PROCESSES: RefCell<Option<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>>> = RefCell::new(None);
+    #[allow(unused_doc_comments)]
+    /// Global state manager
+    static PROCESSES: ProcessStorage = const { RefCell::new(None) };
 }
 
 /// Initialize state storage
@@ -172,8 +176,8 @@ pub fn init_state_storage(memory: Memory) {
 /// Store etching process
 pub fn store_process(process: &EtchingProcess) -> Result<(), String> {
     let key = process.id.as_bytes().to_vec();
-    let value = candid::encode_one(process)
-        .map_err(|e| format!("Failed to encode process: {}", e))?;
+    let value =
+        candid::encode_one(process).map_err(|e| format!("Failed to encode process: {}", e))?;
 
     PROCESSES.with(|p| {
         if let Some(ref mut map) = *p.borrow_mut() {

@@ -1,10 +1,10 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use ic_stable_structures::storable::Bound;
-use std::cell::RefCell;
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, Storable};
 use std::borrow::Cow;
+use std::cell::RefCell;
 
 use quri_types::{SessionPermissions, UserSession};
 
@@ -219,7 +219,7 @@ thread_local! {
 }
 
 const MAX_REQUESTS_PER_HOUR: u32 = 100;
-const RATE_LIMIT_WINDOW: u64 = 3600_000_000_000; // 1 hour in nanoseconds
+const RATE_LIMIT_WINDOW: u64 = 3_600_000_000_000; // 1 hour in nanoseconds
 
 #[init]
 fn init() {
@@ -239,7 +239,10 @@ fn post_upgrade() {
 /// Create a new session for a user
 /// Inspired by Odin.fun's session keys feature
 #[update]
-fn create_session(permissions: SessionPermissions, duration_seconds: u64) -> Result<UserSession, String> {
+fn create_session(
+    permissions: SessionPermissions,
+    duration_seconds: u64,
+) -> Result<UserSession, String> {
     let caller = ic_cdk::caller();
 
     if caller == Principal::anonymous() {
@@ -274,9 +277,7 @@ fn create_session(permissions: SessionPermissions, duration_seconds: u64) -> Res
 fn get_session() -> Option<UserSession> {
     let caller = ic_cdk::caller();
 
-    SESSIONS.with(|sessions| {
-        sessions.borrow().get(&caller)
-    })
+    SESSIONS.with(|sessions| sessions.borrow().get(&caller))
 }
 
 /// Validate a session
@@ -383,7 +384,7 @@ fn generate_session_key(principal: Principal) -> Vec<u8> {
 
     let mut hasher = Sha256::new();
     hasher.update(principal.as_slice());
-    hasher.update(&ic_cdk::api::time().to_le_bytes());
+    hasher.update(ic_cdk::api::time().to_le_bytes());
     hasher.finalize().to_vec()
 }
 

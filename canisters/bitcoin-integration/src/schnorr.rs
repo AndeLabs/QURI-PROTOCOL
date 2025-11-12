@@ -36,9 +36,7 @@ const SCHNORR_ALGORITHM: &str = "bip340secp256k1";
 const SCHNORR_KEY_ID: &str = "dfx_test_key";
 
 /// Obtiene la public key Schnorr del canister
-pub async fn get_schnorr_public_key(
-    derivation_path: Vec<Vec<u8>>,
-) -> Result<Vec<u8>, String> {
+pub async fn get_schnorr_public_key(derivation_path: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
     #[derive(candid::CandidType)]
     struct SchnorrPublicKeyArgs {
         canister_id: Option<Principal>,
@@ -73,12 +71,7 @@ pub async fn get_schnorr_public_key(
         (args,),
     )
     .await
-    .map_err(|(code, msg)| {
-        format!(
-            "Failed to get Schnorr public key: {:?} - {}",
-            code, msg
-        )
-    })?;
+    .map_err(|(code, msg)| format!("Failed to get Schnorr public key: {:?} - {}", code, msg))?;
 
     Ok(result.public_key)
 }
@@ -121,9 +114,7 @@ pub async fn sign_message(
         (args,),
     )
     .await
-    .map_err(|(code, msg)| {
-        format!("Failed to sign with Schnorr: {:?} - {}", code, msg)
-    })?;
+    .map_err(|(code, msg)| format!("Failed to sign with Schnorr: {:?} - {}", code, msg))?;
 
     Ok(result.signature)
 }

@@ -4,16 +4,14 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
-use quri_types::{RuneConfig, RuneEtching, RuneId, RuneMetadata};
+use quri_types::{RuneEtching, RuneId, RuneMetadata};
 
 mod errors;
 mod etching_flow;
 mod state;
 mod validators;
 
-use errors::{EtchingError, EtchingResult};
 use etching_flow::{EtchingConfig, EtchingOrchestrator};
-use state::EtchingProcess;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 type RuneStorage = StableBTreeMap<RuneId, RuneMetadata, Memory>;
@@ -35,9 +33,9 @@ thread_local! {
         )
     );
 
-    static ETCHING_CONFIG: RefCell<Option<EtchingConfig>> = RefCell::new(None);
+    static ETCHING_CONFIG: RefCell<Option<EtchingConfig>> = const { RefCell::new(None) };
 
-    static CANISTER_CONFIG: RefCell<Option<CanisterConfig>> = RefCell::new(None);
+    static CANISTER_CONFIG: RefCell<Option<CanisterConfig>> = const { RefCell::new(None) };
 }
 
 #[init]

@@ -89,7 +89,10 @@ fn convert_runestone_to_indexed(
     // Only process etchings
     let etching = runestone.etching?;
 
-    let name = etching.rune.clone().unwrap_or_else(|| format!("RUNE_{}", block_height));
+    let name = etching
+        .rune
+        .clone()
+        .unwrap_or_else(|| format!("RUNE_{}", block_height));
     let symbol = etching.symbol.map(|c| c.to_string()).unwrap_or_default();
     let total_supply = calculate_total_supply(&etching);
 
