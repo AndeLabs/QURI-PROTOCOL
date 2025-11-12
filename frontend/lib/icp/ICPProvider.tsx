@@ -38,7 +38,7 @@ export function ICPProvider({ children }: { children: ReactNode }) {
           });
         }
       } catch (error) {
-        logger.error('Failed to initialize ICP auth', error);
+        logger.error('Failed to initialize ICP auth', error instanceof Error ? error : undefined);
       } finally {
         setIsLoading(false);
       }
@@ -65,7 +65,7 @@ export function ICPProvider({ children }: { children: ReactNode }) {
 
       return success;
     } catch (error) {
-      logger.error('Connection failed', error);
+      logger.error('Connection failed', error instanceof Error ? error : undefined);
       return false;
     } finally {
       setIsLoading(false);
@@ -80,7 +80,7 @@ export function ICPProvider({ children }: { children: ReactNode }) {
       setPrincipal(null);
       setIsConnected(false);
     } catch (error) {
-      logger.error('Disconnect failed', error);
+      logger.error('Disconnect failed', error instanceof Error ? error : undefined);
     } finally {
       setIsLoading(false);
     }
