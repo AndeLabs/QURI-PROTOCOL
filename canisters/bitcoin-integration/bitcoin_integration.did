@@ -1,3 +1,6 @@
+// Bitcoin Integration Canister - Low-level Bitcoin and ckBTC operations
+// Handles UTXO management, transaction construction, Schnorr signing, and broadcasting
+
 type BitcoinNetwork = variant {
     Mainnet;
     Testnet;
@@ -32,9 +35,41 @@ type MintTerms = record {
     offset_end : opt nat64;
 };
 
+type Utxo = record {
+    outpoint : Outpoint;
+    value : nat64;
+    height : nat32;
+};
+
+type Outpoint = record {
+    txid : blob;
+    vout : nat32;
+};
+
+type UtxoSelection = record {
+    selected : vec Utxo;
+    total_value : nat64;
+    estimated_fee : nat64;
+    change : nat64;
+};
+
 service : (BitcoinNetwork, principal) -> {
+    // Address management
     "get_p2tr_address" : () -> (variant { Ok : BitcoinAddress; Err : text });
+
+    // Fee estimation
     "get_fee_estimates" : () -> (variant { Ok : FeeEstimates; Err : text });
-    "etch_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
+
+    // UTXO management
+    "select_utxos" : (nat64, nat64) -> (variant { Ok : UtxoSelection; Err : text });
+
+    // Transaction operations
+    "build_and_sign_etching_tx" : (RuneEtching, UtxoSelection) -> (variant { Ok : blob; Err : text });
+    "broadcast_transaction" : (blob) -> (variant { Ok : text; Err : text });
+
+    // Blockchain queries
+    "get_block_height" : () -> (variant { Ok : nat64; Err : text });
+
+    // ckBTC operations
     "get_ckbtc_balance" : (principal) -> (variant { Ok : nat64; Err : text }) query;
 }
