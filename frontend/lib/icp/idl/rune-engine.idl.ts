@@ -40,6 +40,7 @@ const EtchingConfigView = IDL.Record({
   enable_retries: IDL.Bool,
 });
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const Result = (ok: any, err: any) =>
   IDL.Variant({
     Ok: ok,
