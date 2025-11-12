@@ -64,7 +64,7 @@ export default function GlobalRunesExplorer() {
 
       // Get latest block
       const blockInfo = await client.getLatestBlock();
-      setLatestBlock(blockInfo.height);
+      setLatestBlock(Number(blockInfo.height));
 
       // In production, we'd have a method to get all Runes
       // For now, we'll demonstrate with a sample query
@@ -205,7 +205,7 @@ export default function GlobalRunesExplorer() {
         <div className="flex justify-center gap-4">
           <Button
             onClick={() => setActiveTab('all')}
-            variant={activeTab === 'all' ? 'default' : 'outline'}
+            variant={activeTab === 'all' ? 'primary' : 'outline'}
             size="lg"
             className="min-w-[200px]"
           >
@@ -214,7 +214,7 @@ export default function GlobalRunesExplorer() {
           </Button>
           <Button
             onClick={() => setActiveTab('quri')}
-            variant={activeTab === 'quri' ? 'default' : 'outline'}
+            variant={activeTab === 'quri' ? 'primary' : 'outline'}
             size="lg"
             className="min-w-[200px]"
           >

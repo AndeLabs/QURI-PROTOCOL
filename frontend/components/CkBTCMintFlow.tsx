@@ -170,7 +170,7 @@ export function CkBTCMintFlow({
         fee: [],
         memo: [],
         created_at_time: [],
-      });
+      }) as { Ok?: bigint; Err?: any };
 
       if ('Err' in approveResult) {
         throw new Error(`Approval failed: ${JSON.stringify(approveResult.Err)}`);
@@ -215,13 +215,13 @@ export function CkBTCMintFlow({
         runeData,
         metadataOpt,
         MINT_FEE_SATS
-      );
+      ) as { Ok?: string; Err?: string };
 
       if ('Err' in result) {
         throw new Error(result.Err);
       }
 
-      const createdRuneId = result.Ok;
+      const createdRuneId = result.Ok!;
       setRuneId(createdRuneId);
       setStep('success');
       onSuccess(createdRuneId);

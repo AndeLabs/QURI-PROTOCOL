@@ -18,7 +18,11 @@ export default function StakingPage() {
 
       {/* Staking Interface */}
       <div className="max-w-4xl mx-auto">
-        <RuneStaking />
+        <RuneStaking
+          runeId="840000:1"
+          runeName="DOG•GO•TO•THE•MOON"
+          runeSymbol="DOG"
+        />
       </div>
 
       {/* Stats Cards */}
