@@ -91,6 +91,7 @@ export async function getPrincipal(): Promise<Principal | null> {
 
 export function createActor<T>(
   canisterId: string,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   idlFactory: any
 ): ActorSubclass<T> {
   const canisterIdPrincipal = Principal.fromText(canisterId);
