@@ -2,8 +2,40 @@ import { CheckCircle2 } from 'lucide-react';
 
 const features = [
   {
+    title: 'Complete DEX Trading',
+    description: 'AMM swaps + Limit orders with professional orderbook matching engine',
+  },
+  {
+    title: 'Cross-Chain Bridge',
+    description: 'Seamlessly transfer Bitcoin Runes between Bitcoin and ICP via Omnity Network',
+  },
+  {
+    title: 'Liquidity Mining',
+    description: 'Earn rewards by providing liquidity with time and amount-based boost multipliers',
+  },
+  {
+    title: 'Smart Order Routing',
+    description: 'Best price execution with multi-hop and split routing across pools',
+  },
+  {
     title: 'Threshold Schnorr Signatures',
     description: 'Distributed key management using Internet Computer threshold cryptography',
+  },
+  {
+    title: 'ckBTC Integration',
+    description: 'Native Chain-Key Bitcoin support (ICRC-1/ICRC-2) for seamless trading',
+  },
+  {
+    title: 'Professional Orderbook',
+    description: 'Limit, Market, Stop orders with GTC, IOC, FOK, GTT time-in-force options',
+  },
+  {
+    title: 'Runes Staking',
+    description: 'Stake your Runes to earn rewards with flexible lock periods',
+  },
+  {
+    title: 'Global Explorer',
+    description: 'Real-time on-chain verification and tracking of all Bitcoin Runes',
   },
   {
     title: 'P2TR Taproot Addresses',
@@ -14,16 +46,8 @@ const features = [
     description: 'Intelligent coin selection with Branch & Bound algorithm',
   },
   {
-    title: 'ckBTC Integration',
-    description: 'Seamless integration with Chain-Key Bitcoin (ICRC-1/ICRC-2)',
-  },
-  {
-    title: 'State Machine',
-    description: 'Robust etching flow with 11 states and error recovery',
-  },
-  {
     title: 'Production Grade',
-    description: 'Comprehensive error handling, validation, and testing',
+    description: '7,300+ lines of professional code with comprehensive testing',
   },
 ];
 

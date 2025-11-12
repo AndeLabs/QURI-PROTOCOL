@@ -93,8 +93,9 @@ export function Hero() {
             {/* Subtitle - Elegant and Spacious */}
             <RevealOnScroll animation="slide-up" delay={200}>
               <p className="text-xl lg:text-2xl text-museum-charcoal mb-12 max-w-2xl leading-relaxed">
-                QURI is a professional launchpad for Bitcoin Runes — digital art pieces
-                etched permanently onto the world&apos;s most secure blockchain.
+                QURI is the first complete ecosystem for Bitcoin Runes — create, trade,
+                stake, and bridge your digital artifacts with professional-grade DEX,
+                cross-chain capabilities, and liquidity mining on ICP.
               </p>
             </RevealOnScroll>
 
@@ -160,11 +161,11 @@ export function Hero() {
                   </div>
                 </div>
                 <h3 className="font-serif text-2xl font-bold text-museum-black mb-3">
-                  Zero Platform Fees
+                  Complete DEX Trading
                 </h3>
                 <p className="text-museum-dark-gray leading-relaxed">
-                  Pay only Bitcoin network fees. No hidden costs, no platform cuts.
-                  Your art, your value.
+                  Professional-grade AMM swaps, limit orderbook, smart routing, and
+                  liquidity mining. Trade Runes with best-in-class execution.
                 </p>
               </article>
             </RevealOnScroll>
@@ -178,11 +179,11 @@ export function Hero() {
                   </div>
                 </div>
                 <h3 className="font-serif text-2xl font-bold text-museum-black mb-3">
-                  Instant Creation
+                  Cross-Chain Bridge
                 </h3>
                 <p className="text-museum-dark-gray leading-relaxed">
-                  Create and deploy your Runes in minutes with our intuitive,
-                  production-ready interface.
+                  Seamlessly transfer Runes between Bitcoin and ICP via Omnity Network.
+                  Unlock DeFi capabilities while maintaining Bitcoin security.
                 </p>
               </article>
             </RevealOnScroll>
