@@ -8,10 +8,15 @@ use std::collections::HashMap;
 mod amm;
 mod router;
 mod farming;
+mod orderbook;
 
 use amm::{AMMPool, AddLiquidityResult, RemoveLiquidityResult, SwapResult};
 use router::{DEXRouter, Route, RouteQuote, RouterConfig};
 use farming::{LiquidityFarm, UserStake, StakeResult, HarvestResult, FarmStats};
+use orderbook::{
+    Orderbook, Order, OrderType, OrderSide, TimeInForce, PlaceOrderResult,
+    CancelOrderResult, OrderbookDepth, OrderbookStats, Trade, OrderbookConfig,
+};
 
 /// QURI DEX - Complete Decentralized Exchange for Bitcoin Runes
 ///
@@ -119,6 +124,9 @@ thread_local! {
         paused: false,
         btc_price_usd: 50_000.0,
     });
+
+    /// Orderbooks: pool_id -> Orderbook
+    static ORDERBOOKS: RefCell<HashMap<String, Orderbook>> = RefCell::new(HashMap::new());
 }
 
 // ============================================================================
@@ -496,6 +504,160 @@ async fn swap(
     ic_cdk::println!("✅ Swap executed: {:?}", result);
 
     Ok(result)
+}
+
+// ============================================================================
+// Orderbook Trading
+// ============================================================================
+
+/// Create orderbook for a pool
+#[update]
+fn create_orderbook(pool_id: String) -> Result<(), String> {
+    let caller = ic_cdk::caller();
+    let admin = CONFIG.with(|c| c.borrow().admin);
+
+    if caller != admin {
+        return Err("Unauthorized: admin only".to_string());
+    }
+
+    // Verify pool exists
+    if !POOLS.with(|pools| pools.borrow().contains_key(&pool_id)) {
+        return Err("Pool not found".to_string());
+    }
+
+    // Check if orderbook already exists
+    if ORDERBOOKS.with(|obs| obs.borrow().contains_key(&pool_id)) {
+        return Err("Orderbook already exists for this pool".to_string());
+    }
+
+    // Create orderbook
+    let orderbook = Orderbook::new(pool_id.clone(), None);
+
+    ORDERBOOKS.with(|obs| {
+        obs.borrow_mut().insert(pool_id.clone(), orderbook);
+    });
+
+    ic_cdk::println!("✅ Created orderbook for pool: {}", pool_id);
+
+    Ok(())
+}
+
+/// Place an order in the orderbook
+#[update]
+async fn place_order(
+    pool_id: String,
+    side: OrderSide,
+    order_type: OrderType,
+    price: Nat,
+    amount: Nat,
+    time_in_force: TimeInForce,
+) -> Result<PlaceOrderResult, String> {
+    let caller = ic_cdk::caller();
+
+    // Check if DEX is paused
+    if CONFIG.with(|c| c.borrow().paused) {
+        return Err("DEX is paused".to_string());
+    }
+
+    // Get orderbook
+    let mut orderbook = ORDERBOOKS
+        .with(|obs| obs.borrow().get(&pool_id).cloned())
+        .ok_or("Orderbook not found for this pool")?;
+
+    // TODO: Lock user's tokens (ICRC-2 approve)
+
+    // Place order
+    let result = orderbook.place_order(
+        caller,
+        side,
+        order_type,
+        price,
+        amount,
+        time_in_force,
+    )?;
+
+    // Update orderbook
+    ORDERBOOKS.with(|obs| {
+        obs.borrow_mut().insert(pool_id, orderbook);
+    });
+
+    // Update stats
+    GLOBAL_STATS.with(|stats| {
+        stats.borrow_mut().total_trades += result.trades.len() as u64;
+    });
+
+    ic_cdk::println!("✅ Order placed: {:?}", result);
+
+    Ok(result)
+}
+
+/// Cancel an order
+#[update]
+fn cancel_order(pool_id: String, order_id: String) -> Result<CancelOrderResult, String> {
+    let caller = ic_cdk::caller();
+
+    // Get orderbook
+    let mut orderbook = ORDERBOOKS
+        .with(|obs| obs.borrow().get(&pool_id).cloned())
+        .ok_or("Orderbook not found for this pool")?;
+
+    // Cancel order
+    let result = orderbook.cancel_order(caller, order_id)?;
+
+    // Update orderbook
+    ORDERBOOKS.with(|obs| {
+        obs.borrow_mut().insert(pool_id, orderbook);
+    });
+
+    // TODO: Unlock user's tokens
+
+    ic_cdk::println!("✅ Order cancelled: {:?}", result);
+
+    Ok(result)
+}
+
+/// Get orderbook depth
+#[query]
+fn get_orderbook_depth(pool_id: String, levels: usize) -> Result<OrderbookDepth, String> {
+    ORDERBOOKS.with(|obs| {
+        obs.borrow()
+            .get(&pool_id)
+            .map(|orderbook| orderbook.get_depth(levels))
+            .ok_or("Orderbook not found for this pool".to_string())
+    })
+}
+
+/// Get user's orders in a pool
+#[query]
+fn get_user_orders(pool_id: String, user: Principal) -> Result<Vec<Order>, String> {
+    ORDERBOOKS.with(|obs| {
+        obs.borrow()
+            .get(&pool_id)
+            .map(|orderbook| orderbook.get_user_orders(user))
+            .ok_or("Orderbook not found for this pool".to_string())
+    })
+}
+
+/// Get recent trades
+#[query]
+fn get_recent_trades(pool_id: String, limit: usize) -> Result<Vec<Trade>, String> {
+    ORDERBOOKS.with(|obs| {
+        obs.borrow()
+            .get(&pool_id)
+            .map(|orderbook| orderbook.get_recent_trades(limit))
+            .ok_or("Orderbook not found for this pool".to_string())
+    })
+}
+
+/// Get orderbook statistics
+#[query]
+fn get_orderbook_stats(pool_id: String) -> Result<OrderbookStats, String> {
+    ORDERBOOKS.with(|obs| {
+        obs.borrow()
+            .get(&pool_id)
+            .map(|orderbook| orderbook.get_stats())
+            .ok_or("Orderbook not found for this pool".to_string())
+    })
 }
 
 // ============================================================================
