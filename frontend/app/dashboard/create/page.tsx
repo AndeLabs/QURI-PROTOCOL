@@ -47,7 +47,7 @@ export default function CreatePage() {
                 Threshold Schnorr
               </h3>
               <p className="text-sm text-museum-dark-gray">
-                Enterprise-grade security with ICP's threshold signatures.
+                Enterprise-grade security with ICP&apos;s threshold signatures.
               </p>
             </div>
             <div>
