@@ -7,10 +7,14 @@ import { z } from 'zod';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
+import { ErrorAlert } from './ui/ErrorAlert';
+import { TransactionPreview } from './TransactionPreview';
+import { StatusTracker, EtchingStage } from './StatusTracker';
 import { useICP } from '@/lib/icp/ICPProvider';
 import { useRuneEngine } from '@/hooks/useRuneEngine';
 import { validateRuneName, validateSymbol } from '@/lib/utils';
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
+import { parseEtchingError } from '@/lib/error-messages';
+import { AlertCircle, Sparkles } from 'lucide-react';
 import { RuneEtching } from '@/types/canisters';
 
 const etchingSchema = z.object({
@@ -43,14 +47,21 @@ type EtchingFormData = z.infer<typeof etchingSchema>;
 export function EtchingForm() {
   const { isConnected } = useICP();
   const { createRune, isLoading, error } = useRuneEngine();
+
+  // State management
+  const [showPreview, setShowPreview] = useState(false);
+  const [pendingEtching, setPendingEtching] = useState<RuneEtching | null>(null);
   const [processId, setProcessId] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [currentStage, setCurrentStage] = useState<EtchingStage>('validating');
+  const [txid, setTxid] = useState<string | undefined>();
+  const [confirmations, setConfirmations] = useState(0);
 
   const {
     register,
     handleSubmit,
     formState: { errors },
     reset,
+    getValues,
   } = useForm<EtchingFormData>({
     resolver: zodResolver(etchingSchema),
     defaultValues: {
@@ -59,10 +70,8 @@ export function EtchingForm() {
     },
   });
 
+  // Handle form submission - show preview first
   const onSubmit = async (data: EtchingFormData) => {
-    setSuccess(false);
-    setProcessId(null);
-
     const etching: RuneEtching = {
       rune_name: data.rune_name,
       symbol: data.symbol,
@@ -83,147 +92,211 @@ export function EtchingForm() {
           : [],
     };
 
-    const id = await createRune(etching);
+    setPendingEtching(etching);
+    setShowPreview(true);
+  };
+
+  // Handle confirmed transaction from preview
+  const handleConfirmTransaction = async () => {
+    if (!pendingEtching) return;
+
+    setShowPreview(false);
+    setCurrentStage('validating');
+
+    const id = await createRune(pendingEtching);
 
     if (id) {
       setProcessId(id);
-      setSuccess(true);
+      setCurrentStage('checking_balance');
+      // TODO: Poll for status updates
+      // For now, we just show the initial state
       reset();
     }
   };
 
+  // Handle cancel preview
+  const handleCancelPreview = () => {
+    setShowPreview(false);
+    setPendingEtching(null);
+  };
+
+  // Handle dismiss error
+  const handleDismissError = () => {
+    // Error will be cleared by the hook on next action
+  };
+
+  // Parse error for better UX
+  const parsedError = error ? parseEtchingError(error) : null;
+
+  // Show status tracker if we have a process ID
+  if (processId) {
+    return (
+      <div className="space-y-6">
+        <StatusTracker
+          processId={processId}
+          currentStage={currentStage}
+          txid={txid}
+          confirmations={confirmations}
+          requiredConfirmations={6}
+          error={error || undefined}
+        />
+
+        {currentStage === 'completed' && (
+          <div className="text-center">
+            <Button
+              onClick={() => {
+                setProcessId(null);
+                setCurrentStage('validating');
+                setTxid(undefined);
+                setConfirmations(0);
+              }}
+              size="lg"
+            >
+              <Sparkles className="mr-2 h-4 w-4" />
+              Create Another Rune
+            </Button>
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
-    <Card className="mx-auto max-w-2xl">
-      <CardHeader>
-        <CardTitle>Create Your Rune</CardTitle>
-        <CardDescription>
-          Launch your Bitcoin Rune on the Bitcoin blockchain through Internet Computer
-        </CardDescription>
-      </CardHeader>
+    <>
+      <Card className="mx-auto max-w-2xl">
+        <CardHeader>
+          <CardTitle>Create Your Rune</CardTitle>
+          <CardDescription>
+            Launch your Bitcoin Rune on the Bitcoin blockchain through Internet Computer
+          </CardDescription>
+        </CardHeader>
 
-      <CardContent>
-        {!isConnected && (
-          <div className="mb-6 rounded-lg bg-yellow-50 p-4">
-            <div className="flex">
-              <AlertCircle className="h-5 w-5 text-yellow-400" />
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-yellow-800">Wallet Required</h3>
-                <p className="mt-1 text-sm text-yellow-700">
-                  Please connect your wallet to create a Rune
-                </p>
+        <CardContent>
+          {/* Wallet Connection Warning */}
+          {!isConnected && (
+            <div className="mb-6 rounded-lg border-2 border-yellow-200 bg-yellow-50 p-4">
+              <div className="flex gap-3">
+                <AlertCircle className="h-5 w-5 flex-shrink-0 text-yellow-500" />
+                <div>
+                  <h3 className="font-semibold text-yellow-900">Connect Wallet to Continue</h3>
+                  <p className="mt-1 text-sm text-yellow-700">
+                    You can explore the form, but you'll need to connect your wallet using
+                    Internet Identity before creating a Rune.
+                  </p>
+                </div>
               </div>
             </div>
-          </div>
-        )}
+          )}
 
-        {success && processId && (
-          <div className="mb-6 rounded-lg bg-green-50 p-4">
-            <div className="flex">
-              <CheckCircle2 className="h-5 w-5 text-green-400" />
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-green-800">Rune Creation Initiated!</h3>
-                <p className="mt-1 text-sm text-green-700">
-                  Process ID: <span className="font-mono">{processId}</span>
-                </p>
-                <p className="mt-1 text-sm text-green-700">
-                  Your Rune is being etched on the Bitcoin blockchain. This may take a few minutes.
-                </p>
-              </div>
+          {/* Error Alert */}
+          {parsedError && (
+            <div className="mb-6">
+              <ErrorAlert error={parsedError} onDismiss={handleDismissError} />
             </div>
-          </div>
-        )}
+          )}
 
-        {error && (
-          <div className="mb-6 rounded-lg bg-red-50 p-4">
-            <div className="flex">
-              <AlertCircle className="h-5 w-5 text-red-400" />
-              <div className="ml-3">
-                <h3 className="text-sm font-medium text-red-800">Error</h3>
-                <p className="mt-1 text-sm text-red-700">{error}</p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
-          <Input
-            label="Rune Name"
-            placeholder="BITCOIN•RUNE"
-            helperText="Use only uppercase letters and spacers (•). Max 26 characters."
-            error={errors.rune_name?.message}
-            {...register('rune_name')}
-          />
-
-          <Input
-            label="Symbol"
-            placeholder="BTC"
-            helperText="1-4 characters, alphanumeric only"
-            error={errors.symbol?.message}
-            {...register('symbol')}
-          />
-
-          <Input
-            label="Divisibility"
-            type="number"
-            placeholder="8"
-            helperText="Decimal places (0-18). Bitcoin uses 8."
-            error={errors.divisibility?.message}
-            {...register('divisibility', { valueAsNumber: true })}
-          />
-
-          <Input
-            label="Premine"
-            type="number"
-            placeholder="1000000"
-            helperText="Initial supply to mint immediately"
-            error={errors.premine?.message}
-            {...register('premine', { valueAsNumber: true })}
-          />
-
-          <div className="border-t border-gray-200 pt-6">
-            <h3 className="mb-4 text-lg font-medium text-gray-900">
-              Mint Terms (Optional)
-            </h3>
-
+          {/* Form */}
+          <form onSubmit={handleSubmit(onSubmit)} className="space-y-6">
+            {/* Basic Parameters */}
             <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-gray-900">Basic Parameters</h3>
+
               <Input
-                label="Mint Amount"
-                type="number"
-                placeholder="100"
-                helperText="Amount per mint"
-                error={errors.mintAmount?.message}
-                {...register('mintAmount', { valueAsNumber: true })}
+                label="Rune Name"
+                placeholder="BITCOIN•RUNE"
+                helperText="Use only uppercase letters and spacers (•). Max 26 characters."
+                error={errors.rune_name?.message}
+                {...register('rune_name')}
               />
 
               <Input
-                label="Mint Cap"
-                type="number"
-                placeholder="10000"
-                helperText="Maximum number of mints"
-                error={errors.mintCap?.message}
-                {...register('mintCap', { valueAsNumber: true })}
+                label="Symbol"
+                placeholder="BTC"
+                helperText="1-4 characters, alphanumeric only"
+                error={errors.symbol?.message}
+                {...register('symbol')}
               />
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Divisibility"
+                  type="number"
+                  placeholder="8"
+                  helperText="Decimal places (0-18)"
+                  error={errors.divisibility?.message}
+                  {...register('divisibility', { valueAsNumber: true })}
+                />
+
+                <Input
+                  label="Premine"
+                  type="number"
+                  placeholder="1000000"
+                  helperText="Initial supply"
+                  error={errors.premine?.message}
+                  {...register('premine', { valueAsNumber: true })}
+                />
+              </div>
             </div>
-          </div>
 
-          <Button
-            type="submit"
-            className="w-full"
-            size="lg"
-            disabled={!isConnected || isLoading}
-            isLoading={isLoading}
-          >
-            {isLoading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Creating Rune...
-              </>
-            ) : (
-              'Create Rune'
+            {/* Mint Terms */}
+            <div className="space-y-4 border-t border-gray-200 pt-6">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">Mint Terms</h3>
+                <p className="mt-1 text-sm text-gray-500">
+                  Optional: Allow others to mint your Rune after creation
+                </p>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-2">
+                <Input
+                  label="Mint Amount"
+                  type="number"
+                  placeholder="100"
+                  helperText="Amount per mint"
+                  error={errors.mintAmount?.message}
+                  {...register('mintAmount', { valueAsNumber: true })}
+                />
+
+                <Input
+                  label="Mint Cap"
+                  type="number"
+                  placeholder="10000"
+                  helperText="Maximum mints"
+                  error={errors.mintCap?.message}
+                  {...register('mintCap', { valueAsNumber: true })}
+                />
+              </div>
+            </div>
+
+            {/* Submit Button */}
+            <Button
+              type="submit"
+              className="w-full"
+              size="lg"
+              disabled={!isConnected || isLoading}
+            >
+              Review Transaction
+            </Button>
+
+            {!isConnected && (
+              <p className="text-center text-sm text-gray-500">
+                Connect your wallet above to enable Rune creation
+              </p>
             )}
-          </Button>
-        </form>
-      </CardContent>
-    </Card>
+          </form>
+        </CardContent>
+      </Card>
+
+      {/* Transaction Preview Modal */}
+      {showPreview && pendingEtching && (
+        <TransactionPreview
+          etching={pendingEtching}
+          estimatedFee={BigInt(10000)} // TODO: Get actual fee estimate
+          onConfirm={handleConfirmTransaction}
+          onCancel={handleCancelPreview}
+          isLoading={isLoading}
+        />
+      )}
+    </>
   );
 }
