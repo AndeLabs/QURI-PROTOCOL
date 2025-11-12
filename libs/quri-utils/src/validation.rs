@@ -1,5 +1,5 @@
-use quri_types::{RuneConfig, QuriError};
-use crate::{validate_rune_name, validate_divisibility};
+use crate::{validate_divisibility, validate_rune_name};
+use quri_types::{QuriError, RuneConfig};
 
 /// Comprehensive validation for Rune configuration
 pub fn validate_rune_config(config: &RuneConfig) -> Result<(), QuriError> {
@@ -79,7 +79,7 @@ fn validate_mint_terms(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quri_types::{RuneConfig, MintTerms};
+    use quri_types::{MintTerms, RuneConfig};
 
     #[test]
     fn test_valid_rune_config() {

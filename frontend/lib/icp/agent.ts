@@ -1,6 +1,7 @@
 import { HttpAgent, Actor, ActorSubclass } from '@dfinity/agent';
 import { AuthClient } from '@dfinity/auth-client';
 import { Principal } from '@dfinity/principal';
+import { logger } from '@/lib/logger';
 
 const IC_HOST = process.env.NEXT_PUBLIC_IC_HOST || 'http://localhost:4943';
 
@@ -18,8 +19,9 @@ export async function getAgent(): Promise<HttpAgent> {
   if (IC_HOST.includes('localhost')) {
     try {
       await agent.fetchRootKey();
+      logger.debug('Root key fetched successfully');
     } catch (error) {
-      console.warn('Unable to fetch root key:', error);
+      logger.warn('Unable to fetch root key (local development)', { error });
     }
   }
 
@@ -50,13 +52,16 @@ export async function login(): Promise<boolean> {
         });
 
         if (IC_HOST.includes('localhost')) {
-          agent.fetchRootKey().catch(console.warn);
+          agent.fetchRootKey().catch((err) => {
+            logger.warn('Failed to fetch root key after login', { error: err });
+          });
         }
 
+        logger.info('Login successful');
         resolve(true);
       },
       onError: (error) => {
-        console.error('Login failed:', error);
+        logger.error('Login failed', error);
         resolve(false);
       },
     });
@@ -70,8 +75,12 @@ export async function logout(): Promise<void> {
   // Reset agent to anonymous
   agent = new HttpAgent({ host: IC_HOST });
   if (IC_HOST.includes('localhost')) {
-    await agent.fetchRootKey().catch(console.warn);
+    await agent.fetchRootKey().catch((err) => {
+      logger.warn('Failed to fetch root key after logout', { error: err });
+    });
   }
+
+  logger.info('Logout successful');
 }
 
 export async function isAuthenticated(): Promise<boolean> {

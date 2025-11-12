@@ -1,7 +1,7 @@
 // 🎓 LECCIÓN: Imports y Módulos
 // Importamos Tag desde crate (el root del package runes-utils)
 // porque lo re-exportamos en lib.rs con `pub use tag::Tag;`
-use crate::{Runestone, RunesError, Result, Tag};
+use crate::{Result, RunesError, Runestone, Tag};
 use quri_types::RuneEtching;
 use quri_utils::encoding::encode_leb128;
 
@@ -15,7 +15,7 @@ pub fn build_etching_runestone(etching: &RuneEtching) -> Result<Vec<u8>> {
 
     // Add divisibility
     if etching.divisibility > 0 {
-        integers.push(Tag::Divisibility.as_u128());  // ✅ Usar método
+        integers.push(Tag::Divisibility.as_u128()); // ✅ Usar método
         integers.push(etching.divisibility as u128);
     }
 

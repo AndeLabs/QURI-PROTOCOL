@@ -1,7 +1,7 @@
 // 🎓 MÓDULOS PÚBLICOS
-pub mod runestone;
 pub mod etching;
-pub mod tag;  // Módulo Tag exportado públicamente
+pub mod runestone;
+pub mod tag; // Módulo Tag exportado públicamente
 
 // Re-exportar Tag para fácil acceso
 pub use tag::Tag;
@@ -86,7 +86,7 @@ impl RuneId {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use quri_types::{RuneEtching, MintTerms};
+    use quri_types::RuneEtching;
 
     #[test]
     fn test_build_runestone() {

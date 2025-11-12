@@ -66,7 +66,8 @@ impl EtchingOrchestrator {
         }
 
         // Create new process
-        let mut process = EtchingProcess::new(process_id.clone(), caller, etching.rune_name.clone());
+        let mut process =
+            EtchingProcess::new(process_id.clone(), caller, etching.rune_name.clone());
         self.save_process(&process)?;
 
         // Execute flow with error handling
@@ -104,7 +105,7 @@ impl EtchingOrchestrator {
         self.step_validate(process, &etching).await?;
 
         // Step 2: Check ckBTC balance
-        let balance = self.step_check_balance(process, caller).await?;
+        let _balance = self.step_check_balance(process, caller).await?;
 
         // Step 3: Select UTXOs
         let utxo_selection = self.step_select_utxos(process).await?;
@@ -162,22 +163,19 @@ impl EtchingOrchestrator {
         ic_cdk::println!("[Etching {}] Checking ckBTC balance...", process.id);
 
         // Get bitcoin-integration canister ID
-        let btc_canister_id = crate::get_bitcoin_integration_id()
-            .map_err(|e| EtchingError::InternalError(e))?;
+        let btc_canister_id =
+            crate::get_bitcoin_integration_id().map_err(EtchingError::InternalError)?;
 
         // Call bitcoin-integration canister to get balance
-        let (balance_result,): (Result<u64, String>,) = ic_cdk::call(
-            btc_canister_id,
-            "get_ckbtc_balance",
-            (caller,),
-        )
-        .await
-        .map_err(|(code, msg)| {
-            EtchingError::CkBtcError(format!(
-                "Failed to get ckBTC balance: {:?} - {}",
-                code, msg
-            ))
-        })?;
+        let (balance_result,): (Result<u64, String>,) =
+            ic_cdk::call(btc_canister_id, "get_ckbtc_balance", (caller,))
+                .await
+                .map_err(|(code, msg)| {
+                    EtchingError::CkBtcError(format!(
+                        "Failed to get ckBTC balance: {:?} - {}",
+                        code, msg
+                    ))
+                })?;
 
         let balance = balance_result.map_err(EtchingError::CkBtcError)?;
 
@@ -206,8 +204,8 @@ impl EtchingOrchestrator {
         ic_cdk::println!("[Etching {}] Selecting UTXOs...", process.id);
 
         // Get bitcoin-integration canister ID
-        let btc_canister_id = crate::get_bitcoin_integration_id()
-            .map_err(|e| EtchingError::InternalError(e))?;
+        let btc_canister_id =
+            crate::get_bitcoin_integration_id().map_err(EtchingError::InternalError)?;
 
         // Call bitcoin-integration to select UTXOs
         let amount_needed = 10_000u64; // 10k sats for etching
@@ -218,10 +216,7 @@ impl EtchingOrchestrator {
         )
         .await
         .map_err(|(code, msg)| {
-            EtchingError::InternalError(format!(
-                "Failed to select UTXOs: {:?} - {}",
-                code, msg
-            ))
+            EtchingError::InternalError(format!("Failed to select UTXOs: {:?} - {}", code, msg))
         })?;
 
         let selection = selection_result.map_err(|e| {
@@ -250,8 +245,8 @@ impl EtchingOrchestrator {
         ic_cdk::println!("[Etching {}] Building transaction...", process.id);
 
         // Get bitcoin-integration canister ID
-        let btc_canister_id = crate::get_bitcoin_integration_id()
-            .map_err(|e| EtchingError::InternalError(e))?;
+        let btc_canister_id =
+            crate::get_bitcoin_integration_id().map_err(EtchingError::InternalError)?;
 
         // Call bitcoin-integration to build and sign transaction
         let (tx_result,): (Result<Vec<u8>, String>,) = ic_cdk::call(
@@ -295,8 +290,8 @@ impl EtchingOrchestrator {
         ic_cdk::println!("[Etching {}] Broadcasting transaction...", process.id);
 
         // Get bitcoin-integration canister ID
-        let btc_canister_id = crate::get_bitcoin_integration_id()
-            .map_err(|e| EtchingError::InternalError(e))?;
+        let btc_canister_id =
+            crate::get_bitcoin_integration_id().map_err(EtchingError::InternalError)?;
 
         // Call bitcoin-integration to broadcast transaction
         let (broadcast_result,): (Result<String, String>,) = ic_cdk::call(
@@ -321,11 +316,7 @@ impl EtchingOrchestrator {
     }
 
     /// Step 7: Wait for confirmations
-    async fn step_confirm(
-        &self,
-        process: &mut EtchingProcess,
-        txid: &str,
-    ) -> EtchingResult<()> {
+    async fn step_confirm(&self, process: &mut EtchingProcess, _txid: &str) -> EtchingResult<()> {
         process.update_state(EtchingState::Confirming { confirmations: 0 });
         self.save_process(process)?;
 
@@ -351,8 +342,8 @@ impl EtchingOrchestrator {
     async fn step_index(
         &self,
         process: &mut EtchingProcess,
-        etching: &RuneEtching,
-        txid: &str,
+        _etching: &RuneEtching,
+        _txid: &str,
     ) -> EtchingResult<()> {
         process.update_state(EtchingState::Indexing);
         self.save_process(process)?;
@@ -360,8 +351,7 @@ impl EtchingOrchestrator {
         ic_cdk::println!("[Etching {}] Indexing Rune...", process.id);
 
         // Get registry canister ID
-        let registry_id = crate::get_registry_id()
-            .map_err(|e| EtchingError::InternalError(e))?;
+        let _registry_id = crate::get_registry_id().map_err(EtchingError::InternalError)?;
 
         // TODO: Create proper IndexedRune structure with block height and tx index
         // For now, we'll skip this step as it requires parsing the blockchain
@@ -418,7 +408,7 @@ impl EtchingOrchestrator {
         let mut hasher = Sha256::new();
         hasher.update(caller.as_slice());
         hasher.update(etching.rune_name.as_bytes());
-        hasher.update(&timestamp.to_le_bytes());
+        hasher.update(timestamp.to_le_bytes());
 
         let hash = hasher.finalize();
         format!("etch_{}", hex::encode(&hash[..16]))

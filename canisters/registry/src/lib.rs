@@ -6,9 +6,9 @@ use std::cell::RefCell;
 
 use quri_types::{RegistryEntry, RuneId, RuneMetadata};
 
+mod bitcoin_client;
 mod indexer;
 mod parser;
-mod bitcoin_client;
 
 pub use indexer::{IndexedRune, IndexerConfig, IndexerStats, RuneIdentifier};
 
@@ -65,7 +65,10 @@ fn register_rune(metadata: RuneMetadata) -> Result<(), String> {
     });
 
     INDEX.with(|index| {
-        index.borrow_mut().push(&metadata.id).map_err(|e| format!("Failed to update index: {:?}", e))
+        index
+            .borrow_mut()
+            .push(&metadata.id)
+            .map_err(|e| format!("Failed to update index: {:?}", e))
     })?;
 
     Ok(())
@@ -74,9 +77,7 @@ fn register_rune(metadata: RuneMetadata) -> Result<(), String> {
 /// Get a Rune's registry entry
 #[query]
 fn get_rune(rune_id: RuneId) -> Option<RegistryEntry> {
-    REGISTRY.with(|registry| {
-        registry.borrow().get(&rune_id)
-    })
+    REGISTRY.with(|registry| registry.borrow().get(&rune_id))
 }
 
 /// List all Runes with pagination
@@ -116,11 +117,8 @@ fn search_runes(query: String) -> Vec<RegistryEntry> {
 #[query]
 fn get_trending(limit: u64) -> Vec<RegistryEntry> {
     REGISTRY.with(|registry| {
-        let mut entries: Vec<RegistryEntry> = registry
-            .borrow()
-            .iter()
-            .map(|(_, entry)| entry)
-            .collect();
+        let mut entries: Vec<RegistryEntry> =
+            registry.borrow().iter().map(|(_, entry)| entry).collect();
 
         // Sort by 24h volume descending
         entries.sort_by(|a, b| b.trading_volume_24h.cmp(&a.trading_volume_24h));
@@ -227,8 +225,7 @@ fn get_indexer_stats() -> IndexerStats {
 /// Manual indexing trigger (for testing/admin)
 #[update]
 async fn index_block_range(start: u64, end: u64) -> Result<u64, String> {
-    let config = indexer::get_config()
-        .ok_or("Indexer not initialized".to_string())?;
+    let _config = indexer::get_config().ok_or("Indexer not initialized".to_string())?;
 
     let mut indexed_count = 0u64;
 
