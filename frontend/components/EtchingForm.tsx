@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -14,6 +14,8 @@ import { useICP } from '@/lib/icp/ICPProvider';
 import { useRuneEngine } from '@/hooks/useRuneEngine';
 import { validateRuneName, validateSymbol } from '@/lib/utils';
 import { parseEtchingError } from '@/lib/error-messages';
+import { logger } from '@/lib/logger';
+import { estimateEtchingFee } from '@/lib/fee-estimation';
 import { AlertCircle, Sparkles } from 'lucide-react';
 import { RuneEtching } from '@/types/canisters';
 
@@ -46,7 +48,7 @@ type EtchingFormData = z.infer<typeof etchingSchema>;
 
 export function EtchingForm() {
   const { isConnected } = useICP();
-  const { createRune, isLoading, error } = useRuneEngine();
+  const { createRune, getEtchingStatus, isLoading, error } = useRuneEngine();
 
   // State management
   const [showPreview, setShowPreview] = useState(false);
@@ -55,6 +57,7 @@ export function EtchingForm() {
   const [currentStage, setCurrentStage] = useState<EtchingStage>('validating');
   const [txid, setTxid] = useState<string | undefined>();
   const [confirmations, setConfirmations] = useState(0);
+  const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     register,
@@ -95,6 +98,68 @@ export function EtchingForm() {
     setShowPreview(true);
   };
 
+  // Poll for status updates
+  useEffect(() => {
+    if (!processId) return;
+
+    const pollStatus = async () => {
+      try {
+        const status = await getEtchingStatus(processId);
+
+        if (!status) {
+          logger.warn('No status found for process', { processId });
+          return;
+        }
+
+        // Map state string to EtchingStage
+        const stateMap: Record<string, EtchingStage> = {
+          'Validating': 'validating',
+          'CheckingBalance': 'checking_balance',
+          'SelectingUtxos': 'selecting_utxos',
+          'BuildingTransaction': 'building_tx',
+          'Signing': 'signing',
+          'Broadcasting': 'broadcasting',
+          'Confirming': 'confirming',
+          'Indexing': 'indexing',
+          'Completed': 'completed',
+          'Failed': 'failed',
+        };
+
+        const stage = stateMap[status.state] || 'validating';
+        setCurrentStage(stage);
+
+        // Extract txid if available
+        if (status.txid && status.txid.length > 0) {
+          setTxid(status.txid[0]);
+        }
+
+        // Stop polling if completed or failed
+        if (stage === 'completed' || stage === 'failed') {
+          if (pollingIntervalRef.current) {
+            clearInterval(pollingIntervalRef.current);
+            pollingIntervalRef.current = null;
+          }
+          logger.info('Etching process finished', { processId, stage });
+        }
+      } catch (err) {
+        logger.error('Failed to poll etching status', err, { processId });
+      }
+    };
+
+    // Initial poll
+    pollStatus();
+
+    // Poll every 5 seconds
+    pollingIntervalRef.current = setInterval(pollStatus, 5000);
+
+    // Cleanup on unmount
+    return () => {
+      if (pollingIntervalRef.current) {
+        clearInterval(pollingIntervalRef.current);
+      }
+    };
+  }, [processId, getEtchingStatus]);
+
   // Handle confirmed transaction from preview
   const handleConfirmTransaction = async () => {
     if (!pendingEtching) return;
@@ -106,9 +171,7 @@ export function EtchingForm() {
 
     if (id) {
       setProcessId(id);
-      setCurrentStage('checking_balance');
-      // TODO: Poll for status updates
-      // For now, we just show the initial state
+      logger.info('Rune creation initiated', { processId: id });
       reset();
     }
   };
@@ -290,7 +353,7 @@ export function EtchingForm() {
       {showPreview && pendingEtching && (
         <TransactionPreview
           etching={pendingEtching}
-          estimatedFee={BigInt(10000)} // TODO: Get actual fee estimate
+          estimatedFee={estimateEtchingFee('medium')}
           onConfirm={handleConfirmTransaction}
           onCancel={handleCancelPreview}
           isLoading={isLoading}
