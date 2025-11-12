@@ -61,7 +61,6 @@ export function EtchingForm() {
     handleSubmit,
     formState: { errors },
     reset,
-    getValues,
   } = useForm<EtchingFormData>({
     resolver: zodResolver(etchingSchema),
     defaultValues: {
@@ -180,7 +179,7 @@ export function EtchingForm() {
                 <div>
                   <h3 className="font-semibold text-yellow-900">Connect Wallet to Continue</h3>
                   <p className="mt-1 text-sm text-yellow-700">
-                    You can explore the form, but you'll need to connect your wallet using
+                    You can explore the form, but you&apos;ll need to connect your wallet using
                     Internet Identity before creating a Rune.
                   </p>
                 </div>
