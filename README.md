@@ -4,19 +4,27 @@
 [![Rust](https://img.shields.io/badge/rust-1.75.0-orange.svg)](https://www.rust-lang.org/)
 [![ICP](https://img.shields.io/badge/ICP-Mainnet-blue.svg)](https://internetcomputer.org/)
 
-> Zero-fee Bitcoin Runes launchpad powered by ICP's threshold Schnorr signatures
+> Comprehensive Bitcoin Asset Platform powered by ICP's Chain Fusion
 
 ## 🎯 Overview
 
-QURI is a decentralized, zero-platform-fee Runes launchpad built on the Internet Computer Protocol (ICP). It democratizes the creation of Bitcoin Runes tokens with instant finality and self-custody.
+QURI Protocol is evolving into a comprehensive Bitcoin asset platform built on the Internet Computer Protocol (ICP). Starting with Runes, we're expanding to Ordinals (NFTs), BRC-20 tokens, a decentralized marketplace, and Bitcoin DeFi.
 
 ### Key Features
 
-- ⚡ **Instant Finality**: 2-second transaction confirmation via ICP canisters
+#### Phase 1 (Production Ready ✅)
+- ⚡ **Runes Creation**: 2-second transaction confirmation via ICP canisters
 - 💰 **Zero Platform Fees**: Users only pay Bitcoin network fees
 - 🔒 **Self-Custody**: Non-custodial via Internet Identity
 - 🔐 **Threshold Schnorr**: Direct Bitcoin signing from smart contracts
+
+#### Phase 2 (Planned 🚀)
+- 🖼️ **Ordinals & BRC-20**: Create and trade Bitcoin NFTs and tokens
+- 🏪 **Marketplace**: Decentralized trading with escrow
+- 💎 **DeFi**: Staking, DEX, lending for Bitcoin assets
 - 🌐 **Open Source**: 100% transparent and auditable code
+
+**Phase 2 Documentation:** [PHASE2_INDEX.md](./PHASE2_INDEX.md)
 
 ## 🏗️ Architecture
 
@@ -230,28 +238,58 @@ For detailed deployment instructions, see:
 
 ## 📊 Project Status
 
-- [x] Phase 1: Backend Development
-  - [x] Production-grade etching orchestration
-  - [x] Threshold Schnorr signatures
-  - [x] UTXO selection & management
-  - [x] ckBTC integration (ICRC-1/ICRC-2)
-  - [x] State machine with error recovery
-  - [x] Comprehensive unit tests (24/24 passing)
-- [x] Phase 2: Frontend Development
-  - [x] Next.js 14 with TypeScript
-  - [x] ICP agent integration
-  - [x] Internet Identity authentication
-  - [x] Professional UI components
-  - [x] Form validation with Zod
-  - [x] Vercel deployment config
-- [ ] Phase 3: Testing & Deployment
-  - [ ] Bitcoin Integration Testing
-  - [ ] Testnet Deployment
-  - [ ] Mainnet Deployment
-- [ ] Phase 4: Advanced Features
-  - [ ] L2 Development (Celestia)
-  - [ ] Advanced analytics
-  - [ ] Multi-signature support
+### Phase 1: Runes Platform (✅ ~90% Complete)
+
+**Backend:**
+- [x] Production-grade etching orchestration
+- [x] Threshold Schnorr signatures
+- [x] UTXO selection & management
+- [x] ckBTC integration (ICRC-1/ICRC-2)
+- [x] State machine with error recovery
+- [x] Comprehensive unit tests (62 tests passing)
+- [x] CI/CD pipeline (Rustfmt, Clippy, Tests)
+
+**Frontend:**
+- [x] Next.js 14 with TypeScript
+- [x] ICP agent integration
+- [x] Internet Identity authentication
+- [x] Professional UI components
+- [x] Form validation with Zod
+- [x] Production logging & monitoring
+- [x] Vercel deployment ready
+
+**Remaining:**
+- [ ] Bitcoin mainnet testing
+- [ ] Security audit
+- [ ] Public mainnet launch
+
+### Phase 2: Comprehensive Bitcoin Platform (🚧 Planned)
+
+**Phase 2A: Ordinals & BRC-20** (Months 1-6, $300K)
+- [ ] Ordinals inscription engine
+- [ ] BRC-20 token standard support
+- [ ] Bitcoin indexer infrastructure
+- [ ] Multi-wallet integration (Xverse, Leather, Unisat)
+- **Target:** 1,000+ inscriptions, 10+ BRC-20 tokens
+
+**Phase 2B: Marketplace** (Months 7-12, $500K)
+- [ ] Decentralized marketplace canister
+- [ ] Order book & escrow system
+- [ ] Collection management & verification
+- [ ] Trading UI (buy, sell, offers, auctions)
+- **Target:** $10M+ trading volume, 5,000+ users
+
+**Phase 2C: DeFi Integration** (Months 13-18, $700K)
+- [ ] DEX with AMM pools
+- [ ] Staking & yield farming
+- [ ] Lending protocol
+- [ ] Launchpad & governance
+- **Target:** $100M+ TVL, 50,000+ users
+
+**Phase 2 Documentation:**
+- [Research & Market Analysis](./PHASE2_RESEARCH.md)
+- [Implementation Roadmap](./PHASE2_ROADMAP.md)
+- [Master Index](./PHASE2_INDEX.md)
 
 ## 🤝 Contributing
 
