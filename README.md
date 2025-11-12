@@ -4,17 +4,18 @@
 [![Rust](https://img.shields.io/badge/rust-1.75.0-orange.svg)](https://www.rust-lang.org/)
 [![ICP](https://img.shields.io/badge/ICP-Mainnet-blue.svg)](https://internetcomputer.org/)
 
-> Comprehensive Bitcoin Asset Platform powered by ICP's Chain Fusion
+> The first complete ecosystem for Bitcoin Runes - Create, Trade, Stake, and Bridge on ICP
 
 ## 🎯 Overview
 
-QURI Protocol is evolving into a comprehensive Bitcoin asset platform built on the Internet Computer Protocol (ICP). Starting with Runes, we're expanding to Ordinals (NFTs), BRC-20 tokens, a decentralized marketplace, and Bitcoin DeFi.
+QURI is the **first production-ready, complete ecosystem for Bitcoin Runes** built on the Internet Computer Protocol (ICP). We provide a full DeFi suite with professional-grade DEX, cross-chain bridge, liquidity mining, and Runes creation capabilities.
 
-### Key Features
+### 🌟 Key Features
 
 #### Phase 1 (Production Ready ✅)
 - ⚡ **Runes Creation**: 2-second transaction confirmation via ICP canisters
 - 💰 **Zero Platform Fees**: Users only pay Bitcoin network fees
+- ⚡ **Instant Finality**: 2-second transaction confirmation via ICP
 - 🔒 **Self-Custody**: Non-custodial via Internet Identity
 - 🔐 **Threshold Schnorr**: Direct Bitcoin signing from smart contracts
 
@@ -28,30 +29,51 @@ QURI Protocol is evolving into a comprehensive Bitcoin asset platform built on t
 
 ## 🏗️ Architecture
 
-This monorepo contains the complete QURI Protocol implementation - backend canisters and professional frontend.
+This monorepo contains the complete QURI Protocol implementation - backend canisters, professional frontend, and comprehensive documentation.
 
 ```
 quri-protocol/
-├── canisters/              # ICP Smart Contracts (Backend)
-│   ├── rune-engine/        # Core Runes creation logic
+├── backend/canisters/      # ICP Smart Contracts (5,300+ lines Rust)
+│   ├── dex/               # 🆕 Complete DEX Implementation
+│   │   ├── amm.rs         # AMM pools (constant product)
+│   │   ├── router.rs      # Smart order routing
+│   │   ├── farming.rs     # Liquidity mining & staking
+│   │   ├── orderbook.rs   # Professional limit orderbook
+│   │   └── lib.rs         # DEX orchestration
+│   ├── bridge/            # 🆕 Cross-Chain Bridge (Bitcoin ↔ ICP)
+│   │   └── lib.rs         # Omnity Network integration
+│   ├── wrunes_ledger/     # 🆕 ICRC-1/ICRC-2 Token Ledger
+│   │   └── lib.rs         # Wrapped Runes implementation
+│   ├── rune-engine/       # Core Runes creation logic
 │   ├── bitcoin-integration/ # Bitcoin/ckBTC integration
-│   ├── registry/           # Runes registry & metadata
-│   └── identity-manager/   # Authentication & access control
-├── frontend/               # Next.js Frontend (Production-Ready)
-│   ├── app/               # Next.js App Router
-│   ├── components/        # React components
-│   ├── lib/              # ICP integration & utilities
-│   ├── hooks/            # Custom React hooks
-│   └── types/            # TypeScript type definitions
-├── libs/                   # Shared libraries
-│   ├── quri-types/         # Common types & interfaces
-│   ├── quri-utils/         # Utility functions
-│   ├── bitcoin-utils/      # Bitcoin-specific utilities
-│   ├── runes-utils/        # Runes protocol utilities
+│   ├── registry/          # Runes registry & metadata
+│   └── identity-manager/  # Authentication & access control
+├── frontend/              # Next.js Frontend (2,000+ lines TypeScript)
+│   ├── app/              # Next.js App Router
+│   ├── components/       # React components
+│   │   ├── dex/         # 🆕 DEX UI Components
+│   │   │   ├── swap/    # Token swap interface
+│   │   │   ├── pools/   # Liquidity pools
+│   │   │   ├── orderbook/ # Orderbook trading
+│   │   │   └── bridge/  # Bridge interface
+│   ├── src/
+│   │   ├── types/       # 🆕 Type definitions (dex, orderbook, bridge)
+│   │   └── hooks/       # 🆕 useActor hook for ICP
+│   ├── lib/             # ICP integration & utilities
+│   └── hooks/           # Custom React hooks
+├── docs/                  # 🆕 Comprehensive Documentation (2,700+ lines)
+│   ├── DEX_DESIGN.md     # Complete technical design
+│   ├── DEX_COMPONENTS_README.md  # Frontend guide
+│   └── SESSION_3_COMPLETE_DEX_SUMMARY.md  # Final summary
+├── libs/                  # Shared libraries
+│   ├── quri-types/        # Common types & interfaces
+│   ├── quri-utils/        # Utility functions
+│   ├── bitcoin-utils/     # Bitcoin-specific utilities
+│   ├── runes-utils/       # Runes protocol utilities
 │   └── schnorr-signatures/ # Threshold signature utilities
-└── scripts/                # Deployment & testing scripts
-    ├── deploy-local.sh     # Local deployment automation
-    └── test-etching.sh     # End-to-end testing
+└── scripts/               # Deployment & testing scripts
+    ├── deploy-local.sh    # Local deployment automation
+    └── test-etching.sh    # End-to-end testing
 ```
 
 ## 🚀 Quick Start
@@ -130,6 +152,52 @@ npm run dev
 ```
 
 ## 📦 Canisters
+
+### 🆕 DEX Canister (Complete Trading Platform)
+Professional-grade decentralized exchange with AMM, orderbook, routing, and liquidity mining.
+
+**Main Features:**
+- **AMM Pools**: Uniswap V2-style constant product formula (x * y = k)
+- **Smart Router**: Multi-hop and split routing for best execution
+- **Orderbook**: Limit/Market/Stop orders with price-time priority matching
+- **Liquidity Mining**: Stake LP tokens, earn rewards with boost multipliers
+- **Statistics**: Real-time TVL, APY, volume tracking
+
+**Key Functions:**
+- `create_pool()`, `add_liquidity()`, `remove_liquidity()`
+- `swap()`, `get_swap_quote()`
+- `place_order()`, `cancel_order()`, `get_orderbook_depth()`
+- `stake()`, `harvest()`, `get_pending_rewards()`
+
+### 🆕 Bridge Canister (Cross-Chain Transfer)
+Bidirectional bridge for transferring Bitcoin Runes between Bitcoin and ICP via Omnity Network.
+
+**Main Features:**
+- **Bitcoin → ICP**: Lock Runes on Bitcoin, mint wRunes on ICP
+- **ICP → Bitcoin**: Burn wRunes on ICP, release Runes on Bitcoin
+- **Security**: 6 Bitcoin confirmations, multi-signature verification
+- **Daily Limits**: Configurable per-rune deposit/withdrawal limits
+- **Fee Management**: Bridge fees and network fee tracking
+
+**Key Functions:**
+- `initiate_deposit()`, `process_deposit()`
+- `initiate_withdrawal()`, `process_withdrawal()`
+- `get_transaction()`, `get_bridge_stats()`
+
+### 🆕 wRunes Ledger (ICRC-1/ICRC-2 Token)
+Complete token ledger for wrapped Bitcoin Runes with ICRC standards support.
+
+**Main Features:**
+- **ICRC-1**: Base token standard (transfer, balance_of)
+- **ICRC-2**: Approval standard (approve, transfer_from)
+- **Bridge Integration**: Mint/burn controlled by bridge canister
+- **Transaction History**: Complete audit trail with pagination
+- **Metadata**: Original Rune information preserved
+
+**Key Functions:**
+- `icrc1_transfer()`, `icrc1_balance_of()`
+- `icrc2_approve()`, `icrc2_transfer_from()`
+- `mint()`, `burn()` (bridge-only)
 
 ### Rune Engine
 Core business logic for Runes creation, including parameter validation, runestone construction, and metadata management.

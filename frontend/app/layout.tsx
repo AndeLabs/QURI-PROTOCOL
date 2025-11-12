@@ -1,19 +1,12 @@
 import type { Metadata } from 'next';
-import { Inter, Roboto_Mono } from 'next/font/google';
 import './globals.css';
+import '../styles/dex.css';
 import { Providers } from './providers';
 
-const inter = Inter({
-  subsets: ['latin'],
-  variable: '--font-inter',
-  display: 'swap',
-});
-
-const robotoMono = Roboto_Mono({
-  subsets: ['latin'],
-  variable: '--font-roboto-mono',
-  display: 'swap',
-});
+/**
+ * Production-ready font configuration using system fonts
+ * This approach is faster, more reliable, and doesn't depend on external services
+ */
 
 export const metadata: Metadata = {
   title: 'QURI Protocol - Bitcoin Runes Launchpad',
@@ -35,7 +28,7 @@ export default function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <body
-        className={`${inter.variable} ${robotoMono.variable} antialiased`}
+        className="font-sans antialiased"
         suppressHydrationWarning
       >
         <Providers>{children}</Providers>

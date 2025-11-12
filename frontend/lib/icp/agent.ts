@@ -61,7 +61,7 @@ export async function login(): Promise<boolean> {
         resolve(true);
       },
       onError: (error) => {
-        logger.error('Login failed', error);
+        logger.error('Login failed', typeof error === 'string' ? new Error(error) : undefined, { rawError: error });
         resolve(false);
       },
     });
