@@ -15,7 +15,7 @@
  *
  * `repr` (representation) controla cómo Rust almacena un enum en memoria:
  *
- * ```rust
+ * ```rust,ignore
  * // SIN repr: Rust elige la mejor representación
  * enum Color {
  *     Red,    // Internamente: 0
@@ -40,13 +40,13 @@
  * ### La Solución
  *
  * En lugar de:
- * ```rust
+ * ```rust,ignore
  * #[repr(u128)]  // ❌ Unstable!
  * enum Tag { ... }
  * ```
  *
  * Hacemos:
- * ```rust
+ * ```rust,ignore
  * enum Tag { ... }  // ✅ Rust elige
  *
  * impl Tag {
@@ -60,7 +60,7 @@
  *
  * El operador `as` en Rust convierte entre tipos numéricos:
  *
- * ```rust
+ * ```rust,ignore
  * let x: u8 = 5;
  * let y: u64 = x as u64;  // 5 as u64
  * let z: u128 = y as u128;  // 5 as u128
@@ -68,7 +68,7 @@
  *
  * Para enums, el cast toma el "discriminante" (valor interno):
  *
- * ```rust
+ * ```rust,ignore
  * enum Tag {
  *     Body = 0,      // discriminante = 0
  *     Rune = 13,     // discriminante = 13
@@ -191,9 +191,10 @@ impl Tag {
     ///
     /// Ejemplo:
     /// ```rust
+    /// use runes_utils::Tag;
     /// const RUNE_TAG: u128 = Tag::Rune.as_u128();  // Calculado en compile-time!
     /// ```
-    #[inline(always)]  // 🎯 Hint al compilador: siempre inline esto
+    #[inline(always)] // 🎯 Hint al compilador: siempre inline esto
     pub const fn as_u128(self) -> u128 {
         self as u128
     }
@@ -207,6 +208,7 @@ impl Tag {
     ///
     /// Retornar `Option<Tag>` es más seguro que panic:
     /// ```rust
+    /// use runes_utils::Tag;
     /// let tag = Tag::from_u128(1);  // Some(Tag::Divisibility)
     /// let invalid = Tag::from_u128(99);  // None
     /// ```
@@ -226,7 +228,7 @@ impl Tag {
             11 => Some(Tag::Mint),
             12 => Some(Tag::Pointer),
             13 => Some(Tag::Rune),
-            _ => None,  // Valor inválido
+            _ => None, // Valor inválido
         }
     }
 
@@ -236,6 +238,8 @@ impl Tag {
     ///
     /// Útil antes de parsear para evitar errores:
     /// ```rust
+    /// use runes_utils::Tag;
+    /// let value = 1u128;
     /// if Tag::is_valid(value) {
     ///     let tag = Tag::from_u128(value).unwrap();
     ///     // ... procesar tag
@@ -243,7 +247,7 @@ impl Tag {
     /// ```
     #[inline]
     pub const fn is_valid(value: u128) -> bool {
-        value <= 13  // Tags actuales: 0-13
+        value <= 13 // Tags actuales: 0-13
     }
 }
 

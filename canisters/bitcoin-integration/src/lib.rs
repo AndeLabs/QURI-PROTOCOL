@@ -19,7 +19,7 @@ pub struct Config {
 }
 
 thread_local! {
-    static CONFIG: RefCell<Option<Config>> = RefCell::new(None);
+    static CONFIG: RefCell<Option<Config>> = const { RefCell::new(None) };
 }
 
 #[init]
@@ -65,10 +65,7 @@ async fn get_fee_estimates() -> Result<FeeEstimates, String> {
 
 /// Select UTXOs for a specific amount
 #[update]
-async fn select_utxos(
-    amount_needed: u64,
-    fee_rate: u64,
-) -> Result<utxo::UtxoSelection, String> {
+async fn select_utxos(amount_needed: u64, fee_rate: u64) -> Result<utxo::UtxoSelection, String> {
     let network = get_network()?;
     utxo::select_utxos_for_etching(network, amount_needed, fee_rate)
         .await
@@ -114,12 +111,8 @@ async fn build_and_sign_etching_tx(
     };
 
     let fee_rate = 2; // sats/vbyte
-    let tx_data = transaction::build_etching_transaction(
-        &etching,
-        prev_output,
-        &change_address,
-        fee_rate,
-    )?;
+    let tx_data =
+        transaction::build_etching_transaction(&etching, prev_output, &change_address, fee_rate)?;
 
     // Sign transaction with threshold Schnorr
     let derivation_path = address_info.derivation_path;
@@ -128,11 +121,8 @@ async fn build_and_sign_etching_tx(
         .map_err(|e| format!("Failed to sign transaction: {}", e))?;
 
     // Finalize transaction with signature
-    let signed_tx = transaction::finalize_transaction(
-        tx_data.unsigned_tx,
-        tx_data.input_index,
-        &signature,
-    )?;
+    let signed_tx =
+        transaction::finalize_transaction(tx_data.unsigned_tx, tx_data.input_index, &signature)?;
 
     // Serialize transaction to bytes
     use bitcoin::consensus::Encodable;
@@ -177,7 +167,7 @@ fn get_network() -> Result<BitcoinNetwork, String> {
         config
             .borrow()
             .as_ref()
-            .map(|c| c.network.clone())
+            .map(|c| c.network)
             .ok_or_else(|| "Canister not initialized".to_string())
     })
 }
@@ -204,9 +194,9 @@ fn convert_network(network: BitcoinNetwork) -> bitcoin::Network {
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct FeeEstimates {
-    pub slow: u64,      // sat/vbyte
-    pub medium: u64,    // sat/vbyte
-    pub fast: u64,      // sat/vbyte
+    pub slow: u64,   // sat/vbyte
+    pub medium: u64, // sat/vbyte
+    pub fast: u64,   // sat/vbyte
 }
 
 ic_cdk::export_candid!();

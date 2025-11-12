@@ -95,8 +95,7 @@ use bitcoin::hashes::Hash;
 use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
 use bitcoin::transaction::Version;
 use bitcoin::{
-    Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut,
-    Witness,
+    Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
 };
 use quri_types::{BitcoinNetwork, RuneEtching};
 use runes_utils::build_runestone;
@@ -169,8 +168,8 @@ pub fn build_etching_transaction(
 ) -> Result<EtchingTransaction, String> {
     // 🎓 PASO 1: Construir el runestone
     // El runestone es la "carga útil" que contiene la metadata del Rune
-    let runestone_bytes = build_runestone(etching)
-        .map_err(|e| format!("Failed to build runestone: {}", e))?;
+    let runestone_bytes =
+        build_runestone(etching).map_err(|e| format!("Failed to build runestone: {}", e))?;
 
     // 🎓 PASO 2: Crear script OP_RETURN
     // OP_RETURN marca el output como "unspendable" (pruneado por nodos)
@@ -182,7 +181,7 @@ pub fn build_etching_transaction(
         previous_output: utxo.outpoint,
         script_sig: ScriptBuf::new(), // Vacío para Taproot (witness-based)
         sequence: Sequence::ENABLE_RBF_NO_LOCKTIME, // Permite RBF (Replace-By-Fee)
-        witness: Witness::new(), // Se llenará después de firmar
+        witness: Witness::new(),      // Se llenará después de firmar
     };
 
     // 🎓 PASO 4: Calcular fee
@@ -384,9 +383,9 @@ fn estimate_transaction_vsize(runestone_bytes: &[u8]) -> u64 {
 
     // 🎓 Calculate weight y vsize
     let weight = base_size * 4 + witness_size;
-    let vsize = (weight + 3) / 4; // Ceiling division
+     // Ceiling division
 
-    vsize
+    (weight + 3) / 4
 }
 
 // ========================================================================
@@ -449,7 +448,6 @@ fn convert_network(network: BitcoinNetwork) -> Network {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use bitcoin::{Transaction, TxIn, TxOut};
 
     /// Test básico: crear script OP_RETURN
     #[test]
@@ -461,7 +459,7 @@ mod tests {
         assert!(script.as_bytes().starts_with(&[0x6A])); // OP_RETURN
 
         // Verificar que contiene OP_13
-        assert!(script.as_bytes().contains(&[0x5D])); // OP_13
+        assert!(script.as_bytes().contains(&0x5D)); // OP_13
     }
 
     /// Test: estimación de tamaño

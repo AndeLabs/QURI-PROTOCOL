@@ -1,9 +1,10 @@
 use candid::{CandidType, Deserialize};
-use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::memory_manager::VirtualMemory;
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
+type RuneStorage = RefCell<Option<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>>>;
 
 /// Indexed Rune with full metadata
 #[derive(CandidType, Deserialize, Clone, Debug)]
@@ -53,9 +54,9 @@ pub struct IndexerConfig {
 }
 
 thread_local! {
-    static RUNES: RefCell<Option<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>>> = RefCell::new(None);
+    static RUNES: RuneStorage = const { RefCell::new(None) };
     static STATS: RefCell<IndexerStats> = RefCell::new(IndexerStats::default());
-    static CONFIG: RefCell<Option<IndexerConfig>> = RefCell::new(None);
+    static CONFIG: RefCell<Option<IndexerConfig>> = const { RefCell::new(None) };
 }
 
 /// Initialize the indexer with configuration
@@ -68,8 +69,7 @@ pub fn init_indexer(config: IndexerConfig) {
 /// Store a newly indexed Rune
 pub fn store_rune(rune: IndexedRune) -> Result<(), String> {
     let key = encode_rune_key(&rune.id);
-    let value = candid::encode_one(&rune)
-        .map_err(|e| format!("Failed to encode rune: {}", e))?;
+    let value = candid::encode_one(&rune).map_err(|e| format!("Failed to encode rune: {}", e))?;
 
     RUNES.with(|runes| {
         if let Some(ref mut map) = *runes.borrow_mut() {
@@ -99,9 +99,8 @@ pub fn get_rune(id: &RuneIdentifier) -> Option<IndexedRune> {
 
     RUNES.with(|runes| {
         if let Some(ref map) = *runes.borrow() {
-            map.get(&key).and_then(|bytes| {
-                candid::decode_one(&bytes).ok()
-            })
+            map.get(&key)
+                .and_then(|bytes| candid::decode_one(&bytes).ok())
         } else {
             None
         }

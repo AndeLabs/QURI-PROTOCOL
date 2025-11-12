@@ -1,8 +1,6 @@
 use candid::{CandidType, Deserialize};
-use ic_cdk::api::management_canister::bitcoin::{
-    GetUtxosResponse, Outpoint, Utxo as ICPUtxo,
-};
-use quri_types::{BitcoinNetwork, RuneEtching};
+use ic_cdk::api::management_canister::bitcoin::Utxo as ICPUtxo;
+use quri_types::BitcoinNetwork;
 
 use crate::bitcoin_api;
 
@@ -123,9 +121,9 @@ fn find_exact_match(
     // Simplified Branch & Bound: try combinations up to 3 inputs
     // (full BnB is complex, this is MVP)
 
-    for i in 0..utxos.len() {
-        let single = vec![utxos[i].clone()];
-        let value = utxos[i].value;
+    for utxo in utxos {
+        let single = vec![utxo.clone()];
+        let value = utxo.value;
         let fee = estimate_fee(&single, fee_rate);
 
         if value >= target + fee && value <= target + fee + tolerance {
@@ -207,6 +205,7 @@ pub fn filter_dust(utxos: Vec<ICPUtxo>) -> Vec<ICPUtxo> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use ic_cdk::api::management_canister::bitcoin::Outpoint;
 
     #[test]
     fn test_dust_filter() {

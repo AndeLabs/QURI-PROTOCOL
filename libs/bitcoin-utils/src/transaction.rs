@@ -9,12 +9,12 @@ pub fn build_etching_transaction(
     utxos: &[ic_cdk::api::management_canister::bitcoin::Utxo],
 ) -> Result<Vec<u8>> {
     let _ = (etching, utxos); // Silence unused warnings for now
-    // In production, this would:
-    // 1. Create transaction inputs from UTXOs
-    // 2. Create OP_RETURN output with runestone
-    // 3. Create change output
-    // 4. Calculate proper fees
-    // 5. Serialize transaction
+                              // In production, this would:
+                              // 1. Create transaction inputs from UTXOs
+                              // 2. Create OP_RETURN output with runestone
+                              // 3. Create change output
+                              // 4. Calculate proper fees
+                              // 5. Serialize transaction
 
     // Placeholder implementation
     let tx = create_placeholder_tx(runestone);
@@ -31,7 +31,7 @@ pub fn calculate_vsize(tx: &[u8]) -> u64 {
 /// Create transaction ID (TXID) from raw transaction
 pub fn calculate_txid(tx: &[u8]) -> String {
     let hash1 = Sha256::digest(tx);
-    let hash2 = Sha256::digest(&hash1);
+    let hash2 = Sha256::digest(hash1);
     hex::encode(hash2)
 }
 
