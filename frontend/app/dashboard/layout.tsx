@@ -9,7 +9,7 @@ import {
   Home,
   Repeat,
   Coins,
-  Bridge,
+  ArrowLeftRight,
   Lock,
   Search,
   BarChart3,
@@ -48,7 +48,7 @@ const navigation: NavItem[] = [
   {
     name: 'Bridge',
     href: '/dashboard/bridge',
-    icon: Bridge,
+    icon: ArrowLeftRight,
     description: 'Bitcoin ↔ ICP transfers',
   },
   {

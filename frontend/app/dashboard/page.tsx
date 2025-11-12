@@ -10,7 +10,7 @@ import {
   Activity,
   Sparkles,
   Repeat,
-  Bridge,
+  ArrowLeftRight,
   Lock,
 } from 'lucide-react';
 
@@ -79,7 +79,7 @@ const quickActions: QuickAction[] = [
   {
     title: 'Bridge',
     description: 'Bitcoin ↔ ICP transfers',
-    icon: Bridge,
+    icon: ArrowLeftRight,
     href: '/dashboard/bridge',
     color: 'from-purple-400 to-purple-600',
   },

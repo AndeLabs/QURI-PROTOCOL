@@ -111,7 +111,7 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
       });
 
       // Load position
-      const positionResult = await actor.get_stake(runeId);
+      const positionResult = await actor.get_stake(runeId) as StakePosition[] | null;
       if (positionResult && positionResult.length > 0) {
         setPosition(positionResult[0]);
       } else {
@@ -119,16 +119,16 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
       }
 
       // Load pool
-      const poolResult = await actor.get_pool(runeId);
+      const poolResult = await actor.get_pool(runeId) as StakingPool[] | null;
       if (poolResult && poolResult.length > 0) {
         setPool(poolResult[0]);
       }
 
       // Load pending rewards if user has stake
       if (positionResult && positionResult.length > 0) {
-        const rewardsResult = await actor.calculate_pending_rewards(runeId);
+        const rewardsResult = await actor.calculate_pending_rewards(runeId) as { Ok?: RewardCalculation; Err?: string };
         if ('Ok' in rewardsResult) {
-          setPendingRewards(rewardsResult.Ok);
+          setPendingRewards(rewardsResult.Ok!);
         }
       }
     } catch (err) {
@@ -158,7 +158,7 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
         canisterId: QURI_REGISTRY_CANISTER,
       });
 
-      const result = await actor.stake(runeId, amount);
+      const result = await actor.stake(runeId, amount) as { Ok?: StakePosition; Err?: string };
 
       if ('Err' in result) {
         throw new Error(result.Err);
@@ -202,13 +202,13 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
         canisterId: QURI_REGISTRY_CANISTER,
       });
 
-      const result = await actor.unstake(runeId, amount);
+      const result = await actor.unstake(runeId, amount) as { Ok?: [bigint, bigint]; Err?: string };
 
       if ('Err' in result) {
         throw new Error(result.Err);
       }
 
-      const [unstaked, rewards] = result.Ok;
+      const [unstaked, rewards] = result.Ok!;
 
       setUnstakeAmount('');
       await loadData();
@@ -243,13 +243,13 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
         canisterId: QURI_REGISTRY_CANISTER,
       });
 
-      const result = await actor.claim_staking_rewards(runeId);
+      const result = await actor.claim_staking_rewards(runeId) as { Ok?: bigint; Err?: string };
 
       if ('Err' in result) {
         throw new Error(result.Err);
       }
 
-      const rewards = result.Ok;
+      const rewards = result.Ok!;
       await loadData();
 
       logger.info('Claimed staking rewards', {
