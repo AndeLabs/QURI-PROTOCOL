@@ -2,8 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { RuneCard, RuneCardCompact, RuneData } from './RuneCard';
-import { Grid3x3, List, Search, SlidersHorizontal, Loader2 } from 'lucide-react';
+import { RuneLightbox } from './RuneLightbox';
+import { RuneGallerySkeleton } from './LoadingSkeletons';
+import { RevealOnScroll } from './Parallax';
+import { Grid3x3, List, Search, SlidersHorizontal } from 'lucide-react';
 import { logger } from '@/lib/logger';
+import { useFavorites } from '@/lib/hooks/useFavorites';
+import { shareRune } from '@/lib/utils/share';
 
 /**
  * Museum-Grade Rune Gallery Component
@@ -34,6 +39,17 @@ export function RuneGallery({
   const [sortBy, setSortBy] = useState<SortOption>('recent');
   const [loading, setLoading] = useState(false);
   const [selectedRune, setSelectedRune] = useState<RuneData | null>(null);
+  const [selectedRuneIndex, setSelectedRuneIndex] = useState<number>(-1);
+
+  // Favorites functionality
+  const { toggleFavorite, isFavorited } = useFavorites();
+
+  const handleFavoriteToggle = (runeId: string) => {
+    const rune = filteredRunes.find((r) => r.id === runeId);
+    if (rune) {
+      toggleFavorite(rune);
+    }
+  };
 
   // Load runes from API (placeholder for now)
   useEffect(() => {
@@ -111,15 +127,37 @@ export function RuneGallery({
     logger.userAction('Filter/Sort Runes', { query: searchQuery, sort: sortBy, count: filtered.length });
   }, [runes, searchQuery, sortBy]);
 
+  // Handle rune selection for lightbox
+  const handleRuneClick = (rune: RuneData, index: number) => {
+    setSelectedRune(rune);
+    setSelectedRuneIndex(index);
+  };
+
+  const handleNextRune = () => {
+    if (selectedRuneIndex < filteredRunes.length - 1) {
+      const nextIndex = selectedRuneIndex + 1;
+      setSelectedRune(filteredRunes[nextIndex]);
+      setSelectedRuneIndex(nextIndex);
+    }
+  };
+
+  const handlePrevRune = () => {
+    if (selectedRuneIndex > 0) {
+      const prevIndex = selectedRuneIndex - 1;
+      setSelectedRune(filteredRunes[prevIndex]);
+      setSelectedRuneIndex(prevIndex);
+    }
+  };
+
+  const handleShare = async (rune: RuneData) => {
+    const success = await shareRune(rune);
+    if (success) {
+      logger.userAction('Share Rune', { runeId: rune.id });
+    }
+  };
+
   if (loading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-museum-white">
-        <div className="text-center">
-          <Loader2 className="w-12 h-12 mx-auto mb-4 text-gold-500 animate-spin" />
-          <p className="text-museum-dark-gray font-serif text-lg">Loading collection...</p>
-        </div>
-      </div>
-    );
+    return <RuneGallerySkeleton viewMode={viewMode} />;
   }
 
   return (
@@ -235,53 +273,49 @@ export function RuneGallery({
         ) : viewMode === 'grid' ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 lg:gap-12">
             {filteredRunes.map((rune, index) => (
-              <RuneCard
-                key={rune.id}
-                rune={rune}
-                onClick={() => setSelectedRune(rune)}
-                featured={index === 0}
-              />
+              <RevealOnScroll key={rune.id} animation="fade" delay={index * 50}>
+                <RuneCard
+                  rune={rune}
+                  onClick={() => handleRuneClick(rune, index)}
+                  featured={index === 0}
+                  onFavorite={handleFavoriteToggle}
+                  onShare={handleShare}
+                  isFavorited={isFavorited(rune.id)}
+                />
+              </RevealOnScroll>
             ))}
           </div>
         ) : (
           <div className="max-w-4xl mx-auto space-y-0 border border-museum-light-gray">
-            {filteredRunes.map((rune) => (
+            {filteredRunes.map((rune, index) => (
               <RuneCardCompact
                 key={rune.id}
                 rune={rune}
-                onClick={() => setSelectedRune(rune)}
+                onClick={() => handleRuneClick(rune, index)}
+                onFavorite={handleFavoriteToggle}
+                isFavorited={isFavorited(rune.id)}
               />
             ))}
           </div>
         )}
       </main>
 
-      {/* Rune Detail Modal (placeholder) */}
+      {/* Lightbox - Full-screen Art Viewing */}
       {selectedRune && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-museum-black bg-opacity-80 backdrop-blur-sm p-8"
-          onClick={() => setSelectedRune(null)}
-        >
-          <div
-            className="bg-museum-white max-w-4xl w-full max-h-[90vh] overflow-auto shadow-museum-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="p-12">
-              <button
-                onClick={() => setSelectedRune(null)}
-                className="float-right text-museum-gray hover:text-museum-charcoal transition-colors"
-              >
-                ✕
-              </button>
-              <h2 className="font-serif text-4xl font-bold text-museum-black mb-4">
-                {selectedRune.name}
-              </h2>
-              <p className="text-museum-dark-gray">
-                Detailed view coming soon...
-              </p>
-            </div>
-          </div>
-        </div>
+        <RuneLightbox
+          rune={selectedRune}
+          onClose={() => {
+            setSelectedRune(null);
+            setSelectedRuneIndex(-1);
+          }}
+          onNext={handleNextRune}
+          onPrev={handlePrevRune}
+          hasNext={selectedRuneIndex < filteredRunes.length - 1}
+          hasPrev={selectedRuneIndex > 0}
+          onFavorite={handleFavoriteToggle}
+          onShare={handleShare}
+          isFavorited={isFavorited(selectedRune.id)}
+        />
       )}
     </div>
   );

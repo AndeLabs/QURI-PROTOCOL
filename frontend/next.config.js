@@ -4,6 +4,32 @@ const nextConfig = {
   swcMinify: true,
   output: 'standalone',
 
+  // Image optimization for Vercel
+  images: {
+    formats: ['image/avif', 'image/webp'],
+    deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
+    imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
+    domains: [
+      'localhost',
+      // Add your image domains here (IPFS gateways, ICP domains, etc)
+      'gateway.pinata.cloud',
+      'ipfs.io',
+      'cloudflare-ipfs.com',
+      'ic0.app',
+      'raw.githubusercontent.com',
+    ],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**.ic0.app',
+      },
+      {
+        protocol: 'https',
+        hostname: '**.icp0.io',
+      },
+    ],
+  },
+
   // Environment variables exposed to the browser
   env: {
     NEXT_PUBLIC_IC_HOST: process.env.NEXT_PUBLIC_IC_HOST || 'http://localhost:4943',
