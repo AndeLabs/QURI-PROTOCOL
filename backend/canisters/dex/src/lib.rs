@@ -6,8 +6,12 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 
 mod amm;
+mod router;
+mod farming;
 
 use amm::{AMMPool, AddLiquidityResult, RemoveLiquidityResult, SwapResult};
+use router::{DEXRouter, Route, RouteQuote, RouterConfig};
+use farming::{LiquidityFarm, UserStake, StakeResult, HarvestResult, FarmStats};
 
 /// QURI DEX - Complete Decentralized Exchange for Bitcoin Runes
 ///
