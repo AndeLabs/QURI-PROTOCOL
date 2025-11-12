@@ -142,7 +142,7 @@ export function EtchingForm() {
           logger.info('Etching process finished', { processId, stage });
         }
       } catch (err) {
-        logger.error('Failed to poll etching status', err, { processId });
+        logger.error('Failed to poll etching status', err instanceof Error ? err : undefined, { processId });
       }
     };
 
