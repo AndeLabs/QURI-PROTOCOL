@@ -44,7 +44,7 @@ export function useRuneEngine() {
       const actor = getRuneEngineActor();
       const result = await actor.get_etching_status(processId);
 
-      if (result.length > 0) {
+      if (result.length > 0 && result[0]) {
         return result[0];
       }
       return null;

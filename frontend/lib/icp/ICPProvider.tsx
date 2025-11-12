@@ -3,6 +3,7 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Principal } from '@dfinity/principal';
 import { getAgent, login, logout, isAuthenticated, getPrincipal } from './agent';
+import { logger } from '@/lib/logger';
 
 interface ICPContextType {
   isConnected: boolean;
@@ -32,9 +33,12 @@ export function ICPProvider({ children }: { children: ReactNode }) {
         if (authenticated) {
           const userPrincipal = await getPrincipal();
           setPrincipal(userPrincipal);
+          logger.info('ICP authentication restored', {
+            principal: userPrincipal?.toText(),
+          });
         }
       } catch (error) {
-        console.error('Failed to initialize ICP auth:', error);
+        logger.error('Failed to initialize ICP auth', error);
       } finally {
         setIsLoading(false);
       }
@@ -52,11 +56,16 @@ export function ICPProvider({ children }: { children: ReactNode }) {
         const userPrincipal = await getPrincipal();
         setPrincipal(userPrincipal);
         setIsConnected(true);
+        logger.info('User connected successfully', {
+          principal: userPrincipal?.toText(),
+        });
+      } else {
+        logger.warn('User connection cancelled or failed');
       }
 
       return success;
     } catch (error) {
-      console.error('Connection failed:', error);
+      logger.error('Connection failed', error);
       return false;
     } finally {
       setIsLoading(false);
@@ -67,10 +76,11 @@ export function ICPProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       await logout();
+      logger.info('User disconnected');
       setPrincipal(null);
       setIsConnected(false);
     } catch (error) {
-      console.error('Disconnect failed:', error);
+      logger.error('Disconnect failed', error);
     } finally {
       setIsLoading(false);
     }
