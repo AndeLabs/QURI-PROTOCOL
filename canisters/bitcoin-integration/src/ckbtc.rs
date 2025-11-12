@@ -52,9 +52,14 @@ pub enum RetrieveBtcError {
     MalformedAddress(String),
     AlreadyProcessing,
     AmountTooLow(u64),
-    InsufficientFunds { balance: u64 },
+    InsufficientFunds {
+        balance: u64,
+    },
     TemporarilyUnavailable(String),
-    GenericError { error_code: u64, error_message: String },
+    GenericError {
+        error_code: u64,
+        error_message: String,
+    },
 }
 
 /// Get ckBTC balance for a principal
@@ -81,11 +86,7 @@ pub async fn get_balance(principal: Principal) -> Result<u64, String> {
 }
 
 /// Transfer ckBTC from caller to recipient
-pub async fn transfer(
-    to: Principal,
-    amount: u64,
-    memo: Option<Vec<u8>>,
-) -> Result<u64, String> {
+pub async fn transfer(to: Principal, amount: u64, memo: Option<Vec<u8>>) -> Result<u64, String> {
     let ledger = Principal::from_text(CKBTC_LEDGER_MAINNET)
         .map_err(|e| format!("Invalid ledger principal: {}", e))?;
 
@@ -118,15 +119,18 @@ pub async fn transfer(
 }
 
 /// Charge etching fee from user to canister
-pub async fn charge_etching_fee(
-    from: Principal,
-    amount: u64,
-) -> Result<u64, String> {
+pub async fn charge_etching_fee(from: Principal, amount: u64) -> Result<u64, String> {
     let canister_id = ic_cdk::api::id();
 
     // User must have approved canister to spend their ckBTC
     // This uses ICRC-2 approve/transferFrom pattern
-    transfer_from(from, canister_id, amount, Some(b"Rune etching fee".to_vec())).await
+    transfer_from(
+        from,
+        canister_id,
+        amount,
+        Some(b"Rune etching fee".to_vec()),
+    )
+    .await
 }
 
 /// Transfer ckBTC from one account to another (requires approval)
@@ -181,10 +185,7 @@ async fn transfer_from(
 }
 
 /// Request ckBTC withdrawal to Bitcoin address
-pub async fn withdraw_to_bitcoin(
-    address: String,
-    amount: u64,
-) -> Result<String, String> {
+pub async fn withdraw_to_bitcoin(address: String, amount: u64) -> Result<String, String> {
     let minter = Principal::from_text(CKBTC_MINTER_MAINNET)
         .map_err(|e| format!("Invalid minter principal: {}", e))?;
 
@@ -193,12 +194,13 @@ pub async fn withdraw_to_bitcoin(
     let (result,): (Result<RetrieveBtcOk, RetrieveBtcError>,) =
         call(minter, "retrieve_btc", (args,))
             .await
-            .map_err(|(code, msg)| {
-                format!("Withdraw call failed: {} - {}", code as u32, msg)
-            })?;
+            .map_err(|(code, msg)| format!("Withdraw call failed: {} - {}", code as u32, msg))?;
 
     match result {
-        Ok(ok) => Ok(format!("Withdrawal initiated, block index: {}", ok.block_index)),
+        Ok(ok) => Ok(format!(
+            "Withdrawal initiated, block index: {}",
+            ok.block_index
+        )),
         Err(e) => Err(format!("Withdrawal failed: {:?}", e)),
     }
 }
@@ -221,9 +223,7 @@ pub async fn get_btc_address(principal: Principal) -> Result<String, String> {
 
     let (address,): (String,) = call(minter, "get_btc_address", (args,))
         .await
-        .map_err(|(code, msg)| {
-            format!("Get BTC address failed: {} - {}", code as u32, msg)
-        })?;
+        .map_err(|(code, msg)| format!("Get BTC address failed: {} - {}", code as u32, msg))?;
 
     Ok(address)
 }
@@ -244,7 +244,11 @@ pub async fn update_balance(principal: Principal) -> Result<Vec<u64>, String> {
         ValueTooSmall,
         Tainted,
         Checked,
-        Minted { block_index: u64, minted_amount: u64, utxo: () },
+        Minted {
+            block_index: u64,
+            minted_amount: u64,
+            utxo: (),
+        },
     }
 
     let args = UpdateBalanceArgs {
@@ -254,9 +258,7 @@ pub async fn update_balance(principal: Principal) -> Result<Vec<u64>, String> {
 
     let (utxos,): (Vec<UtxoStatus>,) = call(minter, "update_balance", (args,))
         .await
-        .map_err(|(code, msg)| {
-            format!("Update balance failed: {} - {}", code as u32, msg)
-        })?;
+        .map_err(|(code, msg)| format!("Update balance failed: {} - {}", code as u32, msg))?;
 
     let minted_blocks: Vec<u64> = utxos
         .iter()
@@ -281,10 +283,7 @@ pub async fn get_transfer_fee() -> Result<u64, String> {
         .await
         .map_err(|(code, msg)| format!("Get fee failed: {} - {}", code as u32, msg))?;
 
-    let fee_u64: u64 = fee
-        .0
-        .try_into()
-        .map_err(|_| "Fee overflow".to_string())?;
+    let fee_u64: u64 = fee.0.try_into().map_err(|_| "Fee overflow".to_string())?;
 
     Ok(fee_u64)
 }

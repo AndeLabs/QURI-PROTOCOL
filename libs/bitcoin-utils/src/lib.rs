@@ -1,6 +1,6 @@
 pub mod address;
-pub mod transaction;
 pub mod script;
+pub mod transaction;
 
 use thiserror::Error;
 

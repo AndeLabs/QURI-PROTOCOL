@@ -1,8 +1,7 @@
 use ic_cdk::api::management_canister::bitcoin::{
     bitcoin_get_balance, bitcoin_get_current_fee_percentiles, bitcoin_get_utxos,
     bitcoin_send_transaction, BitcoinNetwork as ICPBitcoinNetwork, GetBalanceRequest,
-    GetCurrentFeePercentilesRequest, GetUtxosRequest, SendTransactionRequest,
-    Utxo,
+    GetCurrentFeePercentilesRequest, GetUtxosRequest, SendTransactionRequest, Utxo,
 };
 use quri_types::BitcoinNetwork;
 
@@ -32,10 +31,7 @@ pub async fn get_balance(address: String, network: BitcoinNetwork) -> Result<u64
 }
 
 /// Get UTXOs for a Bitcoin address
-pub async fn get_utxos(
-    address: String,
-    network: BitcoinNetwork,
-) -> Result<Vec<Utxo>, String> {
+pub async fn get_utxos(address: String, network: BitcoinNetwork) -> Result<Vec<Utxo>, String> {
     let request = GetUtxosRequest {
         address,
         network: to_icp_network(network),
@@ -93,7 +89,7 @@ pub fn calculate_txid(tx_bytes: &[u8]) -> String {
 
     // Bitcoin uses double SHA256 for txid
     let hash1 = Sha256::digest(tx_bytes);
-    let hash2 = Sha256::digest(&hash1);
+    let hash2 = Sha256::digest(hash1);
 
     // Reverse bytes (Bitcoin convention)
     let mut txid_bytes = hash2.to_vec();
@@ -126,7 +122,7 @@ pub async fn wait_for_confirmations(
 /// Get number of confirmations for a transaction
 async fn get_transaction_confirmations(
     _txid: &str,
-    network: BitcoinNetwork,
+    _network: BitcoinNetwork,
 ) -> Result<u32, String> {
     // Note: ICP Bitcoin API doesn't have direct get_transaction
     // We would need to track this via block height differences

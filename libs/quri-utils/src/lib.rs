@@ -1,8 +1,8 @@
 use quri_types::QuriError;
 
-pub mod validation;
 pub mod encoding;
 pub mod time;
+pub mod validation;
 
 /// Validates a Rune name according to the Runes protocol specification
 /// Names must be 1-26 characters, only A-Z
@@ -48,7 +48,12 @@ pub fn format_rune_amount(amount: u64, divisibility: u8) -> String {
     if fractional == 0 {
         whole.to_string()
     } else {
-        format!("{}.{:0width$}", whole, fractional, width = divisibility as usize)
+        format!(
+            "{}.{:0width$}",
+            whole,
+            fractional,
+            width = divisibility as usize
+        )
     }
 }
 
@@ -79,9 +84,10 @@ mod tests {
     #[test]
     fn test_format_rune_amount() {
         assert_eq!(format_rune_amount(100, 0), "100");
-        assert_eq!(format_rune_amount(100, 2), "1.00");
+        assert_eq!(format_rune_amount(100, 2), "1"); // No fractional part, so no decimals shown
         assert_eq!(format_rune_amount(12345, 2), "123.45");
-        assert_eq!(format_rune_amount(100000000, 8), "1.00000000");
+        assert_eq!(format_rune_amount(100000000, 8), "1"); // No fractional part
+        assert_eq!(format_rune_amount(100000001, 8), "1.00000001"); // With fractional part
     }
 
     #[test]

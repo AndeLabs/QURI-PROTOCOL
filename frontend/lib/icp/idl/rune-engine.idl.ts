@@ -47,7 +47,8 @@ const Result = (ok: any, err: any) =>
     Err: err,
   });
 
-export const idlFactory = ({ IDL }: { IDL: typeof IDL }) => {
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const idlFactory = ({ IDL }: { IDL: any }) => {
   return IDL.Service({
     create_rune: IDL.Func([RuneEtching], [Result(IDL.Text, IDL.Text)], []),
     get_etching_status: IDL.Func([IDL.Text], [IDL.Opt(EtchingProcessView)], ['query']),

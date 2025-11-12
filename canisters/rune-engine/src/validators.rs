@@ -119,8 +119,7 @@ impl EtchingValidator {
         // Check premine doesn't exceed total supply
         if let Some(ref terms) = etching.terms {
             let premine_u128 = etching.premine as u128;
-            let total_mintable = (terms.amount as u128)
-                .saturating_mul(terms.cap as u128);
+            let total_mintable = (terms.amount as u128).saturating_mul(terms.cap as u128);
             let total_supply = premine_u128.saturating_add(total_mintable);
 
             if premine_u128 > total_supply {

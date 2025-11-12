@@ -58,9 +58,7 @@ use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use std::borrow::Cow;
 
-use crate::{
-    RegistryEntry, RuneId, RuneMetadata, UserSession
-};
+use crate::{RegistryEntry, RuneId, RuneMetadata, UserSession};
 
 // ========================================================================
 // 🎓 IMPLEMENTACIÓN 1: RuneId
@@ -212,7 +210,6 @@ impl Storable for UserSession {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use candid::Principal;
 
     /// Test básico: serialización y deserialización
     #[test]
