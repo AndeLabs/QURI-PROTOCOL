@@ -1,17 +1,10 @@
-type RuneId = record {
-    block : nat64;
-    tx : nat64;
-    name : text;
-    timestamp : nat64;
-};
+// Rune Engine Canister - Production-grade Rune etching orchestrator
+// Handles complete etching flow with state management and error recovery
 
-type RuneConfig = record {
-    name : text;
-    symbol : text;
-    divisibility : nat8;
-    total_supply : nat64;
-    premine : nat64;
-    terms : opt MintTerms;
+type BitcoinNetwork = variant {
+    Mainnet;
+    Testnet;
+    Regtest;
 };
 
 type MintTerms = record {
@@ -23,20 +16,43 @@ type MintTerms = record {
     offset_end : opt nat64;
 };
 
-type RuneMetadata = record {
-    id : RuneId;
-    name : text;
+type RuneEtching = record {
+    rune_name : text;
     symbol : text;
     divisibility : nat8;
-    creator : principal;
-    created_at : nat64;
-    total_supply : nat64;
     premine : nat64;
+    terms : opt MintTerms;
+};
+
+type EtchingProcessView = record {
+    id : text;
+    rune_name : text;
+    state : text;
+    created_at : nat64;
+    updated_at : nat64;
+    retry_count : nat32;
+    txid : opt text;
+};
+
+type EtchingConfigView = record {
+    network : BitcoinNetwork;
+    fee_rate : nat64;
+    required_confirmations : nat32;
+    enable_retries : bool;
 };
 
 service : {
-    "create_rune" : (RuneConfig) -> (variant { Ok : RuneId; Err : text });
-    "get_rune" : (RuneId) -> (opt RuneMetadata) query;
-    "list_runes" : (nat64, nat64) -> (vec RuneMetadata) query;
-    "rune_count" : () -> (nat64) query;
+    // Main etching API - create a new Rune on Bitcoin
+    "create_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
+
+    // Query APIs - check status and history
+    "get_etching_status" : (text) -> (opt EtchingProcessView) query;
+    "get_my_etchings" : () -> (vec EtchingProcessView) query;
+
+    // Configuration APIs (admin/deployment only)
+    "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
+    "update_etching_config" : (EtchingConfigView) -> (variant { Ok : null; Err : text });
+
+    // Maintenance API - cleanup old completed processes
+    "cleanup_old_processes" : (nat64) -> (nat64);
 }

@@ -1,426 +1,107 @@
-# Deployment Guide
+# QURI Protocol - Deployment Guide
 
-This guide covers deployment procedures for QURI Protocol across different environments.
+Production-grade deployment guide for QURI Protocol Rune Launchpad on Internet Computer.
 
-## Prerequisites
+## 📋 Prerequisites
 
-- dfx 0.15.0 or higher
-- Cycles wallet with sufficient cycles
-- Authentication configured (`dfx identity use <identity>`)
-- Built WASM files
-
-## Environment Overview
-
-### 1. Local Development
-- **Network**: Local ICP replica
-- **Purpose**: Development and testing
-- **Cycle Cost**: Free
-- **Data**: Ephemeral (lost on restart)
-
-### 2. Testnet
-- **Network**: ICP Testnet
-- **Purpose**: Integration testing
-- **Cycle Cost**: Free test cycles
-- **Data**: Persistent but may be reset
-
-### 3. Mainnet
-- **Network**: ICP Mainnet
-- **Purpose**: Production
-- **Cycle Cost**: Real cycles required
-- **Data**: Persistent and immutable
-
-## Local Deployment
-
-### Step 1: Start Local Replica
+### Required Tools
 
 ```bash
-# Start clean replica
-dfx start --background --clean
+# DFX (Internet Computer SDK)
+dfx --version  # Should be >= 0.15.0
 
-# Verify it's running
-dfx ping local
+# Rust toolchain
+rustc --version  # Should be >= 1.78.0
+cargo --version
+
+# WASM target
+rustup target add wasm32-unknown-unknown
 ```
 
-### Step 2: Build Canisters
+## 🚀 Quick Start - Local Deployment
+
+### Step 1: Start DFX Replica
 
 ```bash
-# Build all canisters
-make build
-
-# Verify WASM files exist
-ls -lh target/wasm32-unknown-unknown/release/*.wasm
+# Start local replica (clean state)
+dfx start --clean --background
 ```
 
-### Step 3: Deploy
+### Step 2: Deploy All Canisters
 
 ```bash
-# Deploy all canisters
-dfx deploy
-
-# Or deploy individually
-dfx deploy rune-engine
-dfx deploy bitcoin-integration --argument '(variant { Testnet }, principal "ryjl3-tyaaa-aaaaa-aaaba-cai")'
-dfx deploy registry
-dfx deploy identity-manager
+# Run automated deployment script
+./scripts/deploy-local.sh
 ```
 
-### Step 4: Verify Deployment
+This script will:
+1. ✅ Build all canisters for WASM
+2. ✅ Deploy in dependency order
+3. ✅ Configure inter-canister connections
+4. ✅ Generate Bitcoin P2TR address
+5. ✅ Display canister IDs and summary
+
+### Step 3: Test the System
 
 ```bash
-# Check canister status
-dfx canister status rune-engine
-
-# Test basic functionality
-dfx canister call rune-engine rune_count
-dfx canister call registry total_runes
+# Run end-to-end tests
+./scripts/test-etching.sh
 ```
 
-## Testnet Deployment
+## 📦 Manual Deployment Steps
 
-### Step 1: Configure Network
-
-Add to `dfx.json`:
-```json
-{
-  "networks": {
-    "testnet": {
-      "providers": ["https://testnet.internetcomputer.org"],
-      "type": "persistent"
-    }
-  }
-}
-```
-
-### Step 2: Get Test Cycles
+### 1. Build Canisters
 
 ```bash
-# Request cycles from faucet
-dfx wallet --network testnet balance
+cargo build --target wasm32-unknown-unknown --release \
+    --package bitcoin-integration \
+    --package registry \
+    --package rune-engine \
+    --package identity-manager
 ```
 
-### Step 3: Deploy
+### 2. Deploy Bitcoin Integration
 
 ```bash
-# Deploy to testnet
-dfx deploy --network testnet
-
-# Verify deployment
-dfx canister --network testnet status rune-engine
+dfx deploy bitcoin-integration \
+    --argument '(variant { Testnet }, principal "mxzaz-hqaaa-aaaar-qaada-cai")' \
+    --network local
 ```
 
-## Mainnet Deployment
-
-### ⚠️ Pre-Deployment Checklist
-
-- [ ] All tests passing (`make test`)
-- [ ] Security audit completed (`make audit`)
-- [ ] Code review approved
-- [ ] Documentation updated
-- [ ] Backup plan prepared
-- [ ] Sufficient cycles allocated
-- [ ] Monitoring configured
-
-### Step 1: Prepare Cycles
+### 3. Configure Inter-Canister Connections
 
 ```bash
-# Check wallet balance
-dfx wallet --network ic balance
+BTC_ID=$(dfx canister id bitcoin-integration --network local)
+REGISTRY_ID=$(dfx canister id registry --network local)
 
-# Top up if needed (requires ICP)
-dfx ledger --network ic top-up <canister-id> --amount 10.0
+dfx canister call rune-engine configure_canisters \
+    "(principal \"$BTC_ID\", principal \"$REGISTRY_ID\")" \
+    --network local
 ```
 
-### Step 2: Configure for Production
-
-Update `dfx.json` with production settings:
-```json
-{
-  "canisters": {
-    "bitcoin-integration": {
-      "init_arg": "(variant { Mainnet }, principal \"<MAINNET_CKBTC_LEDGER>\")"
-    }
-  }
-}
-```
-
-### Step 3: Deploy Canisters
+## 🧪 Testing
 
 ```bash
-# Build optimized WASM
-make build
-
-# Deploy to mainnet
-dfx deploy --network ic
-
-# Record canister IDs
-dfx canister --network ic id rune-engine > .canister_ids
+# Test creating a Rune
+dfx canister call rune-engine create_rune '(record {
+    rune_name = "TEST•RUNE";
+    symbol = "TEST";
+    divisibility = 8 : nat8;
+    premine = 1000000 : nat64;
+    terms = null;
+})' --network local
 ```
 
-### Step 4: Post-Deployment Verification
+## 🔧 Troubleshooting
 
-```bash
-# Verify all canisters
-for canister in rune-engine bitcoin-integration registry identity-manager; do
-  echo "Checking $canister..."
-  dfx canister --network ic status $canister
-done
+### Issue: "Canister configuration not set"
 
-# Test basic operations
-dfx canister --network ic call rune-engine rune_count
-```
+Run configure_canisters command to link canisters.
 
-### Step 5: Monitor
+### Issue: "Insufficient ckBTC balance"
 
-```bash
-# Watch cycles consumption
-watch -n 60 'dfx canister --network ic status rune-engine | grep Cycles'
+Fund the Bitcoin address with testnet ckBTC.
 
-# Set up alerts for low cycles
-# (implement monitoring service)
-```
+---
 
-## Upgrade Procedure
-
-### Preparation
-
-1. **Test Upgrade Locally**
-   ```bash
-   # Build new version
-   make build
-
-   # Upgrade locally first
-   dfx canister install rune-engine --mode upgrade
-
-   # Verify state persisted
-   dfx canister call rune-engine rune_count
-   ```
-
-2. **Create Backup**
-   ```bash
-   # Export state if possible
-   # (implement state export function)
-   ```
-
-### Mainnet Upgrade
-
-```bash
-# Build new version
-make build
-
-# Upgrade canister
-dfx canister --network ic install rune-engine --mode upgrade
-
-# Verify upgrade succeeded
-dfx canister --network ic status rune-engine
-
-# Test functionality
-dfx canister --network ic call rune-engine rune_count
-```
-
-### Rollback Plan
-
-If upgrade fails:
-
-```bash
-# Stop canister
-dfx canister --network ic stop rune-engine
-
-# Reinstall previous version
-dfx canister --network ic install rune-engine --mode reinstall --wasm <previous.wasm>
-
-# Start canister
-dfx canister --network ic start rune-engine
-```
-
-## Cycle Management
-
-### Monitoring Cycles
-
-```bash
-# Check cycles for all canisters
-dfx canister --network ic status --all | grep Cycles
-
-# Set freezing threshold (90 days)
-dfx canister --network ic update-settings rune-engine --freezing-threshold 7776000
-```
-
-### Top-Up Strategy
-
-- Monitor cycles weekly
-- Alert when <1T cycles remaining
-- Auto-top-up from wallet (implement)
-- Target: 6-12 months of operation
-
-### Cost Estimation
-
-Approximate costs per canister:
-- **Storage**: ~$5/GB/year
-- **Compute**: ~$0.0000004 per instruction
-- **HTTP Requests**: ~$0.0004 per call
-
-Initial allocation: **10T cycles** per canister (~$13 USD)
-
-## Security Considerations
-
-### Access Control
-
-```bash
-# Set canister controllers
-dfx canister --network ic update-settings rune-engine \
-  --add-controller <principal-id>
-
-# Verify controllers
-dfx canister --network ic info rune-engine
-```
-
-### Secrets Management
-
-- **Never commit**: Private keys, cycle wallet IDs
-- **Use environment variables**: For sensitive configuration
-- **Encrypt**: Backup files
-
-### Audit Trail
-
-Maintain records of:
-- Deployment timestamps
-- Version numbers
-- Canister IDs
-- Controller principals
-- Cycle top-ups
-
-## Disaster Recovery
-
-### Backup Strategy
-
-1. **State Snapshots**: Weekly automated snapshots
-2. **WASM Archival**: Keep all deployed versions
-3. **Configuration Backup**: Store dfx.json and settings
-
-### Recovery Procedure
-
-```bash
-# 1. Deploy new canister
-dfx canister --network ic create rune-engine
-
-# 2. Install last known good WASM
-dfx canister --network ic install rune-engine --wasm backup.wasm
-
-# 3. Restore state (if export/import implemented)
-# dfx canister call rune-engine import_state '(...)'
-
-# 4. Update frontend with new canister ID
-```
-
-## Monitoring and Alerts
-
-### Health Checks
-
-```bash
-# Create monitoring script
-#!/bin/bash
-for canister in rune-engine bitcoin-integration registry identity-manager; do
-  status=$(dfx canister --network ic status $canister 2>&1)
-  if [[ $status == *"Running"* ]]; then
-    echo "✓ $canister: Running"
-  else
-    echo "✗ $canister: ERROR"
-    # Send alert
-  fi
-done
-```
-
-### Metrics to Track
-
-- Canister status (Running/Stopped)
-- Cycles remaining
-- Memory usage
-- Request count
-- Error rate
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue: "Canister out of cycles"**
-```bash
-# Top up immediately
-dfx ledger --network ic top-up <canister-id> --amount 5.0
-```
-
-**Issue: "Upgrade failed"**
-```bash
-# Check logs
-dfx canister --network ic logs <canister-id>
-
-# Try reinstall (⚠️ loses state)
-dfx canister --network ic install <canister-id> --mode reinstall
-```
-
-**Issue: "Cannot connect to replica"**
-```bash
-# Verify network
-dfx ping ic
-
-# Check dfx version
-dfx --version
-
-# Update dfx
-dfxvm update
-```
-
-## CI/CD Integration
-
-### GitHub Actions
-
-```yaml
-name: Deploy to Mainnet
-
-on:
-  release:
-    types: [published]
-
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Install dfx
-        run: sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
-
-      - name: Build canisters
-        run: make build
-
-      - name: Deploy to mainnet
-        env:
-          DFX_IDENTITY: ${{ secrets.DFX_IDENTITY }}
-        run: |
-          dfx identity import default <(echo "$DFX_IDENTITY")
-          dfx deploy --network ic
-```
-
-## Cost Optimization
-
-### Tips
-
-1. **Optimize WASM size**: Use `opt-level = 'z'`
-2. **Efficient data structures**: Use stable structures wisely
-3. **Batch operations**: Reduce inter-canister calls
-4. **Cache frequently accessed data**: Minimize storage reads
-
-### Expected Monthly Costs
-
-For moderate usage:
-- **Storage** (10GB): ~$4
-- **Compute** (1M calls): ~$0.40
-- **Total**: ~$5-10/month per canister
-
-## Conclusion
-
-- Always test on local/testnet first
-- Monitor cycles proactively
-- Keep backups of WASM and state
-- Document all deployments
-- Have rollback plan ready
-
-For questions or issues, contact the team or open an issue on GitHub.
+For detailed documentation, see full deployment guide.
