@@ -12,34 +12,20 @@ QURI is the **first production-ready, complete ecosystem for Bitcoin Runes** bui
 
 ### 🌟 Key Features
 
-**🏦 Complete DEX Trading**
-- 💱 **AMM Swaps**: Uniswap V2-style constant product pools with 0.3% fees
-- 📊 **Professional Orderbook**: Limit, Market, Stop orders with GTC/IOC/FOK/GTT
-- 🧠 **Smart Routing**: Multi-hop and split routing for best price execution
-- 💰 **Liquidity Mining**: Stake LP tokens with time and amount-based boost multipliers
-
-**🌉 Cross-Chain Bridge**
-- 🔗 **Bitcoin ↔ ICP**: Seamless Runes transfers via Omnity Network
-- 🔐 **Secure Verification**: 6 Bitcoin confirmations with multi-signature security
-- 💎 **wRunes**: ICRC-1/ICRC-2 wrapped Runes for DeFi capabilities
-
-**⚡ Runes Creation**
-- 🔐 **Threshold Schnorr**: Direct Bitcoin signing from smart contracts
+#### Phase 1 (Production Ready ✅)
+- ⚡ **Runes Creation**: 2-second transaction confirmation via ICP canisters
 - 💰 **Zero Platform Fees**: Users only pay Bitcoin network fees
 - ⚡ **Instant Finality**: 2-second transaction confirmation via ICP
 - 🔒 **Self-Custody**: Non-custodial via Internet Identity
+- 🔐 **Threshold Schnorr**: Direct Bitcoin signing from smart contracts
 
-**📈 DeFi Features**
-- 🎯 **Runes Staking**: Stake Runes to earn rewards with flexible lock periods
-- 🌍 **Global Explorer**: Real-time on-chain verification and tracking
-- 📊 **Advanced Analytics**: TVL, APY, volume, and price tracking
-- 🔄 **ICRC-2 Standard**: Full approval and transfer_from support
+#### Phase 2 (Planned 🚀)
+- 🖼️ **Ordinals & BRC-20**: Create and trade Bitcoin NFTs and tokens
+- 🏪 **Marketplace**: Decentralized trading with escrow
+- 💎 **DeFi**: Staking, DEX, lending for Bitcoin assets
+- 🌐 **Open Source**: 100% transparent and auditable code
 
-**💻 Production Quality**
-- ✅ **7,300+ Lines**: Professional Rust and TypeScript code
-- 🧪 **16 Unit Tests**: Comprehensive test coverage
-- 📚 **2,700+ Lines**: Complete documentation
-- 🔐 **Security First**: Access control, validation, slippage protection
+**Phase 2 Documentation:** [PHASE2_INDEX.md](./PHASE2_INDEX.md)
 
 ## 🏗️ Architecture
 
@@ -320,62 +306,58 @@ For detailed deployment instructions, see:
 
 ## 📊 Project Status
 
-- [x] **Phase 1: Core Launchpad** ✅
-  - [x] Production-grade etching orchestration
-  - [x] Threshold Schnorr signatures
-  - [x] UTXO selection & management
-  - [x] ckBTC integration (ICRC-1/ICRC-2)
-  - [x] State machine with error recovery
-  - [x] Comprehensive unit tests (24/24 passing)
+### Phase 1: Runes Platform (✅ ~90% Complete)
 
-- [x] **Phase 2: Hackathon Features** ✅ 🏆
-  - [x] ckBTC minting and conversion
-  - [x] Runes staking with rewards
-  - [x] Global Explorer with on-chain verification
-  - [x] Bitcoin Runes indexer integration
+**Backend:**
+- [x] Production-grade etching orchestration
+- [x] Threshold Schnorr signatures
+- [x] UTXO selection & management
+- [x] ckBTC integration (ICRC-1/ICRC-2)
+- [x] State machine with error recovery
+- [x] Comprehensive unit tests (62 tests passing)
+- [x] CI/CD pipeline (Rustfmt, Clippy, Tests)
 
-- [x] **Phase 3: Complete DEX Implementation** ✅ 🚀
-  - [x] **Backend (5,300+ lines Rust)**
-    - [x] wRunes Ledger (ICRC-1/ICRC-2) - 700 lines
-    - [x] AMM Pools (Constant Product) - 700 lines
-    - [x] Smart Order Router - 800 lines
-    - [x] Liquidity Mining & Farming - 700 lines
-    - [x] Professional Orderbook - 850 lines
-    - [x] Cross-Chain Bridge - 950 lines
-    - [x] DEX Orchestration - 750 lines
-  - [x] **Frontend (2,000+ lines TypeScript/React)**
-    - [x] Swap Interface with real-time quotes
-    - [x] Liquidity Pools UI
-    - [x] Orderbook Trading Interface
-    - [x] Bridge Interface (Bitcoin ↔ ICP)
-    - [x] Type definitions & hooks
-  - [x] **Testing & Documentation**
-    - [x] 16 unit tests (all passing)
-    - [x] 2,700+ lines of documentation
-    - [x] Complete API reference
+**Frontend:**
+- [x] Next.js 14 with TypeScript
+- [x] ICP agent integration
+- [x] Internet Identity authentication
+- [x] Professional UI components
+- [x] Form validation with Zod
+- [x] Production logging & monitoring
+- [x] Vercel deployment ready
 
-- [x] **Phase 4: Frontend Development** ✅
-  - [x] Next.js 14 with TypeScript
-  - [x] ICP agent integration
-  - [x] Internet Identity authentication
-  - [x] Professional UI components
-  - [x] Museum-grade design system
-  - [x] Form validation with Zod
-  - [x] Vercel deployment config
+**Remaining:**
+- [ ] Bitcoin mainnet testing
+- [ ] Security audit
+- [ ] Public mainnet launch
 
-- [ ] **Phase 5: Testing & Deployment** 🔄
-  - [ ] Integration testing (E2E flows)
-  - [ ] Security audit
-  - [ ] Testnet deployment
-  - [ ] Mainnet deployment
-  - [ ] Performance optimization
+### Phase 2: Comprehensive Bitcoin Platform (🚧 Planned)
 
-- [ ] **Phase 6: Advanced Features** 📋
-  - [ ] Concentrated liquidity (Uniswap V3)
-  - [ ] Flash loans
-  - [ ] Perpetual futures
-  - [ ] Mobile app (React Native)
-  - [ ] DAO governance
+**Phase 2A: Ordinals & BRC-20** (Months 1-6, $300K)
+- [ ] Ordinals inscription engine
+- [ ] BRC-20 token standard support
+- [ ] Bitcoin indexer infrastructure
+- [ ] Multi-wallet integration (Xverse, Leather, Unisat)
+- **Target:** 1,000+ inscriptions, 10+ BRC-20 tokens
+
+**Phase 2B: Marketplace** (Months 7-12, $500K)
+- [ ] Decentralized marketplace canister
+- [ ] Order book & escrow system
+- [ ] Collection management & verification
+- [ ] Trading UI (buy, sell, offers, auctions)
+- **Target:** $10M+ trading volume, 5,000+ users
+
+**Phase 2C: DeFi Integration** (Months 13-18, $700K)
+- [ ] DEX with AMM pools
+- [ ] Staking & yield farming
+- [ ] Lending protocol
+- [ ] Launchpad & governance
+- **Target:** $100M+ TVL, 50,000+ users
+
+**Phase 2 Documentation:**
+- [Research & Market Analysis](./PHASE2_RESEARCH.md)
+- [Implementation Roadmap](./PHASE2_ROADMAP.md)
+- [Master Index](./PHASE2_INDEX.md)
 
 ## 🤝 Contributing
 
