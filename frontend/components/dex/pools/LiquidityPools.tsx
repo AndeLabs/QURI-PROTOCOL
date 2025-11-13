@@ -42,10 +42,11 @@ export const LiquidityPools: React.FC = () => {
 
     const loadPositions = async () => {
       try {
-        // TODO: Get user principal
-        const userPrincipal = Principal.anonymous();
-        const positions = await actor.get_user_positions(userPrincipal);
-        setUserPositions(positions);
+        // TODO: Implement actual user authentication
+        // const userPrincipal = await getAuthenticatedPrincipal();
+        // const positions = await actor.get_user_positions(userPrincipal);
+        // setUserPositions(positions);
+        console.log('User authentication not yet implemented');
       } catch (err) {
         console.error('Load positions error:', err);
       }
