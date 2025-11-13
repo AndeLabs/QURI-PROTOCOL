@@ -36,13 +36,15 @@ export async function getAuthClient(): Promise<AuthClient> {
 
 export async function login(): Promise<boolean> {
   const client = await getAuthClient();
+  
+  const isLocal = IC_HOST.includes('localhost') || IC_HOST.includes('127.0.0.1');
+  const iiCanisterId = process.env.NEXT_PUBLIC_INTERNET_IDENTITY_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
 
   return new Promise((resolve) => {
     client.login({
-      identityProvider:
-        IC_HOST.includes('localhost')
-          ? `http://localhost:4943?canisterId=${process.env.NEXT_PUBLIC_INTERNET_IDENTITY_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai'}`
-          : 'https://identity.ic0.app',
+      identityProvider: isLocal
+        ? `http://localhost:4943?canisterId=${iiCanisterId}`
+        : `https://identity.ic0.app`,
       onSuccess: () => {
         // Update agent with authenticated identity
         const identity = client.getIdentity();
@@ -51,7 +53,8 @@ export async function login(): Promise<boolean> {
           identity,
         });
 
-        if (IC_HOST.includes('localhost')) {
+        // Only fetch root key in local development
+        if (isLocal) {
           agent.fetchRootKey().catch((err) => {
             logger.warn('Failed to fetch root key after login', { error: err });
           });

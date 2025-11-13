@@ -56,6 +56,30 @@ const nextConfig = {
 
     return config;
   },
+
+  // Security headers with CSP for NFT.Storage
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'Content-Security-Policy',
+            value: [
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
+              "img-src 'self' data: blob: https:",
+              "font-src 'self' data:",
+              "connect-src 'self' https://*.ic0.app https://*.icp0.io https://api.nft.storage https://nftstorage.link https://ipfs.io https://cloudflare-ipfs.com https://dweb.link",
+              "frame-src 'self' https://*.ic0.app https://identity.ic0.app",
+              "worker-src 'self' blob:",
+            ].join('; '),
+          },
+        ],
+      },
+    ];
+  },
 };
 
 module.exports = nextConfig;

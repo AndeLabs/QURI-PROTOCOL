@@ -22,14 +22,16 @@ export function middleware(request: NextRequest) {
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 
   // Content Security Policy
-  // Allow ICP domains, Bitcoin explorers, and necessary resources
+  // Allow ICP domains, Bitcoin explorers, IPFS gateways, and necessary resources
   const cspDirectives = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js requires unsafe-eval/inline
     "style-src 'self' 'unsafe-inline'", // Tailwind requires unsafe-inline
-    "img-src 'self' data: https:",
+    "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.ic0.app https://*.internetcomputer.org https://mempool.space",
+    "connect-src 'self' https://*.ic0.app https://*.icp0.io https://*.internetcomputer.org https://mempool.space https://api.nft.storage https://nftstorage.link https://ipfs.io https://cloudflare-ipfs.com https://dweb.link https://gateway.pinata.cloud",
+    "frame-src 'self' https://*.ic0.app https://identity.ic0.app",
+    "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",
     "form-action 'self'",
