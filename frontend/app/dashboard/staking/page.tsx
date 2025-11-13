@@ -17,33 +17,17 @@ export default function StakingPage() {
       </div>
 
       {/* Staking Interface */}
-      <div className="max-w-4xl mx-auto">
+      {/* TODO: Load rune data from user's wallet or route params */}
+      {/* <div className="max-w-4xl mx-auto">
         <RuneStaking
-          runeId="840000:1"
-          runeName="DOG•GO•TO•THE•MOON"
-          runeSymbol="DOG"
+          runeId={selectedRuneId}
+          runeName={selectedRuneName}
+          runeSymbol={selectedRuneSymbol}
         />
-      </div>
+      </div> */}
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="rounded-lg border border-museum-light-gray bg-museum-white p-4">
-          <p className="text-sm text-museum-dark-gray mb-1">Total Staked</p>
-          <p className="text-2xl font-bold text-museum-black">$680K</p>
-        </div>
-        <div className="rounded-lg border border-museum-light-gray bg-museum-white p-4">
-          <p className="text-sm text-museum-dark-gray mb-1">Average APY</p>
-          <p className="text-2xl font-bold text-green-600">32.5%</p>
-        </div>
-        <div className="rounded-lg border border-museum-light-gray bg-museum-white p-4">
-          <p className="text-sm text-museum-dark-gray mb-1">Total Stakers</p>
-          <p className="text-2xl font-bold text-museum-black">1,234</p>
-        </div>
-        <div className="rounded-lg border border-museum-light-gray bg-museum-white p-4">
-          <p className="text-sm text-museum-dark-gray mb-1">Rewards Paid</p>
-          <p className="text-2xl font-bold text-museum-black">$125K</p>
-        </div>
-      </div>
+      {/* Stats Cards - Removed hardcoded data */}
+      {/* TODO: Load staking statistics from Registry canister */}
 
       {/* How Staking Works */}
       <div className="rounded-xl border border-museum-light-gray bg-museum-white p-8">
