@@ -148,6 +148,15 @@ export function CkBTCMintFlow({
       setLoading(true);
       setError(null);
 
+      // TODO: Implement after deploying Registry canister
+      throw new Error('Registry canister not yet deployed. Cannot approve spending without canister ID.');
+
+      /* Uncomment after deploying Registry canister:
+      const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID;
+      if (!QURI_REGISTRY_CANISTER) {
+        throw new Error('Registry canister ID not configured');
+      }
+
       const agent = new HttpAgent({ host: 'https://ic0.app' });
       if (process.env.NODE_ENV === 'development') {
         await agent.fetchRootKey();
@@ -181,6 +190,7 @@ export function CkBTCMintFlow({
       logger.info('ckBTC spending approved', {
         block_index: approveResult.Ok,
       });
+      */
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to approve spending';
       setError(errorMsg);
@@ -196,6 +206,15 @@ export function CkBTCMintFlow({
     try {
       setLoading(true);
       setError(null);
+
+      // TODO: Implement after deploying Registry canister
+      throw new Error('Registry canister not yet deployed. Cannot mint without canister ID.');
+
+      /* Uncomment after deploying Registry canister:
+      const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID;
+      if (!QURI_REGISTRY_CANISTER) {
+        throw new Error('Registry canister ID not configured');
+      }
 
       const agent = new HttpAgent({ host: 'https://ic0.app' });
       if (process.env.NODE_ENV === 'development') {
@@ -231,6 +250,7 @@ export function CkBTCMintFlow({
         rune_id: createdRuneId,
         rune_name: runeData.rune_name,
       });
+      */
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to mint Rune';
       setError(errorMsg);
