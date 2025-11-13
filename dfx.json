@@ -13,7 +13,8 @@
       "package": "bitcoin-integration",
       "candid": "canisters/bitcoin-integration/bitcoin_integration.did",
       "build": ["cargo build --target wasm32-unknown-unknown --release --package bitcoin-integration"],
-      "wasm": "target/wasm32-unknown-unknown/release/bitcoin_integration.wasm"
+      "wasm": "target/wasm32-unknown-unknown/release/bitcoin_integration.wasm",
+      "init_arg": "(variant { Testnet }, principal \"mxzaz-hqaaa-aaaar-qaada-cai\")"
     },
     "registry": {
       "type": "rust",
