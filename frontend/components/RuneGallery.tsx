@@ -63,27 +63,16 @@ export function RuneGallery({
       setLoading(true);
       logger.info('Loading runes from registry');
 
-      // TODO: Replace with actual API call to registry canister
+      // TODO: Implement actual API call to registry canister
+      // Example:
+      // const actor = await getRegistryActor();
       // const result = await actor.list_runes({ offset: 0, limit: 50 });
+      // setRunes(result.runes);
+      // setFilteredRunes(result.runes);
 
-      // Mock data for demonstration
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      throw new Error('API integration not yet implemented');
 
-      const mockRunes: RuneData[] = Array.from({ length: 12 }, (_, i) => ({
-        id: `1:${1000 + i}`,
-        name: `QUANTUM•${['LEAP', 'WAVE', 'FLUX', 'NOVA', 'PRIME', 'VISION', 'DAWN', 'ECHO', 'ZENITH', 'CORE', 'PULSE', 'SPARK'][i]}`,
-        symbol: ['QLEP', 'QWAV', 'QFLX', 'QNOV', 'QPRM', 'QVIS', 'QDWN', 'QECH', 'QZEN', 'QCOR', 'QPLS', 'QSPK'][i],
-        supply: `${(Math.random() * 10000000).toFixed(0)}`,
-        divisibility: Math.floor(Math.random() * 9),
-        creator: 'bc1q' + Math.random().toString(36).substring(2, 15),
-        blockHeight: 830000 + i * 100,
-        timestamp: Date.now() - i * 86400000 * 2,
-        description: 'A unique Bitcoin Rune representing digital scarcity and artistic expression on the blockchain.',
-      }));
-
-      setRunes(mockRunes);
-      setFilteredRunes(mockRunes);
-      logger.info('Loaded runes successfully', { count: mockRunes.length });
+      logger.info('Loaded runes successfully');
     } catch (error) {
       logger.error('Failed to load runes', error instanceof Error ? error : undefined);
     } finally {

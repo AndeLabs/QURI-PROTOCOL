@@ -42,48 +42,16 @@ export function Dashboard() {
       setLoading(true);
       setError(null);
 
-      // TODO: Replace with actual API calls to registry canister
-      // This is mock data for demonstration
-      await new Promise((resolve) => setTimeout(resolve, 1000));
+      // TODO: Implement actual API calls to registry canister
+      // Example:
+      // const actor = await getRegistryActor();
+      // const stats = await actor.getDashboardStats();
+      // const recentRunes = await actor.getRecentRunes();
+      // setStats(stats);
+      // setRecentRunes(recentRunes);
 
-      const mockStats: DashboardStats = {
-        totalRunes: 1247,
-        activeUsers: 892,
-        totalVolume: '127.45 BTC',
-        avgFee: '0.0012 BTC',
-        recentEtchings: 23,
-        successRate: 98.7,
-      };
+      throw new Error('API integration not yet implemented');
 
-      const mockRecentRunes: RecentRune[] = [
-        {
-          id: '1:1234',
-          name: 'QUANTUM•LEAP',
-          symbol: 'QLEP',
-          creator: 'bc1q...xyz',
-          timestamp: Date.now() - 3600000,
-          supply: '1,000,000',
-        },
-        {
-          id: '1:1235',
-          name: 'CRYPTO•PUNK',
-          symbol: 'CPNK',
-          creator: 'bc1q...abc',
-          timestamp: Date.now() - 7200000,
-          supply: '500,000',
-        },
-        {
-          id: '1:1236',
-          name: 'SATOSHI•VISION',
-          symbol: 'SVIS',
-          creator: 'bc1q...def',
-          timestamp: Date.now() - 10800000,
-          supply: '21,000,000',
-        },
-      ];
-
-      setStats(mockStats);
-      setRecentRunes(mockRecentRunes);
       logger.info('Dashboard data loaded successfully');
     } catch (err) {
       const errorMessage = 'Failed to load dashboard data';
