@@ -101,37 +101,45 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
   // Load user position and pool data
   const loadData = async () => {
     try {
-      const agent = new HttpAgent({ host: 'https://ic0.app' });
-      if (process.env.NODE_ENV === 'development') {
-        await agent.fetchRootKey();
-      }
+      // TODO: Implement after deploying Registry canister
+      // const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID;
+      // if (!QURI_REGISTRY_CANISTER) {
+      //   throw new Error('Registry canister ID not configured');
+      // }
+      //
+      // const agent = new HttpAgent({ host: 'https://ic0.app' });
+      // if (process.env.NODE_ENV === 'development') {
+      //   await agent.fetchRootKey();
+      // }
+      //
+      // const actor = Actor.createActor(idlFactory, {
+      //   agent,
+      //   canisterId: QURI_REGISTRY_CANISTER,
+      // });
+      //
+      // // Load position
+      // const positionResult = await actor.get_stake(runeId) as StakePosition[] | null;
+      // if (positionResult && positionResult.length > 0) {
+      //   setPosition(positionResult[0]);
+      // } else {
+      //   setPosition(null);
+      // }
+      //
+      // // Load pool
+      // const poolResult = await actor.get_pool(runeId) as StakingPool[] | null;
+      // if (poolResult && poolResult.length > 0) {
+      //   setPool(poolResult[0]);
+      // }
+      //
+      // // Load pending rewards if user has stake
+      // if (positionResult && positionResult.length > 0) {
+      //   const rewardsResult = await actor.calculate_pending_rewards(runeId) as { Ok?: RewardCalculation; Err?: string };
+      //   if ('Ok' in rewardsResult) {
+      //     setPendingRewards(rewardsResult.Ok!);
+      //   }
+      // }
 
-      const actor = Actor.createActor(idlFactory, {
-        agent,
-        canisterId: QURI_REGISTRY_CANISTER,
-      });
-
-      // Load position
-      const positionResult = await actor.get_stake(runeId) as StakePosition[] | null;
-      if (positionResult && positionResult.length > 0) {
-        setPosition(positionResult[0]);
-      } else {
-        setPosition(null);
-      }
-
-      // Load pool
-      const poolResult = await actor.get_pool(runeId) as StakingPool[] | null;
-      if (poolResult && poolResult.length > 0) {
-        setPool(poolResult[0]);
-      }
-
-      // Load pending rewards if user has stake
-      if (positionResult && positionResult.length > 0) {
-        const rewardsResult = await actor.calculate_pending_rewards(runeId) as { Ok?: RewardCalculation; Err?: string };
-        if ('Ok' in rewardsResult) {
-          setPendingRewards(rewardsResult.Ok!);
-        }
-      }
+      logger.info('Staking data loading not yet implemented');
     } catch (err) {
       logger.error('Failed to load staking data', err instanceof Error ? err : undefined);
     }
@@ -143,35 +151,42 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
       setLoading(true);
       setError(null);
 
-      const amount = BigInt(Math.floor(parseFloat(stakeAmount) * 100_000_000));
+      // TODO: Implement after deploying Registry canister
+      throw new Error('Staking not yet implemented. Deploy Registry canister first.');
 
-      if (amount < MIN_STAKE_AMOUNT) {
-        throw new Error(`Minimum stake: ${formatAmount(MIN_STAKE_AMOUNT)} ckBTC`);
-      }
-
-      const agent = new HttpAgent({ host: 'https://ic0.app' });
-      if (process.env.NODE_ENV === 'development') {
-        await agent.fetchRootKey();
-      }
-
-      const actor = Actor.createActor(idlFactory, {
-        agent,
-        canisterId: QURI_REGISTRY_CANISTER,
-      });
-
-      const result = await actor.stake(runeId, amount) as { Ok?: StakePosition; Err?: string };
-
-      if ('Err' in result) {
-        throw new Error(result.Err);
-      }
-
-      setStakeAmount('');
-      await loadData();
-
-      logger.info('Staked Runes', {
-        rune_id: runeId,
-        amount: formatAmount(amount),
-      });
+      // const amount = BigInt(Math.floor(parseFloat(stakeAmount) * 100_000_000));
+      // if (amount < MIN_STAKE_AMOUNT) {
+      //   throw new Error(`Minimum stake: ${formatAmount(MIN_STAKE_AMOUNT)} ckBTC`);
+      // }
+      //
+      // const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID;
+      // if (!QURI_REGISTRY_CANISTER) {
+      //   throw new Error('Registry canister ID not configured');
+      // }
+      //
+      // const agent = new HttpAgent({ host: 'https://ic0.app' });
+      // if (process.env.NODE_ENV === 'development') {
+      //   await agent.fetchRootKey();
+      // }
+      //
+      // const actor = Actor.createActor(idlFactory, {
+      //   agent,
+      //   canisterId: QURI_REGISTRY_CANISTER,
+      // });
+      //
+      // const result = await actor.stake(runeId, amount) as { Ok?: StakePosition; Err?: string };
+      //
+      // if ('Err' in result) {
+      //   throw new Error(result.Err);
+      // }
+      //
+      // setStakeAmount('');
+      // await loadData();
+      //
+      // logger.info('Staked Runes', {
+      //   rune_id: runeId,
+      //   amount: formatAmount(amount),
+      // });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to stake';
       setError(errorMsg);
@@ -187,38 +202,45 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
       setLoading(true);
       setError(null);
 
-      const amount = BigInt(Math.floor(parseFloat(unstakeAmount) * 100_000_000));
+      // TODO: Implement after deploying Registry canister
+      throw new Error('Unstaking not yet implemented. Deploy Registry canister first.');
 
-      if (!position || amount > position.amount) {
-        throw new Error('Insufficient staked amount');
-      }
-
-      const agent = new HttpAgent({ host: 'https://ic0.app' });
-      if (process.env.NODE_ENV === 'development') {
-        await agent.fetchRootKey();
-      }
-
-      const actor = Actor.createActor(idlFactory, {
-        agent,
-        canisterId: QURI_REGISTRY_CANISTER,
-      });
-
-      const result = await actor.unstake(runeId, amount) as { Ok?: [bigint, bigint]; Err?: string };
-
-      if ('Err' in result) {
-        throw new Error(result.Err);
-      }
-
-      const [unstaked, rewards] = result.Ok!;
-
-      setUnstakeAmount('');
-      await loadData();
-
-      logger.info('Unstaked Runes', {
-        rune_id: runeId,
-        unstaked: formatAmount(unstaked),
-        rewards: formatAmount(rewards),
-      });
+      // const amount = BigInt(Math.floor(parseFloat(unstakeAmount) * 100_000_000));
+      // if (!position || amount > position.amount) {
+      //   throw new Error('Insufficient staked amount');
+      // }
+      //
+      // const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID;
+      // if (!QURI_REGISTRY_CANISTER) {
+      //   throw new Error('Registry canister ID not configured');
+      // }
+      //
+      // const agent = new HttpAgent({ host: 'https://ic0.app' });
+      // if (process.env.NODE_ENV === 'development') {
+      //   await agent.fetchRootKey();
+      // }
+      //
+      // const actor = Actor.createActor(idlFactory, {
+      //   agent,
+      //   canisterId: QURI_REGISTRY_CANISTER,
+      // });
+      //
+      // const result = await actor.unstake(runeId, amount) as { Ok?: [bigint, bigint]; Err?: string };
+      //
+      // if ('Err' in result) {
+      //   throw new Error(result.Err);
+      // }
+      //
+      // const [unstaked, rewards] = result.Ok!;
+      //
+      // setUnstakeAmount('');
+      // await loadData();
+      //
+      // logger.info('Unstaked Runes', {
+      //   rune_id: runeId,
+      //   unstaked: formatAmount(unstaked),
+      //   rewards: formatAmount(rewards),
+      // });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to unstake';
       setError(errorMsg);
@@ -234,29 +256,37 @@ export function RuneStaking({ runeId, runeName, runeSymbol, userBalance }: RuneS
       setLoading(true);
       setError(null);
 
-      const agent = new HttpAgent({ host: 'https://ic0.app' });
-      if (process.env.NODE_ENV === 'development') {
-        await agent.fetchRootKey();
-      }
+      // TODO: Implement after deploying Registry canister
+      throw new Error('Claim rewards not yet implemented. Deploy Registry canister first.');
 
-      const actor = Actor.createActor(idlFactory, {
-        agent,
-        canisterId: QURI_REGISTRY_CANISTER,
-      });
-
-      const result = await actor.claim_staking_rewards(runeId) as { Ok?: bigint; Err?: string };
-
-      if ('Err' in result) {
-        throw new Error(result.Err);
-      }
-
-      const rewards = result.Ok!;
-      await loadData();
-
-      logger.info('Claimed staking rewards', {
-        rune_id: runeId,
-        rewards: formatAmount(rewards),
-      });
+      // const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID;
+      // if (!QURI_REGISTRY_CANISTER) {
+      //   throw new Error('Registry canister ID not configured');
+      // }
+      //
+      // const agent = new HttpAgent({ host: 'https://ic0.app' });
+      // if (process.env.NODE_ENV === 'development') {
+      //   await agent.fetchRootKey();
+      // }
+      //
+      // const actor = Actor.createActor(idlFactory, {
+      //   agent,
+      //   canisterId: QURI_REGISTRY_CANISTER,
+      // });
+      //
+      // const result = await actor.claim_staking_rewards(runeId) as { Ok?: bigint; Err?: string };
+      //
+      // if ('Err' in result) {
+      //   throw new Error(result.Err);
+      // }
+      //
+      // const rewards = result.Ok!;
+      // await loadData();
+      //
+      // logger.info('Claimed staking rewards', {
+      //   rune_id: runeId,
+      //   rewards: formatAmount(rewards),
+      // });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to claim rewards';
       setError(errorMsg);
