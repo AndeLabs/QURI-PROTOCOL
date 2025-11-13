@@ -25,10 +25,11 @@ export const BridgeInterface: React.FC = () => {
 
     const loadTransactions = async () => {
       try {
-        // TODO: Get user principal
-        const userPrincipal = Principal.anonymous();
-        const txs = await actor.get_user_transactions(userPrincipal);
-        setTransactions(txs);
+        // TODO: Implement actual user authentication
+        // const userPrincipal = await getAuthenticatedPrincipal();
+        // const txs = await actor.get_user_transactions(userPrincipal);
+        // setTransactions(txs);
+        console.log('User authentication not yet implemented');
       } catch (err) {
         console.error('Load transactions error:', err);
       }
@@ -66,26 +67,28 @@ export const BridgeInterface: React.FC = () => {
 
       const amountNat = BigInt(Math.floor(parseFloat(amount) * 1e8));
 
-      const request = {
-        user_icp: Principal.anonymous(), // TODO: Get actual user principal
-        user_btc_address: btcAddress,
-        rune_id: runeId,
-        rune_name: supportedRunes.find((r) => r.rune_id === runeId)?.rune_name || '',
-        amount: amountNat,
-        btc_txid: btcTxid,
-        btc_vout: parseInt(btcVout),
-      };
+      // TODO: Implement actual user authentication
+      // const userPrincipal = await getAuthenticatedPrincipal();
+      // const request = {
+      //   user_icp: userPrincipal,
+      //   user_btc_address: btcAddress,
+      //   rune_id: runeId,
+      //   rune_name: supportedRunes.find((r) => r.rune_id === runeId)?.rune_name || '',
+      //   amount: amountNat,
+      //   btc_txid: btcTxid,
+      //   btc_vout: parseInt(btcVout),
+      // };
+      // const result = await actor.initiate_deposit(request);
+      // if ('Ok' in result) {
+      //   alert(`Deposit initiated! TX ID: ${result.Ok}`);
+      //   setAmount('');
+      //   setBtcTxid('');
+      //   setBtcVout('0');
+      // } else {
+      //   setError(result.Err);
+      // }
 
-      const result = await actor.initiate_deposit(request);
-
-      if ('Ok' in result) {
-        alert(`Deposit initiated! TX ID: ${result.Ok}`);
-        setAmount('');
-        setBtcTxid('');
-        setBtcVout('0');
-      } else {
-        setError(result.Err);
-      }
+      throw new Error('User authentication not yet implemented');
     } catch (err) {
       setError(`Deposit failed: ${err}`);
       console.error('Deposit error:', err);
@@ -110,22 +113,24 @@ export const BridgeInterface: React.FC = () => {
         return;
       }
 
-      const request = {
-        user_icp: Principal.anonymous(), // TODO: Get actual user principal
-        user_btc_address: btcAddress,
-        wrune_canister: runeConfig.wrune_canister,
-        amount: amountNat,
-      };
+      // TODO: Implement actual user authentication
+      // const userPrincipal = await getAuthenticatedPrincipal();
+      // const request = {
+      //   user_icp: userPrincipal,
+      //   user_btc_address: btcAddress,
+      //   wrune_canister: runeConfig.wrune_canister,
+      //   amount: amountNat,
+      // };
+      // const result = await actor.initiate_withdrawal(request);
+      // if ('Ok' in result) {
+      //   alert(`Withdrawal initiated! TX ID: ${result.Ok}`);
+      //   setAmount('');
+      //   setBtcAddress('');
+      // } else {
+      //   setError(result.Err);
+      // }
 
-      const result = await actor.initiate_withdrawal(request);
-
-      if ('Ok' in result) {
-        alert(`Withdrawal initiated! TX ID: ${result.Ok}`);
-        setAmount('');
-        setBtcAddress('');
-      } else {
-        setError(result.Err);
-      }
+      throw new Error('User authentication not yet implemented');
     } catch (err) {
       setError(`Withdrawal failed: ${err}`);
       console.error('Withdrawal error:', err);

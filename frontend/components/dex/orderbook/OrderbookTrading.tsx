@@ -59,12 +59,13 @@ export const OrderbookTrading: React.FC<OrderbookTradingProps> = ({ poolId }) =>
 
     const loadUserOrders = async () => {
       try {
-        // TODO: Get user principal
-        const userPrincipal = Principal.anonymous();
-        const result = await actor.get_user_orders(poolId, userPrincipal);
-        if ('Ok' in result) {
-          setUserOrders(result.Ok);
-        }
+        // TODO: Implement actual user authentication
+        // const userPrincipal = await getAuthenticatedPrincipal();
+        // const result = await actor.get_user_orders(poolId, userPrincipal);
+        // if ('Ok' in result) {
+        //   setUserOrders(result.Ok);
+        // }
+        console.log('User authentication not yet implemented');
       } catch (err) {
         console.error('Load user orders error:', err);
       }

@@ -61,24 +61,29 @@ export function useActor(canisterName: keyof typeof CANISTER_IDS): UseActorRetur
           await agent.fetchRootKey();
         }
 
-        // TODO: Import IDL factory for each canister
-        // In production, these would be generated from Candid files
+        // TODO: Import actual IDL factory for each canister from generated declarations
+        // These should be generated from Candid files using dfx
         // Example:
         // import { idlFactory as dexIdlFactory } from '../declarations/dex';
+        // import { idlFactory as bridgeIdlFactory } from '../declarations/bridge';
+        // import { idlFactory as wrunesLedgerIdlFactory } from '../declarations/wrunes_ledger';
+        //
+        // const idlFactories = {
+        //   dex: dexIdlFactory,
+        //   bridge: bridgeIdlFactory,
+        //   wrunes_ledger: wrunesLedgerIdlFactory,
+        // };
+        // const idlFactory = idlFactories[canisterName];
 
-        // For now, create a placeholder actor
-        // In production, replace with actual IDL factory
-        const idlFactory: IDLFactory = ({ IDL }: any) => {
-          return IDL.Service({});
-        };
+        // Placeholder - will not work until real IDL factories are imported
+        // Uncomment and configure once canisters are deployed:
+        // const actorInstance = Actor.createActor(idlFactory, {
+        //   agent,
+        //   canisterId: Principal.fromText(canisterId),
+        // });
+        // setActor(actorInstance);
 
-        // Create actor
-        const actorInstance = Actor.createActor(idlFactory, {
-          agent,
-          canisterId: Principal.fromText(canisterId),
-        });
-
-        setActor(actorInstance);
+        throw new Error('IDL factories not yet configured. Please deploy canisters and generate declarations.');
       } catch (err) {
         setError(err instanceof Error ? err : new Error(String(err)));
         console.error(`Failed to initialize ${canisterName} actor:`, err);
