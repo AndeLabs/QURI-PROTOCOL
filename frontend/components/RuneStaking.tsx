@@ -56,7 +56,8 @@ interface RuneStakingProps {
 }
 
 // QURI Registry Canister ID
-const QURI_REGISTRY_CANISTER = 'aaaaa-aa'; // TODO: Replace with actual
+// TODO: Replace with actual deployed canister ID
+// const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID || '';
 
 const MIN_STAKE_AMOUNT = 10_000n; // 0.0001 ckBTC
 

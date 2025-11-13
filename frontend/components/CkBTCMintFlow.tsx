@@ -59,8 +59,9 @@ interface CkBTCMintFlowProps {
 const CKBTC_LEDGER_MAINNET = 'mxzaz-hqaaa-aaaar-qaada-cai';
 const CKBTC_LEDGER_TESTNET = 'mc6ru-gyaaa-aaaar-qaaaq-cai';
 
-// QURI Registry Canister ID (TODO: Replace with actual deployed canister ID)
-const QURI_REGISTRY_CANISTER = 'aaaaa-aa'; // Placeholder
+// QURI Registry Canister ID
+// TODO: Replace with actual deployed canister ID
+// const QURI_REGISTRY_CANISTER = process.env.NEXT_PUBLIC_REGISTRY_CANISTER_ID || '';
 
 // Mint fee in satoshis (0.001 ckBTC = 100,000 sats)
 const MINT_FEE_SATS = 100_000n;
