@@ -6,12 +6,14 @@ use std::cell::RefCell;
 
 use quri_types::{RuneEtching, RuneId, RuneMetadata};
 
+mod block_tracker;
 mod config;
 mod confirmation_tracker;
 mod errors;
 mod etching_flow;
 mod fee_manager;
 mod idempotency;
+mod metrics;
 mod rbac;
 mod state;
 mod validators;
@@ -55,6 +57,14 @@ fn init() {
     let canister_config_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5)));
     config::init_config_storage(etching_config_memory, canister_config_memory);
 
+    // Initialize block tracker (MemoryId 6)
+    let block_tracker_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(6)));
+    block_tracker::init_block_tracker(block_tracker_memory);
+
+    // Initialize metrics (MemoryId 7)
+    let metrics_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(7)));
+    metrics::init_metrics(metrics_memory);
+
     // Initialize Bitcoin confirmation tracker
     confirmation_tracker::init_confirmation_tracker();
 
@@ -69,6 +79,7 @@ fn pre_upgrade() {
     // Stop timers before upgrade
     confirmation_tracker::stop_confirmation_tracker();
     fee_manager::stop_fee_manager();
+    block_tracker::stop_block_tracker();
 }
 
 #[post_upgrade]
@@ -91,6 +102,14 @@ fn post_upgrade() {
     let etching_config_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4)));
     let canister_config_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(5)));
     config::reinit_config_storage(etching_config_memory, canister_config_memory);
+
+    // Reinitialize block tracker (MemoryId 6)
+    let block_tracker_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(6)));
+    block_tracker::reinit_block_tracker(block_tracker_memory);
+
+    // Reinitialize metrics (MemoryId 7)
+    let metrics_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(7)));
+    metrics::reinit_metrics(metrics_memory);
 
     // Restart timers
     confirmation_tracker::init_confirmation_tracker();
@@ -134,6 +153,9 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
     // Get config from stable storage
     let etching_config = config::get_etching_config();
 
+    // Start latency timer
+    let timer = metrics::LatencyTimer::start(metrics::OperationType::EtchingEndToEnd);
+
     // Execute etching flow
     let orchestrator = EtchingOrchestrator::new(etching_config);
     match orchestrator.execute_etching(caller, etching).await {
@@ -146,6 +168,10 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
                 // Don't fail the operation, just log it
             }
 
+            // Record metrics
+            metrics::record_rune_created();
+            timer.stop(true);
+
             Ok(process_id)
         }
         Err(e) => {
@@ -155,6 +181,10 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
             if let Err(record_err) = idempotency::record_request_failure(request_id, caller, error_msg.clone()) {
                 ic_cdk::println!("⚠️  Failed to record idempotency: {}", record_err);
             }
+
+            // Record metrics
+            metrics::record_error(&error_msg);
+            timer.stop(false);
 
             Err(error_msg)
         }
@@ -264,6 +294,65 @@ fn health_check() -> HealthStatus {
         registry_configured,
         canister_id: ic_cdk::id(),
     }
+}
+
+/// Get current Bitcoin block height (cached)
+#[query]
+fn get_bitcoin_block_height() -> Option<u64> {
+    block_tracker::get_cached_block_height_info().map(|info| info.height)
+}
+
+/// Get detailed block height info (for debugging - Admin only)
+#[query]
+fn get_block_height_info() -> Result<Option<BlockHeightInfo>, String> {
+    require_admin!()?;
+
+    let info = block_tracker::get_cached_block_height_info().map(|cached| {
+        let age_seconds = (ic_cdk::api::time() - cached.fetched_at) / 1_000_000_000;
+        BlockHeightInfo {
+            height: cached.height,
+            network: cached.network,
+            age_seconds,
+        }
+    });
+
+    Ok(info)
+}
+
+#[derive(CandidType, Deserialize)]
+pub struct BlockHeightInfo {
+    pub height: u64,
+    pub network: quri_types::BitcoinNetwork,
+    pub age_seconds: u64,
+}
+
+/// Get performance metrics summary (public)
+#[query]
+fn get_metrics_summary() -> metrics::MetricsSummary {
+    metrics::get_metrics_summary()
+}
+
+/// Get detailed performance metrics (Admin only)
+#[query]
+fn get_performance_metrics() -> Result<metrics::PerformanceMetrics, String> {
+    require_admin!()?;
+    Ok(metrics::get_metrics())
+}
+
+/// Get latency percentiles for an operation (Admin only)
+#[query]
+fn get_latency_percentiles(operation: String) -> Result<Option<metrics::LatencyPercentiles>, String> {
+    require_admin!()?;
+
+    let op_type = match operation.as_str() {
+        "etching" => metrics::OperationType::EtchingEndToEnd,
+        "signing" => metrics::OperationType::Signing,
+        "broadcasting" => metrics::OperationType::Broadcasting,
+        "confirmation" => metrics::OperationType::Confirmation,
+        _ => return Err("Invalid operation type. Use: etching, signing, broadcasting, confirmation".to_string()),
+    };
+
+    Ok(metrics::get_latency_percentiles(op_type))
 }
 
 // ============================================================================

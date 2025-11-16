@@ -63,6 +63,55 @@ type RoleAssignment = record {
     granted_by : principal;
 };
 
+type BlockHeightInfo = record {
+    height : nat64;
+    network : BitcoinNetwork;
+    age_seconds : nat64;
+};
+
+type MetricsSummary = record {
+    total_runes_created : nat64;
+    total_errors : nat64;
+    success_rate_percent : nat32;
+    avg_etching_latency_ms : nat64;
+    active_processes : nat32;
+    pending_processes : nat32;
+};
+
+type ErrorBreakdown = record {
+    validation_errors : nat64;
+    balance_errors : nat64;
+    utxo_errors : nat64;
+    signing_errors : nat64;
+    broadcast_errors : nat64;
+    confirmation_errors : nat64;
+    unknown_errors : nat64;
+};
+
+type PerformanceMetrics = record {
+    total_runes_created : nat64;
+    total_errors : nat64;
+    total_retries : nat64;
+    total_confirmations_tracked : nat64;
+    errors_by_type : ErrorBreakdown;
+    avg_etching_latency_ns : nat64;
+    avg_signing_latency_ns : nat64;
+    avg_broadcast_latency_ns : nat64;
+    active_processes : nat32;
+    pending_processes : nat32;
+    last_updated : nat64;
+};
+
+type LatencyPercentiles = record {
+    p50 : nat64;
+    p90 : nat64;
+    p95 : nat64;
+    p99 : nat64;
+    min : nat64;
+    max : nat64;
+    count : nat64;
+};
+
 service : {
     // Main etching API - create a new Rune on Bitcoin
     "create_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
@@ -71,6 +120,15 @@ service : {
     "get_etching_status" : (text) -> (opt EtchingProcessView) query;
     "get_my_etchings" : () -> (vec EtchingProcessView) query;
     "health_check" : () -> (HealthStatus) query;
+
+    // Bitcoin block height tracking
+    "get_bitcoin_block_height" : () -> (opt nat64) query;
+    "get_block_height_info" : () -> (variant { Ok : opt BlockHeightInfo; Err : text }) query;
+
+    // Performance metrics
+    "get_metrics_summary" : () -> (MetricsSummary) query;
+    "get_performance_metrics" : () -> (variant { Ok : PerformanceMetrics; Err : text }) query;
+    "get_latency_percentiles" : (text) -> (variant { Ok : opt LatencyPercentiles; Err : text }) query;
 
     // Configuration APIs (admin/deployment only)
     "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
