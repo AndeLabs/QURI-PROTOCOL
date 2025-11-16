@@ -270,8 +270,8 @@ mod tests {
     #[test]
     fn test_canister_config_storable() {
         let config = CanisterConfig {
-            bitcoin_integration_id: Principal::from_text("aaaaa-aa").unwrap(),
-            registry_id: Principal::from_text("bbbbb-bb").unwrap(),
+            bitcoin_integration_id: Principal::from_text("rrkah-fqaaa-aaaaa-aaaaq-cai").unwrap(),
+            registry_id: Principal::from_text("ryjl3-tyaaa-aaaaa-aaaba-cai").unwrap(),
         };
 
         let bytes = config.to_bytes();
