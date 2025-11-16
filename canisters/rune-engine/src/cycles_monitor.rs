@@ -399,7 +399,8 @@ mod tests {
     #[test]
     fn test_format_cycles() {
         assert_eq!(format_cycles(1_500_000_000_000), "1.50T");
-        assert_eq!(format_cycles(500_000_000), "0.50B");
+        assert_eq!(format_cycles(500_000_000), "500.00M");
+        assert_eq!(format_cycles(1_500_000_000), "1.50B");
         assert_eq!(format_cycles(1_500_000), "1.50M");
         assert_eq!(format_cycles(1_500), "1.50K");
     }
