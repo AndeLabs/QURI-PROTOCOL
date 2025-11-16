@@ -35,9 +35,9 @@ ic-cdk-timers = "0.7"
 ic-stable-structures = "0.6"
 ic-ledger-types = "0.11"
 
-# Bitcoin & Crypto
-bitcoin = { version = "0.31", features = ["serde"] }
-secp256k1 = { version = "0.28", features = ["recovery", "global-context"] }
+# Bitcoin & Crypto (matching DFINITY examples)
+bitcoin = "0.32.7"
+secp256k1 = "0.29"
 sha2 = "0.10"
 ripemd = "0.1"
 

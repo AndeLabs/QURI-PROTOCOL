@@ -1,12 +1,16 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Actor } from '@dfinity/agent';
+import { Principal } from '@dfinity/principal';
+import { getAgent } from '@/lib/icp/agent';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { VerificationBadge } from '@/components/RuneVerification';
 import { OctopusIndexerClient, OctopusRuneEntry } from '@/lib/integrations/octopus-indexer';
-import { Search, Filter, TrendingUp, Users, Coins, ExternalLink, RefreshCw } from 'lucide-react';
+import { Search, Filter, TrendingUp, Users, Coins, ExternalLink, RefreshCw, CheckCircle, Loader } from 'lucide-react';
 import { logger } from '@/lib/logger';
 
 /**
@@ -31,8 +35,11 @@ interface FilterOptions {
   showOnlyVerified: boolean;
 }
 
-export default function GlobalRunesExplorer() {
-  const [activeTab, setActiveTab] = useState<'quri' | 'all'>('all');
+function ExplorerContent() {
+  const searchParams = useSearchParams();
+  const newEtchingId = searchParams.get('new');
+  
+  const [activeTab, setActiveTab] = useState<'quri' | 'all'>('quri'); // Default to QURI tab if new etching
   const [allRunes, setAllRunes] = useState<OctopusRuneEntry[]>([]);
   const [quriRunes, setQuriRunes] = useState<any[]>([]);
   const [filteredRunes, setFilteredRunes] = useState<OctopusRuneEntry[]>([]);
@@ -44,6 +51,9 @@ export default function GlobalRunesExplorer() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [latestBlock, setLatestBlock] = useState<number>(0);
+  const [newRuneData, setNewRuneData] = useState<any | null>(null);
+  const [loadingNewRune, setLoadingNewRune] = useState(false);
+  const [showSuccessBanner, setShowSuccessBanner] = useState(false);
 
   const client = new OctopusIndexerClient('mainnet');
 
@@ -89,13 +99,69 @@ export default function GlobalRunesExplorer() {
     }
   };
 
+  // Load newly created Rune from ICP backend
+  const loadNewRune = async (etchingId: string) => {
+    try {
+      setLoadingNewRune(true);
+      logger.info('Loading new Rune from ICP', { etchingId });
+
+      const agent = await getAgent();
+      const runeEngineId = process.env.NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID;
+
+      if (!runeEngineId) {
+        throw new Error('NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID not configured');
+      }
+
+      const { idlFactory } = await import('@/lib/integrations/rune-engine.did');
+      const actor = Actor.createActor(idlFactory, {
+        agent,
+        canisterId: Principal.fromText(runeEngineId),
+      }) as any;
+
+      // Get etching status
+      const status = await actor.get_etching_status(etchingId);
+      
+      if (status && status.length > 0) {
+        const etchingData = status[0];
+        setNewRuneData(etchingData);
+        setShowSuccessBanner(true);
+        logger.info('New Rune loaded', { etchingData });
+        
+        // Auto-hide banner after 10 seconds
+        setTimeout(() => setShowSuccessBanner(false), 10000);
+      }
+    } catch (err) {
+      logger.error('Failed to load new Rune', err instanceof Error ? err : undefined);
+    } finally {
+      setLoadingNewRune(false);
+    }
+  };
+
   // Load QURI-created Runes
   const loadQuriRunes = async () => {
     try {
-      // TODO: Query QURI Registry for user-created Runes
-      setQuriRunes([]);
+      const agent = await getAgent();
+      const runeEngineId = process.env.NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID;
+
+      if (!runeEngineId) {
+        logger.warn('RUNE_ENGINE_CANISTER_ID not configured, skipping QURI runes');
+        setQuriRunes([]);
+        return;
+      }
+
+      const { idlFactory } = await import('@/lib/integrations/rune-engine.did');
+      const actor = Actor.createActor(idlFactory, {
+        agent,
+        canisterId: Principal.fromText(runeEngineId),
+      }) as any;
+
+      // Get user's etchings
+      const myEtchings = await actor.get_my_etchings();
+      setQuriRunes(myEtchings);
+      logger.info('Loaded QURI Runes', { count: myEtchings.length });
     } catch (err) {
       logger.error('Failed to load QURI Runes', err instanceof Error ? err : undefined);
+      setQuriRunes([]);
     }
   };
 
@@ -140,6 +206,11 @@ export default function GlobalRunesExplorer() {
     loadAllRunes();
     loadQuriRunes();
 
+    // Load new Rune if etchingId is present in URL
+    if (newEtchingId) {
+      loadNewRune(newEtchingId);
+    }
+
     // Refresh every 60 seconds
     const interval = setInterval(() => {
       loadAllRunes();
@@ -147,11 +218,64 @@ export default function GlobalRunesExplorer() {
     }, 60000);
 
     return () => clearInterval(interval);
-  }, []);
+  }, [newEtchingId]);
 
   return (
     <div className="min-h-screen bg-museum-cream p-8">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* Success Banner for New Rune */}
+        {showSuccessBanner && newRuneData && (
+          <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-lg p-6 shadow-lg animate-fade-in">
+            <div className="flex items-start gap-4">
+              <div className="flex-shrink-0">
+                <CheckCircle className="w-12 h-12 text-green-600" />
+              </div>
+              <div className="flex-1">
+                <h3 className="text-2xl font-serif font-bold text-green-900 mb-2">
+                  🎉 ¡Rune Creado Exitosamente!
+                </h3>
+                <div className="space-y-2 text-green-800">
+                  <p className="text-lg">
+                    <strong>Nombre:</strong> {newRuneData.rune_name}
+                  </p>
+                  <p className="text-sm font-mono">
+                    <strong>ID:</strong> {newRuneData.id}
+                  </p>
+                  <p className="text-sm">
+                    <strong>Estado:</strong>{' '}
+                    <span className="inline-flex items-center gap-1">
+                      {newRuneData.state}
+                      {newRuneData.state === 'Broadcasting' && (
+                        <Loader className="w-4 h-4 animate-spin" />
+                      )}
+                    </span>
+                  </p>
+                  {newRuneData.txid && (
+                    <p className="text-sm">
+                      <strong>Transaction ID:</strong>{' '}
+                      <a
+                        href={`https://mempool.space/testnet/tx/${newRuneData.txid}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:underline inline-flex items-center gap-1"
+                      >
+                        {newRuneData.txid.substring(0, 16)}...
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={() => setShowSuccessBanner(false)}
+                className="flex-shrink-0 text-green-600 hover:text-green-800"
+              >
+                ✕
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Header */}
         <div className="text-center space-y-4">
           <h1 className="font-serif text-5xl text-museum-charcoal">
@@ -349,24 +473,41 @@ export default function GlobalRunesExplorer() {
 
         {/* QURI Runes Tab */}
         {!loading && activeTab === 'quri' && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {quriRunes.length === 0 ? (
-              <Card className="col-span-full">
-                <CardContent className="p-12 text-center">
-                  <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600 mb-4">
-                    No QURI Runes created yet
+          <div className="space-y-6">
+            {loadingNewRune && (
+              <Card className="border-blue-300 bg-blue-50">
+                <CardContent className="p-8 text-center">
+                  <Loader className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
+                  <p className="text-blue-900 font-semibold">
+                    Cargando tu Rune recién creado...
                   </p>
-                  <Button onClick={() => (window.location.href = '/create')}>
-                    Create Your First Rune
-                  </Button>
                 </CardContent>
               </Card>
-            ) : (
-              quriRunes.map((rune) => (
-                <RuneExplorerCard key={rune.id} rune={rune} />
-              ))
             )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {quriRunes.length === 0 ? (
+                <Card className="col-span-full">
+                  <CardContent className="p-12 text-center">
+                    <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
+                    <p className="text-gray-600 mb-4">
+                      No QURI Runes created yet
+                    </p>
+                    <Button onClick={() => (window.location.href = '/create')}>
+                      Create Your First Rune
+                    </Button>
+                  </CardContent>
+                </Card>
+              ) : (
+                quriRunes.map((rune) => (
+                  <QuriRuneCard 
+                    key={rune.id} 
+                    rune={rune} 
+                    isNew={newEtchingId === rune.id}
+                  />
+                ))
+              )}
+            </div>
           </div>
         )}
 
@@ -406,6 +547,149 @@ export default function GlobalRunesExplorer() {
         </Card>
       </div>
     </div>
+  );
+}
+
+// ============================================================================
+// QURI Rune Card Component (for user-created Runes)
+// ============================================================================
+
+function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
+  const getStateColor = (state: string) => {
+    switch (state) {
+      case 'Completed':
+        return 'text-green-600 bg-green-50 border-green-200';
+      case 'Broadcasting':
+        return 'text-blue-600 bg-blue-50 border-blue-200';
+      case 'Building':
+        return 'text-yellow-600 bg-yellow-50 border-yellow-200';
+      case 'Failed':
+        return 'text-red-600 bg-red-50 border-red-200';
+      default:
+        return 'text-gray-600 bg-gray-50 border-gray-200';
+    }
+  };
+
+  const formatTimestamp = (timestamp: bigint) => {
+    const date = new Date(Number(timestamp) / 1000000); // Convert nanoseconds to milliseconds
+    return date.toLocaleString();
+  };
+
+  return (
+    <Card 
+      className={`hover:shadow-lg transition-all ${
+        isNew ? 'border-4 border-gold-400 shadow-xl animate-pulse-slow' : ''
+      }`}
+    >
+      {isNew && (
+        <div className="bg-gradient-to-r from-gold-400 to-gold-500 text-white text-center py-2 font-bold text-sm">
+          ✨ NUEVO ✨
+        </div>
+      )}
+      
+      <CardHeader>
+        <div className="flex items-start justify-between">
+          <div>
+            <CardTitle className="font-serif text-xl">
+              {rune.rune_name}
+            </CardTitle>
+            <CardDescription className="font-mono text-xs mt-1">
+              ID: {rune.id}
+            </CardDescription>
+          </div>
+        </div>
+      </CardHeader>
+
+      <CardContent className="space-y-4">
+        {/* State Badge */}
+        <div className={`border px-3 py-2 rounded-sm text-center ${getStateColor(rune.state)}`}>
+          <p className="font-semibold text-sm flex items-center justify-center gap-2">
+            {rune.state}
+            {rune.state === 'Broadcasting' && (
+              <Loader className="w-4 h-4 animate-spin" />
+            )}
+            {rune.state === 'Completed' && (
+              <CheckCircle className="w-4 h-4" />
+            )}
+          </p>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="grid grid-cols-2 gap-3 text-sm">
+          <div className="bg-gray-50 p-3 rounded-sm">
+            <p className="text-gray-600 mb-1">Creado</p>
+            <p className="font-mono text-xs text-gray-900">
+              {formatTimestamp(rune.created_at)}
+            </p>
+          </div>
+
+          <div className="bg-gray-50 p-3 rounded-sm">
+            <p className="text-gray-600 mb-1">Actualizado</p>
+            <p className="font-mono text-xs text-gray-900">
+              {formatTimestamp(rune.updated_at)}
+            </p>
+          </div>
+
+          <div className="bg-gray-50 p-3 rounded-sm">
+            <p className="text-gray-600 mb-1">Reintentos</p>
+            <p className="font-mono font-semibold text-gray-900">
+              {rune.retry_count}
+            </p>
+          </div>
+
+          {rune.txid && (
+            <div className="bg-gray-50 p-3 rounded-sm col-span-2">
+              <p className="text-gray-600 mb-1">Transaction ID</p>
+              <a
+                href={`https://mempool.space/testnet/tx/${rune.txid}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-mono text-xs text-blue-600 hover:underline break-all flex items-center gap-1"
+              >
+                {rune.txid}
+                <ExternalLink className="w-3 h-3 flex-shrink-0" />
+              </a>
+            </div>
+          )}
+        </div>
+
+        {/* Action Buttons */}
+        <div className="flex gap-2">
+          {rune.txid && (
+            <Button
+              onClick={() =>
+                window.open(`https://mempool.space/testnet/tx/${rune.txid}`, '_blank')
+              }
+              variant="outline"
+              size="sm"
+              className="flex-1"
+            >
+              <ExternalLink className="w-4 h-4 mr-2" />
+              Ver en Mempool
+            </Button>
+          )}
+          <Button
+            onClick={() => {
+              alert(
+                `Detalles del Rune:\n\n` +
+                `Nombre: ${rune.rune_name}\n` +
+                `ID: ${rune.id}\n` +
+                `Estado: ${rune.state}\n` +
+                `Creado: ${formatTimestamp(rune.created_at)}\n` +
+                `Actualizado: ${formatTimestamp(rune.updated_at)}\n` +
+                `Reintentos: ${rune.retry_count}\n` +
+                (rune.txid ? `TX: ${rune.txid}` : '')
+              );
+            }}
+            variant="outline"
+            size="sm"
+            className="flex-1"
+          >
+            Ver Detalles
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 }
 
@@ -498,5 +782,24 @@ function RuneExplorerCard({ rune }: { rune: OctopusRuneEntry }) {
         </Button>
       </CardContent>
     </Card>
+  );
+}
+
+// ============================================================================
+// Main Export with Suspense Boundary
+// ============================================================================
+
+export default function GlobalRunesExplorer() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-museum-cream p-8 flex items-center justify-center">
+        <div className="text-center">
+          <Loader className="w-12 h-12 text-gold-500 animate-spin mx-auto mb-4" />
+          <p className="text-museum-gray">Cargando Explorer...</p>
+        </div>
+      </div>
+    }>
+      <ExplorerContent />
+    </Suspense>
   );
 }

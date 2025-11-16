@@ -41,6 +41,28 @@ type EtchingConfigView = record {
     enable_retries : bool;
 };
 
+type HealthStatus = record {
+    healthy : bool;
+    etching_config_initialized : bool;
+    bitcoin_integration_configured : bool;
+    registry_configured : bool;
+    canister_id : principal;
+};
+
+type Role = variant {
+    Owner;
+    Admin;
+    Operator;
+    User;
+};
+
+type RoleAssignment = record {
+    target : principal;
+    role : Role;
+    granted_at : nat64;
+    granted_by : principal;
+};
+
 service : {
     // Main etching API - create a new Rune on Bitcoin
     "create_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
@@ -48,11 +70,20 @@ service : {
     // Query APIs - check status and history
     "get_etching_status" : (text) -> (opt EtchingProcessView) query;
     "get_my_etchings" : () -> (vec EtchingProcessView) query;
+    "health_check" : () -> (HealthStatus) query;
 
     // Configuration APIs (admin/deployment only)
     "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
     "update_etching_config" : (EtchingConfigView) -> (variant { Ok : null; Err : text });
 
+    // RBAC Management APIs
+    "grant_role" : (principal, Role) -> (variant { Ok : null; Err : text });
+    "revoke_role" : (principal) -> (variant { Ok : null; Err : text });
+    "get_my_role" : () -> (Role) query;
+    "get_user_role" : (principal) -> (variant { Ok : Role; Err : text }) query;
+    "list_roles" : () -> (variant { Ok : vec RoleAssignment; Err : text }) query;
+    "get_owner" : () -> (opt principal) query;
+
     // Maintenance API - cleanup old completed processes
-    "cleanup_old_processes" : (nat64) -> (nat64);
+    "cleanup_old_processes" : (nat64) -> (variant { Ok : nat64; Err : text });
 }

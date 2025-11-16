@@ -1,1 +1,46 @@
-sh: candid-extractor: command not found
+type PermissionType = variant { CreateRune; Transfer };
+type Result = variant { Ok : UserSession; Err : text };
+type Result_1 = variant { Ok; Err : text };
+type SessionPermissions = record {
+  can_transfer : bool;
+  can_create_rune : bool;
+  max_amount : nat64;
+};
+type UserSession = record {
+  permissions : SessionPermissions;
+  "principal" : principal;
+  session_key : blob;
+  expires_at : nat64;
+};
+type UserStats = record {
+  runes_created : nat64;
+  joined_at : nat64;
+  total_volume : nat64;
+};
+service : () -> {
+  // Check if caller has permission for an action
+  check_permission : (PermissionType) -> (bool) query;
+  // Create a new session for a user
+  // Inspired by Odin.fun's session keys feature
+  // 
+  // ## Seguridad Mejorada
+  // 
+  // Esta función ahora genera session keys usando `raw_rand()` de ICP,
+  // que proporciona aleatoriedad criptográficamente segura basada en
+  // threshold BLS signatures.
+  // 
+  // ## Performance Note
+  // 
+  // La llamada a `raw_rand()` es async y toma ~2 segundos debido a
+  // consenso inter-canister. Esto es aceptable para creación de sesiones
+  // que típicamente duran horas/días.
+  create_session : (SessionPermissions, nat64) -> (Result);
+  // Get current session for caller
+  get_session : () -> (opt UserSession) query;
+  // Get user statistics
+  get_user_stats : (principal) -> (UserStats) query;
+  // Revoke a session
+  revoke_session : () -> (Result_1);
+  // Validate a session
+  validate_session : (principal) -> (bool) query;
+}

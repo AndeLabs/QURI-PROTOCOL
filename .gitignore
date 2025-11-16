@@ -12,8 +12,15 @@ canisters/**/*.wasm.gz
 
 # Environment
 .env
+.env.*
 .env.local
 .env.*.local
+*.env
+
+# Sensitive files
+nftstorageapi.txt
+vercel-env*.txt
+*api-key*.txt
 
 # IDE
 .vscode/
@@ -42,3 +49,13 @@ out/
 tmp/
 temp/
 *.tmp
+
+# Cargo build artifacts
+.cargo/
+deps/
+
+# Deployment scripts (may contain sensitive info)
+deploy-fix.sh
+deploy-mainnet.sh
+quick-playground-deploy.sh
+validate-nft-storage-key.sh

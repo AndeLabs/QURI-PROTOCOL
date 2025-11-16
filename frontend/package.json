@@ -4,12 +4,15 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:clean": "rm -rf .next && next dev",
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "type-check": "tsc --noEmit",
     "format": "prettier --write \"**/*.{ts,tsx,js,jsx,json,md}\"",
     "generate:types": "node scripts/generate-candid-types.js",
+    "update:canister-ids": "../scripts/update-frontend-env.sh local",
+    "update:canister-ids:mainnet": "../scripts/update-frontend-env.sh ic",
     "test": "jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"

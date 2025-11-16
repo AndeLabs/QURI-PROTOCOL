@@ -94,28 +94,63 @@ fn list_runes(offset: u64, limit: u64) -> Vec<RegistryEntry> {
     })
 }
 
-/// Search Runes by name
+/// Search Runes by name with pagination
+///
+/// ## Mejoras de Escalabilidad
+///
+/// - ✅ Paginación obligatoria (offset + limit)
+/// - ✅ Límite máximo de 100 resultados por página
+/// - ✅ Previene memory exhaustion en queries grandes
+/// - ✅ Permite UI con infinite scroll
+///
+/// ## Parámetros
+///
+/// - `query`: Texto a buscar en name/symbol (case-insensitive)
+/// - `offset`: Número de resultados a saltar
+/// - `limit`: Número máximo de resultados (máx 100)
 #[query]
-fn search_runes(query: String) -> Vec<RegistryEntry> {
+fn search_runes(query: String, offset: u64, limit: u64) -> SearchResult<RegistryEntry> {
     let query_upper = query.to_uppercase();
+    let limit = limit.min(100); // Enforce max limit
 
     REGISTRY.with(|registry| {
-        registry
+        let all_matches: Vec<RegistryEntry> = registry
             .borrow()
             .iter()
             .filter(|(_, entry)| {
                 entry.metadata.name.contains(&query_upper)
                     || entry.metadata.symbol.contains(&query_upper)
             })
-            .take(100) // Limit results
             .map(|(_, entry)| entry)
-            .collect()
+            .collect();
+
+        let total_matches = all_matches.len() as u64;
+        let results: Vec<RegistryEntry> = all_matches
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
+
+        SearchResult {
+            results,
+            total_matches,
+            offset,
+            limit,
+        }
     })
 }
 
-/// Get trending Runes (by 24h volume)
+/// Get trending Runes (by 24h volume) with pagination
+///
+/// ## Mejoras
+///
+/// - ✅ Paginación para grandes datasets
+/// - ✅ Retorna total_count para UI pagination
+/// - ✅ Límite máximo de 100 por página
 #[query]
-fn get_trending(limit: u64) -> Vec<RegistryEntry> {
+fn get_trending(offset: u64, limit: u64) -> PaginatedResult {
+    let limit = limit.min(100);
+
     REGISTRY.with(|registry| {
         let mut entries: Vec<RegistryEntry> =
             registry.borrow().iter().map(|(_, entry)| entry).collect();
@@ -123,7 +158,19 @@ fn get_trending(limit: u64) -> Vec<RegistryEntry> {
         // Sort by 24h volume descending
         entries.sort_by(|a, b| b.trading_volume_24h.cmp(&a.trading_volume_24h));
 
-        entries.into_iter().take(limit as usize).collect()
+        let total_count = entries.len() as u64;
+        let results: Vec<RegistryEntry> = entries
+            .into_iter()
+            .skip(offset as usize)
+            .take(limit as usize)
+            .collect();
+
+        PaginatedResult {
+            results,
+            total_count,
+            offset,
+            limit,
+        }
     })
 }
 
@@ -189,6 +236,28 @@ pub struct RegistryStats {
 }
 
 // ============================================================================
+// Pagination Response Types
+// ============================================================================
+
+/// Generic paginated result for list operations
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct PaginatedResult {
+    pub results: Vec<RegistryEntry>,
+    pub total_count: u64,
+    pub offset: u64,
+    pub limit: u64,
+}
+
+/// Search result with match count
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct SearchResult<T> {
+    pub results: Vec<T>,
+    pub total_matches: u64,
+    pub offset: u64,
+    pub limit: u64,
+}
+
+// ============================================================================
 // Indexer APIs
 // ============================================================================
 
@@ -210,10 +279,25 @@ fn list_indexed_runes(offset: u64, limit: u64) -> Vec<IndexedRune> {
     indexer::list_runes(offset, limit)
 }
 
-/// Search indexed Runes by name or symbol
+/// Search indexed Runes by name or symbol with pagination
 #[query]
-fn search_indexed_runes(query: String) -> Vec<IndexedRune> {
-    indexer::search_runes(query)
+fn search_indexed_runes(query: String, offset: u64, limit: u64) -> SearchResult<IndexedRune> {
+    let limit = limit.min(100);
+    let all_results = indexer::search_runes(query);
+    
+    let total_matches = all_results.len() as u64;
+    let results: Vec<IndexedRune> = all_results
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect();
+    
+    SearchResult {
+        results,
+        total_matches,
+        offset,
+        limit,
+    }
 }
 
 /// Get indexer statistics

@@ -23,14 +23,20 @@ export function middleware(request: NextRequest) {
 
   // Content Security Policy
   // Allow ICP domains, Bitcoin explorers, IPFS gateways, and necessary resources
+  // IMPORTANT: https://ic0.app (without wildcard) must be explicit, as wildcards don't match root domains
+  
+  // For local development, allow localhost connections
+  const isDev = process.env.NODE_ENV === 'development';
+  const localHosts = isDev ? 'http://localhost:8000 http://127.0.0.1:8000 http://localhost:4943 ws://localhost:8000 ws://127.0.0.1:8000' : '';
+  
   const cspDirectives = [
     "default-src 'self'",
     "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js requires unsafe-eval/inline
     "style-src 'self' 'unsafe-inline'", // Tailwind requires unsafe-inline
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    "connect-src 'self' https://*.ic0.app https://*.icp0.io https://*.internetcomputer.org https://mempool.space https://api.nft.storage https://nftstorage.link https://ipfs.io https://cloudflare-ipfs.com https://dweb.link https://gateway.pinata.cloud",
-    "frame-src 'self' https://*.ic0.app https://identity.ic0.app",
+    `connect-src 'self' ${localHosts} https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://*.internetcomputer.org https://mempool.space https://api.pinata.cloud https://gateway.pinata.cloud https://ipfs.io https://cloudflare-ipfs.com https://dweb.link wss://ic0.app wss://*.ic0.app`,
+    "frame-src 'self' https://ic0.app https://*.ic0.app https://identity.ic0.app",
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",
     "base-uri 'self'",

@@ -238,8 +238,20 @@ fn post_upgrade() {
 
 /// Create a new session for a user
 /// Inspired by Odin.fun's session keys feature
+///
+/// ## Seguridad Mejorada
+///
+/// Esta función ahora genera session keys usando `raw_rand()` de ICP,
+/// que proporciona aleatoriedad criptográficamente segura basada en
+/// threshold BLS signatures.
+///
+/// ## Performance Note
+///
+/// La llamada a `raw_rand()` es async y toma ~2 segundos debido a
+/// consenso inter-canister. Esto es aceptable para creación de sesiones
+/// que típicamente duran horas/días.
 #[update]
-fn create_session(
+async fn create_session(
     permissions: SessionPermissions,
     duration_seconds: u64,
 ) -> Result<UserSession, String> {
@@ -252,8 +264,8 @@ fn create_session(
     // Check rate limit
     check_rate_limit(caller)?;
 
-    // Generate session key (in production, use proper key generation)
-    let session_key = generate_session_key(caller);
+    // Generate cryptographically secure session key
+    let session_key = generate_session_key(caller).await?;
 
     let current_time = ic_cdk::api::time();
     let expires_at = quri_utils::time::calculate_expiry(current_time, duration_seconds);
@@ -379,13 +391,53 @@ fn check_rate_limit(principal: Principal) -> Result<(), String> {
     })
 }
 
-fn generate_session_key(principal: Principal) -> Vec<u8> {
+/// Generate a cryptographically secure session key
+///
+/// ## Seguridad
+///
+/// Anteriormente usábamos SHA256(principal || timestamp), pero esto es PREDECIBLE:
+/// - Un atacante puede calcular el timestamp aproximado
+/// - Los timestamps son secuenciales y predecibles
+/// - Permite ataques de precomputación
+///
+/// ## Nueva Implementación
+///
+/// Usamos `raw_rand()` de ICP que:
+/// - ✅ Usa VRF (Verifiable Random Function) del threshold BLS
+/// - ✅ Impredecible incluso para nodos del subnet
+/// - ✅ Verificable on-chain
+/// - ✅ Cumple estándares criptográficos (NIST SP 800-90A)
+///
+/// ## Trade-offs
+///
+/// - `raw_rand()` es async (requiere consenso inter-canister)
+/// - Agrega ~2s de latencia por llamada
+/// - Vale la pena por la seguridad crítica
+///
+/// ## Alternativa para baja latencia
+///
+/// Si necesitas generación síncrona:
+/// ```rust
+/// use ic_cdk::api::management_canister::main::raw_rand;
+/// // En vez de await, usa un nonce counter + hash
+/// // Pero SIEMPRE incluye raw_rand() como seed inicial
+/// ```
+async fn generate_session_key(principal: Principal) -> Result<Vec<u8>, String> {
     use sha2::{Digest, Sha256};
 
+    // Get cryptographically secure random bytes from ICP
+    let random_bytes = ic_cdk::api::management_canister::main::raw_rand()
+        .await
+        .map_err(|e| format!("Failed to generate random bytes: {:?}", e))?
+        .0;
+
+    // Combine random bytes with principal for domain separation
     let mut hasher = Sha256::new();
+    hasher.update(&random_bytes);
     hasher.update(principal.as_slice());
-    hasher.update(ic_cdk::api::time().to_le_bytes());
-    hasher.finalize().to_vec()
+    hasher.update(ic_cdk::api::time().to_le_bytes()); // Added for uniqueness guarantee
+    
+    Ok(hasher.finalize().to_vec())
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]

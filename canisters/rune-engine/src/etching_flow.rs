@@ -1,6 +1,7 @@
 use candid::{CandidType, Deserialize, Principal};
 use quri_types::{BitcoinNetwork, RuneEtching};
 
+use crate::config::EtchingConfig;
 use crate::errors::{EtchingError, EtchingResult};
 use crate::state::{EtchingProcess, EtchingState};
 use crate::validators::EtchingValidator;
@@ -15,29 +16,6 @@ struct UtxoSelectionResult {
 
 /// Maximum retry attempts for transient failures
 const MAX_RETRIES: u32 = 3;
-
-/// Default fee rate in sats/vbyte
-const DEFAULT_FEE_RATE: u64 = 2;
-
-/// Configuration for etching flow
-#[derive(Clone, Debug)]
-pub struct EtchingConfig {
-    pub network: BitcoinNetwork,
-    pub fee_rate: u64,
-    pub required_confirmations: u32,
-    pub enable_retries: bool,
-}
-
-impl Default for EtchingConfig {
-    fn default() -> Self {
-        Self {
-            network: BitcoinNetwork::Testnet,
-            fee_rate: DEFAULT_FEE_RATE,
-            required_confirmations: 1,
-            enable_retries: true,
-        }
-    }
-}
 
 /// Main orchestrator for Rune etching process
 pub struct EtchingOrchestrator {
