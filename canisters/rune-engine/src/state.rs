@@ -203,6 +203,18 @@ pub fn get_process(id: &str) -> Option<EtchingProcess> {
     })
 }
 
+/// Update process state
+pub fn update_process_state(process: EtchingProcess) {
+    let key = process.id.as_bytes().to_vec();
+    let value = candid::encode_one(&process).expect("Failed to encode process");
+
+    PROCESSES.with(|p| {
+        if let Some(ref mut map) = *p.borrow_mut() {
+            map.insert(key, value);
+        }
+    });
+}
+
 /// Get all processes for a caller
 pub fn get_caller_processes(caller: candid::Principal) -> Vec<EtchingProcess> {
     let mut results = Vec::new();

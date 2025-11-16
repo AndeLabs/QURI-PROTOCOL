@@ -57,8 +57,15 @@ const nextConfig = {
     return config;
   },
 
-  // Security headers with CSP for NFT.Storage
+  // Security headers with CSP
+  // NOTE: Disabled for local development to allow localhost connections
   async headers() {
+    // In development, allow all connections for local testing
+    if (process.env.NODE_ENV === 'development') {
+      return [];
+    }
+    
+    // Production CSP
     return [
       {
         source: '/:path*',
@@ -71,8 +78,8 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://*.ic0.app https://*.icp0.io https://api.nft.storage https://nftstorage.link https://ipfs.io https://cloudflare-ipfs.com https://dweb.link",
-              "frame-src 'self' https://*.ic0.app https://identity.ic0.app",
+              "connect-src 'self' https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https: wss:",
+              "frame-src 'self' https://ic0.app https://*.ic0.app https:",
               "worker-src 'self' blob:",
             ].join('; '),
           },

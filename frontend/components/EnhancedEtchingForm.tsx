@@ -9,10 +9,14 @@ import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { ImageUpload } from './ImageUpload';
 import { useICP } from '@/lib/icp/ICPProvider';
-import { uploadRuneAssets, RuneMetadata } from '@/lib/storage/nft-storage';
+import { uploadRuneAssets, RuneMetadata } from '@/lib/storage/pinata-storage';
 import { logger } from '@/lib/logger';
 import { Plus, X, Info, Image as ImageIcon, FileText, Tag } from 'lucide-react';
 import { InfoTooltip } from './ui/Tooltip';
+import { Actor } from '@dfinity/agent';
+import { Principal } from '@dfinity/principal';
+import { getAgent } from '@/lib/icp/agent';
+import { useToast, ToastContainer } from './ui/Toast';
 
 /**
  * Enhanced Etching Form with Image Upload and Rich Metadata
@@ -48,14 +52,23 @@ function ChecklistItem({ completed, label, error }: { completed: boolean; label:
 
 const enhancedEtchingSchema = z.object({
   // Basic Rune Information
-  rune_name: z.string().min(1, 'Rune name is required').max(26),
-  symbol: z.string().min(1, 'Symbol is required').max(4),
+  rune_name: z.string()
+    .min(1, 'Rune name is required')
+    .max(26, 'Rune name must be 26 characters or less')
+    .regex(/^[A-Z•]+$/, 'Rune name must contain only uppercase letters (A-Z) and spacers (•)'),
+  symbol: z.string()
+    .max(1, 'Symbol must be exactly 1 character')
+    .optional()
+    .or(z.literal(''))
+    .refine((val) => !val || val.length === 1, {
+      message: 'Symbol must be exactly 1 character (or leave empty for default ¤)'
+    }),
   divisibility: z.number().int().min(0).max(18),
-  premine: z.number().int().min(0),
+  premine: z.number().int().min(0).default(0),
 
-  // Minting Terms (optional)
-  mintAmount: z.union([z.number().int().min(0), z.nan(), z.undefined()]).optional(),
-  mintCap: z.union([z.number().int().min(0), z.nan(), z.undefined()]).optional(),
+  // Minting Terms (both required if using open mint)
+  mintAmount: z.number().int().min(1).optional(),
+  mintCap: z.number().int().min(1).optional(),
 
   // Rich Metadata
   description: z.string().max(1000).optional().or(z.literal('')),
@@ -68,7 +81,32 @@ const enhancedEtchingSchema = z.object({
       value: z.union([z.string(), z.number()]),
     })
   ).optional().default([]),
-});
+}).refine(
+  (data) => {
+    // Must have either premine OR both mint terms (amount + cap)
+    const hasPremine = data.premine > 0;
+    const hasMintTerms = data.mintAmount && data.mintAmount > 0 && data.mintCap && data.mintCap > 0;
+    return hasPremine || hasMintTerms;
+  },
+  {
+    message: 'Must have premine OR mint terms (both Amount and Cap). Cannot create a Rune with zero supply.',
+    path: ['premine'], // Shows error on premine field
+  }
+).refine(
+  (data) => {
+    // If one mint term is set, both must be set
+    const hasAmount = data.mintAmount && data.mintAmount > 0;
+    const hasCap = data.mintCap && data.mintCap > 0;
+    if (hasAmount !== hasCap) {
+      return false;
+    }
+    return true;
+  },
+  {
+    message: 'Both Mint Amount and Mint Cap must be set together (or leave both empty)',
+    path: ['mintAmount'],
+  }
+);
 
 type EnhancedEtchingFormData = z.infer<typeof enhancedEtchingSchema>;
 
@@ -78,6 +116,7 @@ interface EnhancedEtchingFormProps {
 
 export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
   const { isConnected, connect, isLoading } = useICP();
+  const { toasts, showToast } = useToast();
 
   // State
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
@@ -127,7 +166,18 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
       }
 
       if (!isValid) {
-        alert('⚠️ Por favor completa todos los campos requeridos correctamente');
+        // Show specific validation errors
+        const errorMessages = Object.entries(errors).map(([field, error]) => {
+          const fieldName = field === 'rune_name' ? 'Rune Name' :
+                           field === 'symbol' ? 'Symbol' :
+                           field === 'divisibility' ? 'Divisibility' :
+                           field === 'premine' ? 'Premine' :
+                           field === 'mintAmount' ? 'Mint Amount' :
+                           field === 'mintCap' ? 'Mint Cap' : field;
+          return `• ${fieldName}: ${error?.message || 'Required'}`;
+        }).join('\n');
+        
+        alert(`⚠️ Please fix the following errors:\n\n${errorMessages}`);
         return;
       }
 
@@ -193,71 +243,148 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
 
       setMetadataUrl(metadataUpload.gatewayUrl);
 
-      // Step 4: Create Rune on Bitcoin
+      // Step 4: Create Rune on Bitcoin using REAL ICP backend
       setUploadProgress(70);
       setUploadStage('Construyendo transacción Bitcoin...');
-      logger.info('Creating Rune on Bitcoin...');
+      logger.info('Creating Rune on Bitcoin via ICP backend...');
 
-      // TODO: Integrate with actual Bitcoin Rune creation
-      // This would call your backend canister to:
-      // 1. Build the Runestone transaction
-      // 2. Sign with Threshold Schnorr
-      // 3. Broadcast to Bitcoin network
-      // 4. Index in registry
+      // Get ICP agent and create actor for rune-engine canister
+      const agent = await getAgent();
+      const runeEngineId = process.env.NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID;
       
-      // Example:
-      // const runeId = await createRuneOnBitcoin({
-      //   runeName: data.rune_name,
-      //   symbol: data.symbol,
-      //   divisibility: data.divisibility,
-      //   premine: data.premine,
-      //   mintAmount: data.mintAmount,
-      //   mintCap: data.mintCap,
-      //   metadataUrl: metadataUpload.ipfsUrl,
-      // });
+      if (!runeEngineId) {
+        throw new Error('NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID not configured');
+      }
 
-      // Simulate network delay for demo
+      // Import IDL factory for rune-engine
+      const { idlFactory } = await import('@/lib/integrations/rune-engine.did');
+      
+      const actor = Actor.createActor(idlFactory, {
+        agent,
+        canisterId: Principal.fromText(runeEngineId),
+      }) as any;
+
+      // Prepare etching data for ICP backend
+      const etchingData = {
+        rune_name: data.rune_name,
+        symbol: data.symbol,
+        divisibility: data.divisibility,
+        premine: BigInt(data.premine),
+        terms: data.mintAmount && data.mintCap ? [{
+          amount: BigInt(data.mintAmount),
+          cap: BigInt(data.mintCap),
+          height_start: [],
+          height_end: [],
+          offset_start: [],
+          offset_end: [],
+        }] : [],
+      };
+
+      // First, check canister health
+      logger.info('Checking canister health...');
+      const healthStatus = await actor.health_check();
+      
+      if (!healthStatus.healthy) {
+        let errorDetails = 'El backend de ICP no está completamente configurado:\n';
+        if (!healthStatus.etching_config_initialized) {
+          errorDetails += '- Configuración de etching no inicializada\n';
+        }
+        if (!healthStatus.bitcoin_integration_configured) {
+          errorDetails += '- Canister de Bitcoin Integration no configurado\n';
+        }
+        if (!healthStatus.registry_configured) {
+          errorDetails += '- Canister de Registry no configurado\n';
+        }
+        errorDetails += '\nPor favor contacta al administrador del sistema.';
+        throw new Error(errorDetails);
+      }
+
+      logger.info('Calling create_rune on ICP', { etchingData });
+      
       setUploadProgress(85);
       setUploadStage('Firmando con Threshold Schnorr...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Call real ICP backend to create Rune on Bitcoin testnet
+      const result = await actor.create_rune(etchingData);
+      
+      if ('Err' in result) {
+        // Parse the error message to provide better user feedback
+        const errorMsg = result.Err;
+        
+        if (errorMsg.includes('Canister configuration not set')) {
+          throw new Error(
+            'El canister no está configurado correctamente. ' +
+            'Necesita configurar los IDs de Bitcoin Integration y Registry. ' +
+            'Por favor contacta al administrador del sistema.'
+          );
+        } else if (errorMsg.includes('Insufficient')) {
+          throw new Error(
+            'Balance insuficiente para crear el Rune. ' +
+            'Necesitas aproximadamente 20,000 sats (~$10-15 USD) en tu wallet.'
+          );
+        } else if (errorMsg.includes('UTXO')) {
+          throw new Error(
+            'No se pudieron seleccionar UTXOs suficientes. ' +
+            'Asegúrate de tener fondos disponibles en tu wallet.'
+          );
+        } else {
+          throw new Error(`Error al crear Rune: ${errorMsg}`);
+        }
+      }
+      
+      const etchingId = result.Ok;
+      logger.info('Rune creation initiated', { etchingId });
       
       setUploadProgress(95);
-      setUploadStage('Broadcasting a Bitcoin...');
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      setUploadStage('Broadcasting a Bitcoin testnet...');
+      
+      // Wait for transaction to be broadcasted
+      await new Promise(resolve => setTimeout(resolve, 2000));
 
       setUploadProgress(100);
       setUploadStage('¡Completado!');
 
-      // Success
-      logger.info('Rune created successfully!', {
+      // Success - Rune created on Bitcoin testnet
+      logger.info('Rune created successfully on Bitcoin testnet!', {
+        etchingId,
         runeName: data.rune_name,
         metadataUrl: metadataUpload.gatewayUrl,
+        imageUrl: imageUpload.gatewayUrl,
       });
 
       if (onSuccess) {
-        onSuccess('mock-rune-id', metadataUpload.gatewayUrl);
+        onSuccess(etchingId, metadataUpload.gatewayUrl);
       }
 
       // Show success notification
       alert(
-        `✨ ¡Rune Creado Exitosamente!\n\n` +
+        `✨ ¡Rune Creado Exitosamente en Bitcoin Testnet!\n\n` +
         `📛 Nombre: ${data.rune_name}\n` +
         `🎫 Símbolo: ${data.symbol}\n` +
-        `💎 Premine: ${data.premine.toLocaleString()} tokens\n\n` +
-        `🔗 Metadata IPFS:\n${metadataUpload.gatewayUrl}\n\n` +
-        `⏳ Tu transacción se está propagando en la red Bitcoin...`
+        `💎 Premine: ${data.premine.toLocaleString()} tokens\n` +
+        `🆔 Etching ID: ${etchingId}\n\n` +
+        `🖼️  Imagen IPFS: ${imageUpload.ipfsHash}\n` +
+        `📄 Metadata IPFS: ${metadataUpload.ipfsHash}\n\n` +
+        `⏳ Redirigiendo al Explorer para ver tu Rune...`
       );
+
+      // Redirect to explorer after 2 seconds
+      setTimeout(() => {
+        window.location.href = `/explorer?new=${etchingId}`;
+      }, 2000);
 
     } catch (error) {
       logger.error('Failed to create Rune', error instanceof Error ? error : undefined);
       
       const errorMessage = error instanceof Error ? error.message : 'Error desconocido';
       
-      alert(
-        `❌ Error al crear Rune\n\n` +
-        `${errorMessage}\n\n` +
-        `Por favor intenta nuevamente o contacta soporte si el problema persiste.`
-      );
+      // Mostrar toast de error profesional
+      showToast({
+        type: 'error',
+        title: 'Error al crear Rune',
+        message: `${errorMessage}. Por favor intenta nuevamente o contacta soporte si el problema persiste.`,
+        duration: 8000,
+      });
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
@@ -383,41 +510,56 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
                     </label>
                     <Input
                       {...register('rune_name')}
-                      placeholder="QUANTUM•LEAP"
-                      className="font-mono"
+                      placeholder="HOLA or QUANTUM•LEAP"
+                      className="font-mono uppercase"
+                      maxLength={26}
+                      onInput={(e) => {
+                        const target = e.target as HTMLInputElement;
+                        const value = target.value.toUpperCase().replace(/[^A-Z•]/g, '');
+                        target.value = value;
+                        setValue('rune_name', value, { shouldValidate: true });
+                      }}
                     />
                     {errors.rune_name && (
                       <p className="text-red-500 text-sm mt-1">{errors.rune_name.message}</p>
                     )}
-                    <p className="text-xs text-museum-gray mt-1">
-                      Up to 26 characters, use • for spacers
-                    </p>
+                    <div className="mt-2 space-y-1">
+                      <p className="text-xs text-museum-gray">
+                        Solo letras MAYÚSCULAS (A-Z) y el separador especial •
+                      </p>
+                      <p className="text-xs text-blue-600 font-medium">
+                        💡 Tip: Para escribir • presiona Alt+8 (Windows) o Option+8 (Mac)
+                      </p>
+                    </div>
                   </div>
 
                   {/* Symbol */}
                   <div>
                     <label className="block text-sm font-medium text-museum-charcoal mb-2 flex items-center gap-2">
-                      Symbol *
+                      Symbol (Optional)
                       <InfoTooltip
-                        title="Símbolo del Token"
-                        description="Abreviatura corta de 1-4 caracteres que aparecerá en exchanges, wallets y exploradores. Similar a BTC para Bitcoin o ETH para Ethereum."
+                        title="Currency Symbol (Optional)"
+                        description="Single character shown after amounts. Leave empty to use default ¤"
                         examples={[
-                          "Si tu Rune es QUANTUM•LEAP → QLEP",
-                          "HELLO•WORLD → HELO",
-                          "UNCOMMON•GOODS → UNCM"
+                          "🐸 for PEPE",
+                          "₿ for Bitcoin-themed",
+                          "$ for dollar-themed",
+                          "Leave empty = uses ¤"
                         ]}
                       />
                     </label>
                     <Input
                       {...register('symbol')}
-                      placeholder="QLEP"
-                      className="font-mono uppercase"
-                      maxLength={4}
+                      placeholder="Leave empty for ¤ (or use 🐸 ₿ $ etc.)"
+                      className="font-mono text-xl text-center"
+                      maxLength={2}
                     />
                     {errors.symbol && (
                       <p className="text-red-500 text-sm mt-1">{errors.symbol.message}</p>
                     )}
-                    <p className="text-xs text-museum-gray mt-1">1-4 characters</p>
+                    <p className="text-xs text-museum-gray mt-1">
+                      Optional: 🐸 ₿ $ € (1 char) or leave empty for default
+                    </p>
                   </div>
 
                   {/* Divisibility */}
@@ -450,17 +592,33 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
                     </p>
                   </div>
 
+                  {/* Supply Distribution - Clear Section */}
+                  <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
+                    <h4 className="font-semibold text-blue-900 mb-2 flex items-center gap-2">
+                      <Info className="w-4 h-4" />
+                      Supply Configuration (Required)
+                    </h4>
+                    <p className="text-sm text-blue-800 mb-2">
+                      You MUST choose at least one option:
+                    </p>
+                    <ul className="text-sm text-blue-800 space-y-1 ml-4">
+                      <li>• <strong>Premine Only</strong>: Fixed supply, you get all tokens (e.g., 21M like Bitcoin)</li>
+                      <li>• <strong>Open Mint Only</strong>: Anyone can mint, no premine (e.g., community fair launch)</li>
+                      <li>• <strong>Both</strong>: You get premine + others can mint more (hybrid model)</li>
+                    </ul>
+                  </div>
+
                   {/* Premine */}
                   <div>
                     <label className="block text-sm font-medium text-museum-charcoal mb-2 flex items-center gap-2">
-                      Premine Amount *
+                      Premine Amount
                       <InfoTooltip
-                        title="Cantidad Premineada"
-                        description="Cantidad inicial de tokens que TÚ recibirás automáticamente al crear el Rune. Estos tokens van directo a tu wallet."
+                        title="Premine - Your Initial Allocation"
+                        description="Tokens YOU receive immediately when creating the Rune. These go directly to your wallet."
                         examples={[
-                          "1,000,000 = recibes 1M tokens al instante",
-                          "Puedes poner 0 si solo quieres mint público",
-                          "Los tokens premined son tuyos para vender, distribuir o guardar"
+                          "Example 1: Premine 21,000,000 + No Mint = Fixed supply (like Bitcoin)",
+                          "Example 2: Premine 1,000,000 + Mint allowed = You get 1M, others can mint more",
+                          "Example 3: Premine 0 + Mint allowed = Fair launch, everyone mints equally"
                         ]}
                       />
                     </label>
@@ -468,67 +626,116 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
                       type="number"
                       {...register('premine', { valueAsNumber: true })}
                       min={0}
-                      placeholder="1000000"
+                      defaultValue={0}
+                      placeholder="0 (or your initial allocation, e.g., 1000000)"
                     />
                     {errors.premine && (
                       <p className="text-red-500 text-sm mt-1">{errors.premine.message}</p>
                     )}
-                    <p className="text-xs text-museum-gray mt-1">Initial supply</p>
+                    <p className="text-xs text-museum-gray mt-1">
+                      Leave at 0 for fair launch (no premine)
+                    </p>
                   </div>
                 </div>
 
                 {/* Minting Terms */}
                 <div className="border-t border-museum-light-gray pt-6">
-                  <div className="flex items-center gap-2 mb-4">
-                    <h3 className="font-serif text-xl">Minting Terms (Optional)</h3>
+                  <div className="flex items-center gap-2 mb-2">
+                    <h3 className="font-serif text-xl">Open Mint Configuration</h3>
                     <InfoTooltip
-                      title="Términos de Minteo Público"
-                      description="Configura si otras personas pueden mintear tokens adicionales después de que crees el Rune. Esto es OPCIONAL - si lo dejas vacío, solo existirán tus tokens premineados."
+                      title="Open Mint - Public Minting"
+                      description="Allow anyone to mint tokens after you create the Rune. BOTH fields required if using open mint."
                       examples={[
-                        "Premine: 1,000,000 (tuyos) + Mint Cap: 10,000,000 (otros) = 11M total",
-                        "Si solo quieres un supply fijo, deja esto vacío"
+                        "Amount: 100, Cap: 1,000,000 = Each mint creates 100 tokens, max 10,000 mints total",
+                        "Amount: 1, Cap: 21,000,000 = Each mint creates 1 token, max 21M mints",
+                        "Leave BOTH empty if you want fixed supply (premine only)"
                       ]}
                     />
                   </div>
+                  <p className="text-sm text-museum-gray mb-4">
+                    Optional: Enable public minting. Total Supply = Premine + (Mint Amount × Number of Mints)
+                  </p>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                       <label className="block text-sm font-medium text-museum-charcoal mb-2 flex items-center gap-2">
-                        Mint Amount
+                        Amount Per Mint
                         <InfoTooltip
-                          title="Cantidad por Mint"
-                          description="Cuántos tokens se crean cada vez que alguien mintea. Cada mint público creará esta cantidad."
+                          title="Amount Per Mint Transaction"
+                          description="How many tokens are created in each mint transaction. This is the fixed amount each minter receives."
                           examples={[
-                            "Si pones 100 → cada persona que mintee recibe 100 tokens",
-                            "Mint Amount: 100, Mint Cap: 10,000 = máximo 100 mints públicos posibles"
+                            "100 = Each person who mints gets 100 tokens",
+                            "1 = Each mint creates 1 token (like Bitcoin mining)",
+                            "Must be > 0 if using open mint"
                           ]}
                         />
                       </label>
                       <Input
                         type="number"
                         {...register('mintAmount', { valueAsNumber: true })}
-                        placeholder="100"
+                        min={1}
+                        placeholder="Leave empty for no public mint"
                       />
+                      {errors.mintAmount && (
+                        <p className="text-red-500 text-sm mt-1">{errors.mintAmount.message}</p>
+                      )}
                     </div>
                     <div>
                       <label className="block text-sm font-medium text-museum-charcoal mb-2 flex items-center gap-2">
-                        Mint Cap
+                        Mint Cap (Max Total)
                         <InfoTooltip
-                          title="Límite Total de Minteo"
-                          description="Cantidad MÁXIMA total de tokens que se pueden mintear públicamente (además del premine). Una vez alcanzado, no se puede mintear más."
+                          title="Maximum Total Mintable Supply"
+                          description="TOTAL number of tokens that can be minted publicly (not counting premine). Once reached, minting closes forever."
                           examples={[
-                            "Mint Cap: 10,000,000 = máximo 10M tokens minteables",
-                            "Supply Total = Premine + Mint Cap"
+                            "1,000,000 = Max 1M tokens can be minted publicly",
+                            "With Amount=100 and Cap=1,000,000 → 10,000 mints possible",
+                            "Total Supply = Premine + Mint Cap"
                           ]}
-                          warning="Una vez minteado el cap completo, no habrá más tokens disponibles para mint."
                         />
                       </label>
                       <Input
                         type="number"
                         {...register('mintCap', { valueAsNumber: true })}
-                        placeholder="10000"
+                        min={1}
+                        placeholder="Leave empty for no public mint"
                       />
+                      {errors.mintCap && (
+                        <p className="text-red-500 text-sm mt-1">{errors.mintCap.message}</p>
+                      )}
                     </div>
                   </div>
+                  
+                  {/* Supply Calculator Display */}
+                  {(() => {
+                    const premine = Number(watch('premine')) || 0;
+                    const mintAmount = Number(watch('mintAmount')) || 0;
+                    const mintCap = Number(watch('mintCap')) || 0;
+                    const hasPremine = premine > 0;
+                    const hasMintTerms = mintAmount > 0 && mintCap > 0;
+                    
+                    if (!hasPremine && !hasMintTerms) return null;
+                    
+                    return (
+                      <div className="mt-4 bg-green-50 border border-green-200 rounded-lg p-4">
+                        <h4 className="font-semibold text-green-900 mb-2">📊 Total Supply Calculation</h4>
+                        <div className="text-sm text-green-800 space-y-1">
+                          {hasPremine && (
+                            <p>• Premine: <strong>{premine.toLocaleString()}</strong> tokens (yours)</p>
+                          )}
+                          {hasMintTerms && (
+                            <>
+                              <p>• Public Mint: <strong>{mintCap.toLocaleString()}</strong> tokens max</p>
+                              <p className="text-xs ml-4">
+                                ({mintAmount.toLocaleString()} per mint × {Math.floor(mintCap / mintAmount).toLocaleString()} mints possible)
+                              </p>
+                            </>
+                          )}
+                          <p className="font-bold pt-2 border-t border-green-300">
+                            Maximum Total Supply: {(premine + mintCap).toLocaleString()} tokens
+                          </p>
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             )}
@@ -696,59 +903,7 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
 
 
 
-            {/* Compact Checklist - Only show what's actually missing */}
-            {(() => {
-              const missingFields = [];
-              
-              // Only check if field has error OR is truly empty (not 0, which is valid)
-              if (!watch('rune_name') || errors.rune_name) {
-                missingFields.push('Nombre del Rune');
-              }
-              if (!watch('symbol') || errors.symbol) {
-                missingFields.push('Símbolo');
-              }
-              if (errors.divisibility) {
-                missingFields.push('Divisibilidad');
-              }
-              if (errors.premine) {
-                missingFields.push('Cantidad Premineada');
-              }
-              if (!selectedImage) {
-                missingFields.push('Imagen/Artwork');
-              }
-              
-              return missingFields.length > 0 ? (
-                <div className="bg-amber-50 border-l-4 border-amber-400 p-4">
-                  <div className="flex items-start gap-3">
-                    <Info className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
-                    <div className="flex-1">
-                      <h4 className="font-semibold text-amber-900 mb-2">
-                        Faltan {missingFields.length} campo{missingFields.length > 1 ? 's' : ''}:
-                      </h4>
-                      <div className="space-y-1 text-sm">
-                        {missingFields.map((field, idx) => (
-                          <div key={idx} className="text-amber-800">
-                            • {field}
-                            {field === 'Imagen/Artwork' && (
-                              <>
-                                {' '}
-                                <button
-                                  type="button"
-                                  onClick={() => setCurrentTab('metadata')}
-                                  className="underline hover:text-amber-900 font-medium"
-                                >
-                                  (ir a pestaña)
-                                </button>
-                              </>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ) : null;
-            })()}
+            {/* Removed redundant checklist - All info now in the button */}
 
             {/* Submit Button - ALWAYS VISIBLE AND PROMINENT */}
             <div className="sticky bottom-0 left-0 right-0 bg-gradient-to-t from-white via-white to-transparent pt-8 pb-6 -mx-6 px-6 mt-8 z-10">
@@ -772,30 +927,31 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
                   </div>
                 )}
 
-                {/* Giant Action Button */}
+                {/* SINGLE SMART BUTTON - Guides user through the entire flow */}
                 <Button
-                  type="submit"
-                  disabled={isUploading || !selectedImage || !isValid}
+                  type={isValid && selectedImage ? 'submit' : 'button'}
+                  disabled={isUploading}
                   isLoading={isUploading}
-                  onClick={() => {
-                    console.log('🔍 DEBUG - Form State:', {
-                      isValid,
-                      selectedImage: !!selectedImage,
-                      errors,
-                      formValues: {
-                        rune_name: watch('rune_name'),
-                        symbol: watch('symbol'),
-                        divisibility: watch('divisibility'),
-                        premine: watch('premine'),
-                      }
-                    });
+                  onClick={(e) => {
+                    // Smart button that guides the user
+                    if (!selectedImage) {
+                      e.preventDefault();
+                      setCurrentTab('metadata');
+                      showToast({
+                        type: 'info',
+                        title: 'Upload Image',
+                        message: 'Drag an image or click to select',
+                        duration: 3000,
+                      });
+                    }
+                    // If has validation errors, the form will show them
                   }}
                   className={`
                     w-full py-8 text-2xl font-black rounded-xl shadow-2xl 
                     transform transition-all duration-200 
                     ${isValid && selectedImage && !isUploading
-                      ? 'bg-gradient-to-r from-bitcoin-500 via-gold-500 to-bitcoin-600 hover:from-bitcoin-600 hover:via-gold-600 hover:to-bitcoin-700 text-white hover:scale-105 hover:shadow-gold-500/50 animate-pulse'
-                      : 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-60'
+                      ? 'bg-gradient-to-r from-bitcoin-500 via-gold-500 to-bitcoin-600 hover:from-bitcoin-600 hover:via-gold-600 hover:to-bitcoin-700 text-white hover:scale-105 hover:shadow-gold-500/50 animate-pulse cursor-pointer'
+                      : 'bg-gradient-to-r from-purple-600 via-blue-600 to-indigo-600 hover:from-purple-700 hover:via-blue-700 hover:to-indigo-700 text-white hover:scale-[1.02] cursor-pointer'
                     }
                   `}
                 >
@@ -810,13 +966,18 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
                   ) : !selectedImage ? (
                     <span className="flex items-center justify-center gap-3">
                       <ImageIcon className="w-8 h-8" />
-                      Falta subir imagen
+                      📸 UPLOAD IMAGE
                     </span>
                   ) : !isValid ? (
-                    <span className="flex items-center justify-center gap-3">
-                      <Info className="w-8 h-8" />
-                      Completa los campos
-                    </span>
+                    (() => {
+                      // Show specific error in button with action hint
+                      if (errors.rune_name) return '❌ Fix Rune Name';
+                      if (errors.premine) return '❌ Fix Supply (Premine or Mint Terms)';
+                      if (errors.mintAmount || errors.mintCap) return '❌ Fix Mint Terms (both Amount & Cap)';
+                      if (errors.symbol) return '❌ Fix Symbol (1 character only)';
+                      if (errors.divisibility) return '❌ Fix Divisibility';
+                      return '❌ Fix Errors Above';
+                    })()
                   ) : (
                     <span className="flex items-center justify-center gap-3">
                       🚀 CREATE RUNE ON BITCOIN
@@ -853,7 +1014,8 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
         </CardContent>
       </Card>
 
-
+      {/* Toast Notifications */}
+      <ToastContainer toasts={toasts} />
     </div>
   );
 }

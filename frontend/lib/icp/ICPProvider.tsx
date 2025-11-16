@@ -23,11 +23,12 @@ export function ICPProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     const initAuth = async () => {
       try {
-        // Initialize agent
-        await getAgent();
-
         // Check if already authenticated
         const authenticated = await isAuthenticated();
+        
+        // Force recreate agent to use correct identity (authenticated or anonymous)
+        await getAgent(true);
+
         setIsConnected(authenticated);
 
         if (authenticated) {
@@ -50,22 +51,26 @@ export function ICPProvider({ children }: { children: ReactNode }) {
   const connect = async (): Promise<boolean> => {
     try {
       setIsLoading(true);
+      logger.info('🔐 Starting Internet Identity login...');
+      
+      // The login function now handles auto-retry with multiple strategies
       const success = await login();
 
       if (success) {
         const userPrincipal = await getPrincipal();
         setPrincipal(userPrincipal);
         setIsConnected(true);
-        logger.info('User connected successfully', {
+        logger.info('✅ User connected successfully', {
           principal: userPrincipal?.toText(),
         });
       } else {
-        logger.warn('User connection cancelled or failed');
+        logger.warn('❌ User connection cancelled or all login strategies failed');
+        // Connection failed, but don't show error to user if they cancelled
       }
 
       return success;
     } catch (error) {
-      logger.error('Connection failed', error instanceof Error ? error : undefined);
+      logger.error('💥 Connection error', error instanceof Error ? error : undefined);
       return false;
     } finally {
       setIsLoading(false);
