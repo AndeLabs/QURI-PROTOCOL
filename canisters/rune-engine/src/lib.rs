@@ -9,6 +9,7 @@ use quri_types::{RuneEtching, RuneId, RuneMetadata};
 mod block_tracker;
 mod config;
 mod confirmation_tracker;
+mod cycles_monitor;
 mod errors;
 mod etching_flow;
 mod fee_manager;
@@ -75,6 +76,9 @@ fn init() {
 
     // Initialize dynamic fee manager
     fee_manager::init_fee_manager();
+
+    // Initialize cycles monitor
+    cycles_monitor::init_cycles_monitor();
 }
 
 #[pre_upgrade]
@@ -85,6 +89,7 @@ fn pre_upgrade() {
     confirmation_tracker::stop_confirmation_tracker();
     fee_manager::stop_fee_manager();
     block_tracker::stop_block_tracker();
+    cycles_monitor::stop_cycles_monitor();
 }
 
 #[post_upgrade]
@@ -123,6 +128,7 @@ fn post_upgrade() {
     // Restart timers
     confirmation_tracker::init_confirmation_tracker();
     fee_manager::init_fee_manager();
+    cycles_monitor::init_cycles_monitor();
 }
 
 // ============================================================================
@@ -392,6 +398,19 @@ fn get_log_stats() -> logging::LogStats {
 fn search_logs(keyword: String, limit: u64) -> Result<Vec<logging::LogEntry>, String> {
     require_admin!()?;
     Ok(logging::search_logs(&keyword, limit))
+}
+
+/// Get cycles metrics
+#[query]
+fn get_cycles_metrics() -> cycles_monitor::CyclesMetrics {
+    cycles_monitor::get_cycles_metrics()
+}
+
+/// Get cycles balance history (Admin only)
+#[query]
+fn get_cycles_history() -> Result<Vec<cycles_monitor::CyclesSnapshot>, String> {
+    require_admin!()?;
+    Ok(cycles_monitor::get_balance_history())
 }
 
 // ============================================================================
