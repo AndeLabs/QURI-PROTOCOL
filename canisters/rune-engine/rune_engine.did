@@ -137,6 +137,28 @@ type LogStats = record {
     last_error_timestamp : opt nat64;
 };
 
+type CyclesStatus = variant {
+    Critical;
+    Warning;
+    Low;
+    Healthy;
+};
+
+type CyclesSnapshot = record {
+    balance : nat;
+    status : CyclesStatus;
+    timestamp : nat64;
+};
+
+type CyclesMetrics = record {
+    current_balance : nat;
+    status : CyclesStatus;
+    burn_rate_per_second : nat;
+    time_until_depletion_seconds : opt nat64;
+    last_check : nat64;
+    total_snapshots : nat64;
+};
+
 service : {
     // Main etching API - create a new Rune on Bitcoin
     "create_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
@@ -160,6 +182,10 @@ service : {
     "get_recent_errors" : (nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
     "get_log_stats" : () -> (LogStats) query;
     "search_logs" : (text, nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
+
+    // Cycles monitoring
+    "get_cycles_metrics" : () -> (CyclesMetrics) query;
+    "get_cycles_history" : () -> (variant { Ok : vec CyclesSnapshot; Err : text }) query;
 
     // Configuration APIs (admin/deployment only)
     "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
