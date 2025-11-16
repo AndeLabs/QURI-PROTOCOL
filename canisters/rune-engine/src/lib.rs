@@ -13,6 +13,7 @@ mod errors;
 mod etching_flow;
 mod fee_manager;
 mod idempotency;
+mod logging;
 mod metrics;
 mod rbac;
 mod state;
@@ -65,6 +66,10 @@ fn init() {
     let metrics_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(7)));
     metrics::init_metrics(metrics_memory);
 
+    // Initialize logging (MemoryId 8)
+    let logging_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(8)));
+    logging::init_logging(logging_memory);
+
     // Initialize Bitcoin confirmation tracker
     confirmation_tracker::init_confirmation_tracker();
 
@@ -110,6 +115,10 @@ fn post_upgrade() {
     // Reinitialize metrics (MemoryId 7)
     let metrics_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(7)));
     metrics::reinit_metrics(metrics_memory);
+
+    // Reinitialize logging (MemoryId 8)
+    let logging_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(8)));
+    logging::reinit_logging(logging_memory);
 
     // Restart timers
     confirmation_tracker::init_confirmation_tracker();
@@ -185,6 +194,9 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
             // Record metrics
             metrics::record_error(&error_msg);
             timer.stop(false);
+
+            // Log error
+            logging::log_error("create_rune", format!("Etching failed: {}", error_msg), None);
 
             Err(error_msg)
         }
@@ -353,6 +365,33 @@ fn get_latency_percentiles(operation: String) -> Result<Option<metrics::LatencyP
     };
 
     Ok(metrics::get_latency_percentiles(op_type))
+}
+
+/// Get recent logs (Admin only)
+#[query]
+fn get_recent_logs(limit: u64) -> Result<Vec<logging::LogEntry>, String> {
+    require_admin!()?;
+    Ok(logging::get_recent_logs(limit, None))
+}
+
+/// Get recent errors only (Admin only)
+#[query]
+fn get_recent_errors(limit: u64) -> Result<Vec<logging::LogEntry>, String> {
+    require_admin!()?;
+    Ok(logging::get_recent_errors(limit))
+}
+
+/// Get log statistics
+#[query]
+fn get_log_stats() -> logging::LogStats {
+    logging::get_log_stats()
+}
+
+/// Search logs by keyword (Admin only)
+#[query]
+fn search_logs(keyword: String, limit: u64) -> Result<Vec<logging::LogEntry>, String> {
+    require_admin!()?;
+    Ok(logging::search_logs(&keyword, limit))
 }
 
 // ============================================================================

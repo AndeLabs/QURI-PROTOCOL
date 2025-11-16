@@ -112,6 +112,31 @@ type LatencyPercentiles = record {
     count : nat64;
 };
 
+type LogLevel = variant {
+    Debug;
+    Info;
+    Warn;
+    Error;
+};
+
+type LogEntry = record {
+    id : nat64;
+    level : LogLevel;
+    message : text;
+    caller : opt principal;
+    module : text;
+    context : opt text;
+    timestamp : nat64;
+};
+
+type LogStats = record {
+    total_errors : nat64;
+    total_warns : nat64;
+    total_infos : nat64;
+    total_debugs : nat64;
+    last_error_timestamp : opt nat64;
+};
+
 service : {
     // Main etching API - create a new Rune on Bitcoin
     "create_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
@@ -129,6 +154,12 @@ service : {
     "get_metrics_summary" : () -> (MetricsSummary) query;
     "get_performance_metrics" : () -> (variant { Ok : PerformanceMetrics; Err : text }) query;
     "get_latency_percentiles" : (text) -> (variant { Ok : opt LatencyPercentiles; Err : text }) query;
+
+    // Logging APIs
+    "get_recent_logs" : (nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
+    "get_recent_errors" : (nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
+    "get_log_stats" : () -> (LogStats) query;
+    "search_logs" : (text, nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
 
     // Configuration APIs (admin/deployment only)
     "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
