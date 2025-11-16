@@ -206,11 +206,22 @@ pub fn get_process(id: &str) -> Option<EtchingProcess> {
 /// Update process state
 pub fn update_process_state(process: EtchingProcess) {
     let key = process.id.as_bytes().to_vec();
-    let value = candid::encode_one(&process).expect("Failed to encode process");
+
+    // Encode with proper error handling
+    let value = match candid::encode_one(&process) {
+        Ok(v) => v,
+        Err(e) => {
+            ic_cdk::println!("❌ CRITICAL: Failed to encode process {}: {}", process.id, e);
+            // This should never happen in practice, but trap is safer than silent failure
+            ic_cdk::trap(&format!("Failed to encode process state: {}", e));
+        }
+    };
 
     PROCESSES.with(|p| {
         if let Some(ref mut map) = *p.borrow_mut() {
             map.insert(key, value);
+        } else {
+            ic_cdk::trap("Process storage not initialized");
         }
     });
 }

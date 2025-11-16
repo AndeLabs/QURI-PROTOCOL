@@ -49,11 +49,15 @@ impl Default for EtchingConfig {
 
 impl Storable for EtchingConfig {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(candid::encode_one(self).expect("Failed to encode EtchingConfig"))
+        Cow::Owned(candid::encode_one(self).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("CRITICAL: Failed to encode EtchingConfig: {}", e))
+        }))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).expect("Failed to decode EtchingConfig")
+        candid::decode_one(&bytes).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("CRITICAL: Failed to decode EtchingConfig: {}", e))
+        })
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -68,11 +72,15 @@ pub struct CanisterConfig {
 
 impl Storable for CanisterConfig {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(candid::encode_one(self).expect("Failed to encode CanisterConfig"))
+        Cow::Owned(candid::encode_one(self).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("CRITICAL: Failed to encode CanisterConfig: {}", e))
+        }))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).expect("Failed to decode CanisterConfig")
+        candid::decode_one(&bytes).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("CRITICAL: Failed to decode CanisterConfig: {}", e))
+        })
     }
 
     const BOUND: Bound = Bound::Unbounded;
@@ -101,7 +109,7 @@ pub fn init_config_storage(etching_memory: Memory, canister_memory: Memory) {
     ETCHING_CONFIG.with(|c| {
         *c.borrow_mut() = Some(
             StableCell::init(etching_memory, EtchingConfig::default())
-                .expect("Failed to initialize EtchingConfig storage"),
+                .unwrap_or_else(|e| ic_cdk::trap(&format!("Failed to initialize EtchingConfig storage: {:?}", e))),
         );
     });
 
@@ -111,7 +119,7 @@ pub fn init_config_storage(etching_memory: Memory, canister_memory: Memory) {
                 bitcoin_integration_id: Principal::anonymous(),
                 registry_id: Principal::anonymous(),
             })
-            .expect("Failed to initialize CanisterConfig storage"),
+            .unwrap_or_else(|e| ic_cdk::trap(&format!("Failed to initialize CanisterConfig storage: {:?}", e))),
         );
     });
 }
@@ -121,7 +129,7 @@ pub fn reinit_config_storage(etching_memory: Memory, canister_memory: Memory) {
     ETCHING_CONFIG.with(|c| {
         *c.borrow_mut() = Some(
             StableCell::init(etching_memory, EtchingConfig::default())
-                .expect("Failed to reinitialize EtchingConfig storage"),
+                .unwrap_or_else(|e| ic_cdk::trap(&format!("Failed to reinitialize EtchingConfig storage: {:?}", e))),
         );
     });
 
@@ -131,7 +139,7 @@ pub fn reinit_config_storage(etching_memory: Memory, canister_memory: Memory) {
                 bitcoin_integration_id: Principal::anonymous(),
                 registry_id: Principal::anonymous(),
             })
-            .expect("Failed to reinitialize CanisterConfig storage"),
+            .unwrap_or_else(|e| ic_cdk::trap(&format!("Failed to reinitialize CanisterConfig storage: {:?}", e))),
         );
     });
 }

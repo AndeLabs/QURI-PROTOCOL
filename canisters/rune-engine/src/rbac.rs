@@ -74,11 +74,15 @@ pub struct RoleEntry {
 // Implementación de Storable para RoleEntry
 impl Storable for RoleEntry {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(candid::encode_one(&self).expect("Failed to encode RoleEntry"))
+        Cow::Owned(candid::encode_one(&self).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("CRITICAL: Failed to encode RoleEntry: {}", e))
+        }))
     }
 
     fn from_bytes(bytes: Cow<[u8]>) -> Self {
-        candid::decode_one(&bytes).expect("Failed to decode RoleEntry")
+        candid::decode_one(&bytes).unwrap_or_else(|e| {
+            ic_cdk::trap(&format!("CRITICAL: Failed to decode RoleEntry: {}", e))
+        })
     }
 
     const BOUND: Bound = Bound::Unbounded;
