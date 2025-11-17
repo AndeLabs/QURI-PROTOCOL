@@ -133,6 +133,7 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
     formState: { errors, isValid, touchedFields },
     watch,
     trigger,
+    setValue,
   } = useForm<EnhancedEtchingFormData>({
     resolver: zodResolver(enhancedEtchingSchema),
     mode: 'onChange', // Enable real-time validation
@@ -209,7 +210,7 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
       setUploadStage('Preparando metadata...');
       const metadata: Omit<RuneMetadata, 'image'> = {
         name: data.rune_name,
-        symbol: data.symbol,
+        symbol: data.symbol || '',
         description: data.description || `${data.rune_name} - A Bitcoin Rune created on QURI Protocol`,
         external_url: data.externalUrl || undefined,
         attributes: data.attributes?.filter(attr => attr.trait_type && attr.value) || [],
