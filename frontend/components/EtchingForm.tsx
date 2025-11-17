@@ -48,7 +48,7 @@ type EtchingFormData = z.infer<typeof etchingSchema>;
 
 export function EtchingForm() {
   const { isConnected } = useICP();
-  const { createRune, getEtchingStatus, isLoading, error } = useRuneEngine();
+  const { etchRune, getEtchingStatus, loading: isLoading, error } = useRuneEngine();
 
   // State management
   const [showPreview, setShowPreview] = useState(false);
@@ -167,7 +167,7 @@ export function EtchingForm() {
     setShowPreview(false);
     setCurrentStage('validating');
 
-    const id = await createRune(pendingEtching);
+    const id = await etchRune(pendingEtching);
 
     if (id) {
       setProcessId(id);
