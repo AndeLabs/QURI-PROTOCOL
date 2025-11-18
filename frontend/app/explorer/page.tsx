@@ -201,20 +201,24 @@ export default function ExplorerPagePremium() {
 
   return (
     <motion.div
-      className="space-y-8"
+      className="min-h-screen bg-gradient-to-br from-museum-white via-museum-cream to-premium-exhibition-gray"
       initial="hidden"
       animate="enter"
       exit="exit"
       variants={reducedMotion ? undefined : pageTransition}
     >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Breadcrumb Navigation */}
       <motion.div variants={reducedMotion ? undefined : fadeInUp}>
         <Breadcrumb items={BreadcrumbPresets.explorer} showDashboardHome={true} />
       </motion.div>
 
       {/* Header */}
-      <motion.div variants={reducedMotion ? undefined : fadeInUp}>
-        <h1 className="font-serif text-4xl md:text-5xl font-bold text-museum-black mb-2">
+      <motion.div
+        variants={reducedMotion ? undefined : fadeInUp}
+        className="bg-museum-white border border-museum-light-gray rounded-2xl p-8 shadow-sm"
+      >
+        <h1 className="font-serif text-4xl md:text-5xl font-bold text-museum-black mb-3">
           Runes Explorer
         </h1>
         <p className="text-museum-dark-gray text-lg">
@@ -232,29 +236,30 @@ export default function ExplorerPagePremium() {
         {statsData.map((stat, index) => (
           <motion.div
             key={stat.label}
-            className="border border-museum-light-gray rounded-xl p-6 bg-museum-white hover:shadow-lg transition-shadow cursor-default"
+            className="border-2 border-museum-light-gray rounded-xl p-6 bg-museum-white hover:shadow-xl hover:border-gold-300 transition-all cursor-default"
             variants={reducedMotion ? undefined : staggerItem}
             whileHover={reducedMotion ? undefined : { y: -4, scale: 1.02 }}
             transition={{ duration: durations.fast }}
           >
-            <div className="flex items-center gap-3 mb-3">
-              <div className={`p-2 ${stat.bgColor} rounded-lg`}>
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`p-3 ${stat.bgColor} rounded-lg shadow-sm`}>
                 <stat.icon className={`h-6 w-6 ${stat.color}`} />
               </div>
-              <span className="text-sm font-medium text-museum-dark-gray">
+              <span className="text-sm font-semibold text-museum-black uppercase tracking-wide">
                 {stat.label}
               </span>
             </div>
-            <p className="text-3xl font-bold text-museum-black">{stat.value}</p>
+            <p className="text-4xl font-bold text-museum-black tracking-tight">{stat.value}</p>
           </motion.div>
         ))}
       </motion.div>
 
       {/* Tabs with Animation */}
       <motion.div
-        className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4"
+        className="bg-museum-white border border-museum-light-gray rounded-2xl p-6 shadow-sm"
         variants={reducedMotion ? undefined : fadeInUp}
       >
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-wrap gap-3">
           {[
             { id: 'all', icon: Coins, label: 'All Runes', count: allRunes.length },
@@ -282,6 +287,7 @@ export default function ExplorerPagePremium() {
         >
           Refresh
         </ButtonPremium>
+        </div>
       </motion.div>
 
       {/* Error Display */}
@@ -346,13 +352,15 @@ export default function ExplorerPagePremium() {
             transition={{ duration: durations.normal }}
           >
             {myRunes.length === 0 ? (
-              <div className="border-2 border-dashed border-museum-light-gray rounded-xl p-12 text-center">
-                <Sparkles className="h-12 w-12 text-museum-dark-gray mx-auto mb-4" />
-                <h3 className="font-serif text-xl font-bold text-museum-black mb-2">
+              <div className="bg-museum-white border-2 border-dashed border-museum-light-gray rounded-2xl p-12 text-center shadow-sm">
+                <div className="bg-gold-50 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                  <Sparkles className="h-12 w-12 text-gold-600" />
+                </div>
+                <h3 className="font-serif text-2xl font-bold text-museum-black mb-3">
                   No Runes Created Yet
                 </h3>
-                <p className="text-museum-dark-gray mb-6">
-                  Create your first Bitcoin Rune now
+                <p className="text-museum-dark-gray text-lg mb-8 max-w-md mx-auto">
+                  Create your first Bitcoin Rune now and start building on QURI Protocol
                 </p>
                 <Link href="/create">
                   <ButtonPremium
@@ -389,12 +397,14 @@ export default function ExplorerPagePremium() {
             transition={{ duration: durations.normal }}
           >
             {myEtchings.length === 0 ? (
-              <div className="border-2 border-dashed border-museum-light-gray rounded-xl p-12 text-center">
-                <Activity className="h-12 w-12 text-museum-dark-gray mx-auto mb-4" />
-                <h3 className="font-serif text-xl font-bold text-museum-black mb-2">
+              <div className="bg-museum-white border-2 border-dashed border-museum-light-gray rounded-2xl p-12 text-center shadow-sm">
+                <div className="bg-purple-50 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                  <Activity className="h-12 w-12 text-purple-600" />
+                </div>
+                <h3 className="font-serif text-2xl font-bold text-museum-black mb-3">
                   No Etchings Yet
                 </h3>
-                <p className="text-museum-dark-gray mb-6">
+                <p className="text-museum-dark-gray text-lg mb-8 max-w-md mx-auto">
                   Start creating Bitcoin Runes to see etching processes here
                 </p>
                 <Link href="/create">
@@ -467,6 +477,7 @@ export default function ExplorerPagePremium() {
           </div>
         </div>
       </motion.div>
+      </div>
     </motion.div>
   );
 }
