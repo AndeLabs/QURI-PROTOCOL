@@ -6,10 +6,8 @@
 export const idlFactory = ({ IDL }: any) => {
   const RuneId = IDL.Text;
 
-  const BlockInfo = IDL.Record({
-    height: IDL.Nat64,
-    hash: IDL.Text,
-  });
+  // BlockInfo is returned as a tuple, not a record
+  // The API returns: (nat32, text) where first element is height, second is hash
 
   const Terms = IDL.Record({
     amount: IDL.Nat,
@@ -48,7 +46,9 @@ export const idlFactory = ({ IDL }: any) => {
   });
 
   return IDL.Service({
-    get_latest_block: IDL.Func([], [BlockInfo], ['query']),
+    // FIXED: get_latest_block returns (nat32, text) tuple, not BlockInfo record
+    // According to official documentation: returns (block_height: nat32, block_hash: text)
+    get_latest_block: IDL.Func([], [IDL.Tuple(IDL.Nat32, IDL.Text)], ['query']),
     get_etching: IDL.Func([IDL.Text], [IDL.Opt(RuneId)], ['query']),
     get_rune: IDL.Func([IDL.Text], [IDL.Opt(RuneEntry)], ['query']),
     get_rune_by_id: IDL.Func([RuneId], [IDL.Opt(RuneEntry)], ['query']),

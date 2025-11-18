@@ -1,10 +1,25 @@
 use candid::{CandidType, Deserialize, Principal};
 use serde::Serialize;
 
-// 🎓 MÓDULO: Implementaciones de Storable trait
-// Este módulo contiene las implementaciones del trait Storable
-// para permitir que nuestros tipos se guarden en Stable Memory
+// 🎓 MÓDULOS
+mod rune_key;
+mod rune_metadata;
+mod validation;
 mod storable_impl;
+mod pagination;
+
+#[cfg(test)]
+mod rune_key_tests;
+#[cfg(test)]
+mod validation_tests;
+#[cfg(test)]
+mod rune_metadata_tests;
+
+// Re-exports públicos
+pub use rune_key::{RuneKey, ParseError as RuneKeyParseError};
+pub use rune_metadata::{RuneMetadata, RuneMetadataBuilder};
+pub use validation::*;
+pub use pagination::*;
 
 /// Bitcoin network types
 #[derive(CandidType, Deserialize, Serialize, Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,7 +29,11 @@ pub enum BitcoinNetwork {
     Regtest,
 }
 
-/// Unique identifier for a Rune
+/// DEPRECATED: Use RuneKey instead
+/// 
+/// Este tipo queda por compatibilidad temporal pero NO debe usarse
+/// como key en StableBTreeMap porque tiene String (unbounded)
+#[deprecated(since = "0.2.0", note = "Use RuneKey for StableBTreeMap keys")]
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 pub struct RuneId {
     pub block: u64,
@@ -45,18 +64,8 @@ pub struct MintTerms {
     pub offset_end: Option<u64>,
 }
 
-/// Metadata stored for each Rune
-#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
-pub struct RuneMetadata {
-    pub id: RuneId,
-    pub name: String,
-    pub symbol: String,
-    pub divisibility: u8,
-    pub creator: Principal,
-    pub created_at: u64,
-    pub total_supply: u64,
-    pub premine: u64,
-}
+// NOTA: RuneMetadata ahora se define en rune_metadata.rs
+// y se re-exporta arriba para mantener la API pública igual
 
 /// Bitcoin address with derivation path
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
@@ -125,13 +134,24 @@ pub struct BondingCurve {
 }
 
 /// Registry entry for tracking Runes
+#[deprecated(since = "0.2.0", note = "Use RegistryEntry with RuneKey")]
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
-pub struct RegistryEntry {
+pub struct RegistryEntryLegacy {
     pub rune_id: RuneId,
     pub metadata: RuneMetadata,
     pub bonding_curve: Option<BondingCurve>,
     pub trading_volume_24h: u64,
     pub holder_count: u64,
+}
+
+/// NEW: RegistryEntry con RuneKey (embedded in metadata)
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct RegistryEntry {
+    pub metadata: RuneMetadata,
+    pub bonding_curve: Option<BondingCurve>,
+    pub trading_volume_24h: u64,
+    pub holder_count: u64,
+    pub indexed_at: u64,
 }
 
 /// Error types

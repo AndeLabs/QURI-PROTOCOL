@@ -189,6 +189,7 @@ service : {
 
     // Configuration APIs (admin/deployment only)
     "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
+    "auto_configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
     "update_etching_config" : (EtchingConfigView) -> (variant { Ok : null; Err : text });
 
     // RBAC Management APIs

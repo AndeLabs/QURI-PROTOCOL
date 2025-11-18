@@ -41,10 +41,10 @@ export function Hero() {
                 Dashboard
               </Link>
               <Link
-                href="/gallery"
+                href="/explorer"
                 className="text-museum-dark-gray hover:text-museum-black transition-colors text-sm font-medium"
               >
-                Gallery
+                Explorer
               </Link>
               <TutorialButton />
               <Button
@@ -118,13 +118,13 @@ export function Hero() {
                   </Button>
                 </Link>
 
-                <Link href="/gallery">
+                <Link href="/explorer">
                   <Button
                     variant="outline"
                     size="lg"
                     className="border-2 border-museum-charcoal text-museum-charcoal hover:bg-museum-charcoal hover:text-museum-white px-8 py-4 text-lg w-full sm:w-auto"
                   >
-                    View Gallery
+                    Explore Runes
                   </Button>
                 </Link>
               </div>

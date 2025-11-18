@@ -87,13 +87,22 @@ export class OctopusIndexerClient {
 
   /**
    * Get the latest Bitcoin block indexed
+   * Returns tuple: [block_height: number, block_hash: string]
    */
   async getLatestBlock(): Promise<BlockInfo> {
     try {
       logger.info('Fetching latest block from Octopus Indexer');
+      // The actual API returns a tuple [nat32, text], not a record
       const result = await this.actor.get_latest_block();
-      logger.info('Latest block fetched', { height: result.height.toString() });
-      return result;
+      
+      // Convert tuple to BlockInfo format for backwards compatibility
+      const blockInfo: BlockInfo = {
+        height: BigInt(result[0]),
+        hash: result[1],
+      };
+      
+      logger.info('Latest block fetched', { height: blockInfo.height.toString() });
+      return blockInfo;
     } catch (error) {
       logger.error('Failed to fetch latest block', error instanceof Error ? error : undefined);
       throw error;

@@ -78,7 +78,7 @@ const nextConfig = {
               "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: blob: https:",
               "font-src 'self' data:",
-              "connect-src 'self' https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https: wss:",
+              "connect-src 'self' https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://icp-api.io https://*.icp-api.io https: wss:",
               "frame-src 'self' https://ic0.app https://*.ic0.app https:",
               "worker-src 'self' blob:",
             ].join('; '),

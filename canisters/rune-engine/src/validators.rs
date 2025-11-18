@@ -80,12 +80,11 @@ impl EtchingValidator {
         Ok(())
     }
 
-    /// Validate symbol
+    /// Validate symbol (OPTIONAL - empty string is allowed)
     fn validate_symbol(symbol: &str) -> EtchingResult<()> {
+        // Symbol is OPTIONAL - empty is allowed (will use default ¤)
         if symbol.is_empty() {
-            return Err(EtchingError::InvalidSymbol(
-                "Symbol cannot be empty".to_string(),
-            ));
+            return Ok(()); // Empty symbol is valid
         }
 
         if symbol.len() > MAX_SYMBOL_LENGTH {
@@ -96,13 +95,14 @@ impl EtchingValidator {
             )));
         }
 
-        // Symbol should be alphanumeric
-        if !symbol.chars().all(|c| c.is_alphanumeric()) {
-            return Err(EtchingError::InvalidSymbol(
-                "Symbol must be alphanumeric".to_string(),
-            ));
+        // Symbol must contain only uppercase A-Z characters
+        if !symbol.chars().all(|c| c.is_ascii_uppercase()) {
+            return Err(EtchingError::InvalidSymbol(format!(
+                "Symbol must contain only uppercase A-Z characters, got '{}'",
+                symbol
+            )));
         }
-
+        
         Ok(())
     }
 
@@ -292,8 +292,8 @@ mod tests {
 
     #[test]
     fn test_symbol_edge_cases() {
-        // Empty string
-        assert!(EtchingValidator::validate_symbol("").is_err());
+        // Empty string is allowed (will use default symbol)
+        assert!(EtchingValidator::validate_symbol("").is_ok());
 
         // Single char
         assert!(EtchingValidator::validate_symbol("A").is_ok());

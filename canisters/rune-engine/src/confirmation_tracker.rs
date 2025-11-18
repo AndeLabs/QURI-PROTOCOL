@@ -50,11 +50,15 @@
 
 use candid::{CandidType, Deserialize};
 use ic_cdk_timers::TimerId;
+use ic_stable_structures::memory_manager::VirtualMemory;
+use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
-use std::collections::HashMap;
 use std::time::Duration;
 
-use crate::state::{get_process, update_process_state, EtchingState};
+use crate::process_id::ProcessId;
+use crate::state::{get_process_by_string, update_process_state, EtchingState};
+
+type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 // ============================================================================
 // Types
@@ -86,16 +90,24 @@ pub struct PendingTransaction {
 }
 
 // ============================================================================
-// State
+// State - NOW PERSISTED IN STABLE MEMORY
 // ============================================================================
 
 thread_local! {
-    /// Map of txid -> PendingTransaction
-    /// Tracks all transactions waiting for confirmations
-    static PENDING_TXS: RefCell<HashMap<String, PendingTransaction>> = RefCell::new(HashMap::new());
+    /// Map of txid (Vec<u8>) -> PendingTransaction
+    /// NOW PERSISTED using StableBTreeMap for upgrade safety
+    static PENDING_TXS: RefCell<Option<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>>> = const { RefCell::new(None) };
 
     /// Timer ID for periodic confirmation checks
     static CONFIRMATION_TIMER: RefCell<Option<TimerId>> = const { RefCell::new(None) };
+}
+
+/// Initialize confirmation tracker storage (called from canister init/post_upgrade)
+pub fn init_confirmation_storage(memory: Memory) {
+    PENDING_TXS.with(|txs| {
+        *txs.borrow_mut() = Some(StableBTreeMap::init(memory));
+    });
+    ic_cdk::println!("Confirmation tracker storage initialized");
 }
 
 // Configuration
@@ -180,8 +192,16 @@ pub fn track_transaction(
         network,
     };
 
+    let key = txid.as_bytes().to_vec();
+    let value = candid::encode_one(&pending_tx)
+        .expect("Failed to encode PendingTransaction");
+
     PENDING_TXS.with(|txs| {
-        txs.borrow_mut().insert(txid.clone(), pending_tx);
+        if let Some(ref mut map) = *txs.borrow_mut() {
+            map.insert(key, value);
+        } else {
+            ic_cdk::println!("⚠️  Confirmation tracker storage not initialized");
+        }
     });
 
     ic_cdk::println!(
@@ -194,8 +214,12 @@ pub fn track_transaction(
 
 /// Remove a transaction from tracking (called when confirmed or failed)
 pub fn untrack_transaction(txid: &str) {
+    let key = txid.as_bytes().to_vec();
+
     PENDING_TXS.with(|txs| {
-        txs.borrow_mut().remove(txid);
+        if let Some(ref mut map) = *txs.borrow_mut() {
+            map.remove(&key);
+        }
     });
 
     ic_cdk::println!("Stopped tracking tx {}", txid);
@@ -223,12 +247,17 @@ pub fn untrack_transaction(txid: &str) {
 async fn check_pending_transactions() {
     let current_time = ic_cdk::api::time();
 
-    // Get snapshot of pending txs
+    // Get snapshot of pending txs from stable storage
     let pending_txs: Vec<PendingTransaction> = PENDING_TXS.with(|txs| {
-        txs.borrow()
-            .values()
-            .cloned()
-            .collect()
+        if let Some(ref map) = *txs.borrow() {
+            map.iter()
+                .filter_map(|(_, value_bytes)| {
+                    candid::decode_one(&value_bytes).ok()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
     });
 
     ic_cdk::println!(
@@ -245,7 +274,7 @@ async fn check_pending_transactions() {
             );
 
             // Mark process as failed
-            if let Some(mut process) = get_process(&tx.process_id) {
+            if let Some(mut process) = get_process_by_string(&tx.process_id) {
                 process.state = EtchingState::Failed {
                     reason: "Transaction timed out after 24h without confirmations".to_string(),
                     at_state: "Broadcasting".to_string(),
@@ -267,11 +296,20 @@ async fn check_pending_transactions() {
                     tx.required_confirmations
                 );
 
-                // Update tracking info
+                // Update tracking info in stable storage
+                let key = tx.txid.as_bytes().to_vec();
                 PENDING_TXS.with(|txs| {
-                    if let Some(tracked_tx) = txs.borrow_mut().get_mut(&tx.txid) {
-                        tracked_tx.current_confirmations = confirmations;
-                        tracked_tx.last_checked = current_time;
+                    if let Some(ref mut map) = *txs.borrow_mut() {
+                        if let Some(value_bytes) = map.get(&key) {
+                            if let Ok(mut tracked_tx) = candid::decode_one::<PendingTransaction>(&value_bytes) {
+                                tracked_tx.current_confirmations = confirmations;
+                                tracked_tx.last_checked = current_time;
+                                
+                                if let Ok(updated_bytes) = candid::encode_one(&tracked_tx) {
+                                    map.insert(key, updated_bytes);
+                                }
+                            }
+                        }
                     }
                 });
 
@@ -283,7 +321,7 @@ async fn check_pending_transactions() {
                     );
 
                     // Mark process as completed (transaction confirmed)
-                    if let Some(mut process) = get_process(&tx.process_id) {
+                    if let Some(mut process) = get_process_by_string(&tx.process_id) {
                         process.state = EtchingState::Indexing;
                         update_process_state(process);
                     }
@@ -475,22 +513,43 @@ async fn get_confirmations_via_bitcoin_integration(
 #[allow(dead_code)]
 pub fn get_pending_transactions() -> Vec<PendingTransaction> {
     PENDING_TXS.with(|txs| {
-        txs.borrow().values().cloned().collect()
+        if let Some(ref map) = *txs.borrow() {
+            map.iter()
+                .filter_map(|(_, value_bytes)| {
+                    candid::decode_one(&value_bytes).ok()
+                })
+                .collect()
+        } else {
+            Vec::new()
+        }
     })
 }
 
 /// Get tracking info for a specific transaction
 #[allow(dead_code)]
 pub fn get_transaction_tracking(txid: &str) -> Option<PendingTransaction> {
+    let key = txid.as_bytes().to_vec();
+    
     PENDING_TXS.with(|txs| {
-        txs.borrow().get(txid).cloned()
+        if let Some(ref map) = *txs.borrow() {
+            map.get(&key)
+                .and_then(|value_bytes| candid::decode_one(&value_bytes).ok())
+        } else {
+            None
+        }
     })
 }
 
 /// Get count of pending transactions
 #[allow(dead_code)]
 pub fn pending_transaction_count() -> usize {
-    PENDING_TXS.with(|txs| txs.borrow().len())
+    PENDING_TXS.with(|txs| {
+        if let Some(ref map) = *txs.borrow() {
+            map.len() as usize
+        } else {
+            0
+        }
+    })
 }
 
 // ============================================================================

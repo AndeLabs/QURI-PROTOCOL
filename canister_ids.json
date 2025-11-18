@@ -1,0 +1,14 @@
+{
+  "bitcoin-integration": {
+    "ic": "yz6hf-qqaaa-aaaah-arn5a-cai"
+  },
+  "identity-manager": {
+    "ic": "y67br-5iaaa-aaaah-arn5q-cai"
+  },
+  "registry": {
+    "ic": "pnqje-qiaaa-aaaah-arodq-cai"
+  },
+  "rune-engine": {
+    "ic": "pkrpq-5qaaa-aaaah-aroda-cai"
+  }
+}

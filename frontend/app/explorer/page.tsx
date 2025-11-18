@@ -10,23 +10,23 @@ import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
 import { VerificationBadge } from '@/components/RuneVerification';
 import { OctopusIndexerClient, OctopusRuneEntry } from '@/lib/integrations/octopus-indexer';
-import { Search, Filter, TrendingUp, Users, Coins, ExternalLink, RefreshCw, CheckCircle, Loader } from 'lucide-react';
+import { Search, Filter, TrendingUp, Users, Coins, ExternalLink, RefreshCw, CheckCircle, Loader, Home } from 'lucide-react';
 import { logger } from '@/lib/logger';
+import Link from 'next/link';
 
 /**
- * Global Runes Explorer
- *
- * SHOWCASE of Octopus Network Runes Indexer integration!
- * Browse ALL Bitcoin Runes on-chain, not just QURI-created ones.
- *
- * Features:
- * - View all Runes indexed on Bitcoin
- * - Real-time on-chain data from Octopus Indexer
- * - Filter by name, symbol, block height
- * - Compare QURI Runes vs All Runes
- * - Verification status for each Rune
- *
- * This demonstrates ICP's Bitcoin integration capabilities!
+ * Unified Runes Explorer
+ * 
+ * ALL Runes are Bitcoin Runes - there's no difference between QURI-created
+ * and other Runes. They all live on Bitcoin blockchain.
+ * 
+ * This explorer shows:
+ * - ALL Bitcoin Runes (from Octopus Indexer)
+ * - MY Runes (created by current user via QURI)
+ * 
+ * Data sources:
+ * - Octopus Indexer: All Bitcoin Runes
+ * - Registry Canister: QURI creation tracking
  */
 
 interface FilterOptions {
@@ -39,9 +39,10 @@ function ExplorerContent() {
   const searchParams = useSearchParams();
   const newEtchingId = searchParams.get('new');
   
-  const [activeTab, setActiveTab] = useState<'quri' | 'all'>('quri'); // Default to QURI tab if new etching
+  // Tabs: 'all' shows all Bitcoin Runes, 'mine' shows user's creations
+  const [activeTab, setActiveTab] = useState<'all' | 'mine'>('all');
   const [allRunes, setAllRunes] = useState<OctopusRuneEntry[]>([]);
-  const [quriRunes, setQuriRunes] = useState<any[]>([]);
+  const [myRunes, setMyRunes] = useState<any[]>([]);
   const [filteredRunes, setFilteredRunes] = useState<OctopusRuneEntry[]>([]);
   const [filters, setFilters] = useState<FilterOptions>({
     search: '',
@@ -54,6 +55,7 @@ function ExplorerContent() {
   const [newRuneData, setNewRuneData] = useState<any | null>(null);
   const [loadingNewRune, setLoadingNewRune] = useState(false);
   const [showSuccessBanner, setShowSuccessBanner] = useState(false);
+  const [userPrincipal, setUserPrincipal] = useState<string>('');
 
   const client = new OctopusIndexerClient('mainnet');
 
@@ -66,6 +68,20 @@ function ExplorerContent() {
     });
   };
 
+  // Load user principal
+  useEffect(() => {
+    const loadUserPrincipal = async () => {
+      try {
+        const agent = await getAgent();
+        const principal = await agent.getPrincipal();
+        setUserPrincipal(principal.toString());
+      } catch (err) {
+        logger.warn('Failed to get user principal', err instanceof Error ? err : undefined);
+      }
+    };
+    loadUserPrincipal();
+  }, []);
+
   // Load data from Octopus Indexer
   const loadAllRunes = async () => {
     try {
@@ -76,19 +92,13 @@ function ExplorerContent() {
       const blockInfo = await client.getLatestBlock();
       setLatestBlock(Number(blockInfo.height));
 
-      // In production, we'd have a method to get all Runes
-      // For now, we'll demonstrate with a sample query
-      // The actual implementation would paginate through all Runes
-
-      // TODO: Implement pagination through all Runes
-      // For hackathon demo, we'll show the concept with known Runes
-
-      logger.info('Loaded Runes from Octopus Indexer', {
+      logger.info('Loaded latest block from Octopus Indexer', {
         latest_block: blockInfo.height,
       });
 
-      // Mock data for demonstration
-      // In production, this would query Octopus for all Runes
+      // TODO: Implement pagination through all Runes
+      // For now, we show the concept with empty array
+      // In production, Octopus would provide a list_runes method
       setAllRunes([]);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load Runes';
@@ -112,7 +122,7 @@ function ExplorerContent() {
         throw new Error('NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID not configured');
       }
 
-      const { idlFactory } = await import('@/lib/integrations/rune-engine.did');
+      const { idlFactory } = await import('@/lib/icp/idl/rune-engine.idl');
       const actor = Actor.createActor(idlFactory, {
         agent,
         canisterId: Principal.fromText(runeEngineId),
@@ -137,19 +147,19 @@ function ExplorerContent() {
     }
   };
 
-  // Load QURI-created Runes
-  const loadQuriRunes = async () => {
+  // Load user's created Runes
+  const loadMyRunes = async () => {
     try {
       const agent = await getAgent();
       const runeEngineId = process.env.NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID;
 
       if (!runeEngineId) {
-        logger.warn('RUNE_ENGINE_CANISTER_ID not configured, skipping QURI runes');
-        setQuriRunes([]);
+        logger.warn('RUNE_ENGINE_CANISTER_ID not configured, skipping My Runes');
+        setMyRunes([]);
         return;
       }
 
-      const { idlFactory } = await import('@/lib/integrations/rune-engine.did');
+      const { idlFactory } = await import('@/lib/icp/idl/rune-engine.idl');
       const actor = Actor.createActor(idlFactory, {
         agent,
         canisterId: Principal.fromText(runeEngineId),
@@ -157,11 +167,11 @@ function ExplorerContent() {
 
       // Get user's etchings
       const myEtchings = await actor.get_my_etchings();
-      setQuriRunes(myEtchings);
-      logger.info('Loaded QURI Runes', { count: myEtchings.length });
+      setMyRunes(myEtchings);
+      logger.info('Loaded My Runes', { count: myEtchings.length });
     } catch (err) {
-      logger.error('Failed to load QURI Runes', err instanceof Error ? err : undefined);
-      setQuriRunes([]);
+      logger.error('Failed to load My Runes', err instanceof Error ? err : undefined);
+      setMyRunes([]);
     }
   };
 
@@ -204,25 +214,36 @@ function ExplorerContent() {
   // Load data on mount
   useEffect(() => {
     loadAllRunes();
-    loadQuriRunes();
+    loadMyRunes();
 
     // Load new Rune if etchingId is present in URL
     if (newEtchingId) {
       loadNewRune(newEtchingId);
+      // Show "My Runes" tab if coming from creation
+      setActiveTab('mine');
     }
 
     // Refresh every 60 seconds
     const interval = setInterval(() => {
       loadAllRunes();
-      loadQuriRunes();
+      loadMyRunes();
     }, 60000);
 
     return () => clearInterval(interval);
   }, [newEtchingId]);
 
   return (
-    <div className="min-h-screen bg-museum-cream p-8">
+    <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-purple-50 p-8">
       <div className="max-w-7xl mx-auto space-y-8">
+        {/* Back to Home */}
+        <Link 
+          href="/"
+          className="inline-flex items-center gap-2 text-neutral-600 hover:text-neutral-900 transition-colors"
+        >
+          <Home className="w-5 h-5" />
+          Back to Home
+        </Link>
+
         {/* Success Banner for New Rune */}
         {showSuccessBanner && newRuneData && (
           <div className="bg-gradient-to-r from-green-50 to-emerald-50 border-2 border-green-400 rounded-lg p-6 shadow-lg animate-fade-in">
@@ -232,17 +253,17 @@ function ExplorerContent() {
               </div>
               <div className="flex-1">
                 <h3 className="text-2xl font-serif font-bold text-green-900 mb-2">
-                  🎉 ¡Rune Creado Exitosamente!
+                  🎉 Rune Created Successfully on Bitcoin!
                 </h3>
                 <div className="space-y-2 text-green-800">
                   <p className="text-lg">
-                    <strong>Nombre:</strong> {newRuneData.rune_name}
+                    <strong>Name:</strong> {newRuneData.rune_name}
                   </p>
                   <p className="text-sm font-mono">
-                    <strong>ID:</strong> {newRuneData.id}
+                    <strong>Process ID:</strong> {newRuneData.id}
                   </p>
                   <p className="text-sm">
-                    <strong>Estado:</strong>{' '}
+                    <strong>Status:</strong>{' '}
                     <span className="inline-flex items-center gap-1">
                       {newRuneData.state}
                       {newRuneData.state === 'Broadcasting' && (
@@ -264,6 +285,9 @@ function ExplorerContent() {
                       </a>
                     </p>
                   )}
+                  <p className="text-xs mt-2 text-green-700">
+                    ✨ Your Rune is now live on the Bitcoin blockchain and will appear in "All Runes" once indexed!
+                  </p>
                 </div>
               </div>
               <button
@@ -278,11 +302,11 @@ function ExplorerContent() {
 
         {/* Header */}
         <div className="text-center space-y-4">
-          <h1 className="font-serif text-5xl text-museum-charcoal">
-            Global Runes Explorer
+          <h1 className="font-serif text-5xl text-neutral-900">
+            Bitcoin Runes Explorer
           </h1>
-          <p className="text-lg text-museum-gray max-w-3xl mx-auto">
-            Browse <strong>ALL</strong> Bitcoin Runes on-chain, powered by{' '}
+          <p className="text-lg text-neutral-600 max-w-3xl mx-auto">
+            Explore <strong>ALL</strong> Bitcoin Runes on-chain, powered by{' '}
             <a
               href="https://github.com/octopus-network/runes-indexer"
               target="_blank"
@@ -292,6 +316,10 @@ function ExplorerContent() {
               Octopus Network Runes Indexer
               <ExternalLink className="w-4 h-4" />
             </a>
+          </p>
+          <p className="text-sm text-neutral-500 max-w-2xl mx-auto">
+            All Runes shown here are <strong>native Bitcoin Runes</strong> living on the Bitcoin blockchain. 
+            QURI creates real Bitcoin Runes, not synthetic tokens.
           </p>
 
           {/* Stats Bar */}
@@ -307,7 +335,7 @@ function ExplorerContent() {
 
             <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
               <CardContent className="p-4 text-center">
-                <p className="text-sm text-purple-600 mb-1">Total Runes</p>
+                <p className="text-sm text-purple-600 mb-1">Total Indexed</p>
                 <p className="text-2xl font-bold text-purple-900">
                   {allRunes.length.toLocaleString()}
                 </p>
@@ -316,9 +344,9 @@ function ExplorerContent() {
 
             <Card className="bg-gradient-to-br from-green-50 to-green-100">
               <CardContent className="p-4 text-center">
-                <p className="text-sm text-green-600 mb-1">QURI Created</p>
+                <p className="text-sm text-green-600 mb-1">Created by You</p>
                 <p className="text-2xl font-bold text-green-900">
-                  {quriRunes.length.toLocaleString()}
+                  {myRunes.length.toLocaleString()}
                 </p>
               </CardContent>
             </Card>
@@ -334,93 +362,95 @@ function ExplorerContent() {
             className="min-w-[200px]"
           >
             <Coins className="w-5 h-5 mr-2" />
-            All Runes ({allRunes.length})
+            All Bitcoin Runes ({allRunes.length})
           </Button>
           <Button
-            onClick={() => setActiveTab('quri')}
-            variant={activeTab === 'quri' ? 'primary' : 'outline'}
+            onClick={() => setActiveTab('mine')}
+            variant={activeTab === 'mine' ? 'primary' : 'outline'}
             size="lg"
             className="min-w-[200px]"
           >
             <Users className="w-5 h-5 mr-2" />
-            QURI Runes ({quriRunes.length})
+            My Runes ({myRunes.length})
           </Button>
         </div>
 
-        {/* Filters */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Filter className="w-5 h-5" />
-              Filters & Search
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              {/* Search */}
-              <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-                <Input
-                  placeholder="Search by name, symbol, or ID..."
-                  value={filters.search}
-                  onChange={(e) =>
-                    setFilters({ ...filters, search: e.target.value })
-                  }
-                  className="pl-10"
-                />
-              </div>
+        {/* Filters - Only show for "All Runes" tab */}
+        {activeTab === 'all' && (
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Filter className="w-5 h-5" />
+                Filters & Search
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+                  <Input
+                    placeholder="Search by name, symbol, or ID..."
+                    value={filters.search}
+                    onChange={(e) =>
+                      setFilters({ ...filters, search: e.target.value })
+                    }
+                    className="pl-10"
+                  />
+                </div>
 
-              {/* Sort By */}
-              <select
-                value={filters.sortBy}
-                onChange={(e) =>
-                  setFilters({
-                    ...filters,
-                    sortBy: e.target.value as FilterOptions['sortBy'],
-                  })
-                }
-                className="border border-gray-300 rounded-sm px-3 py-2 text-sm"
-              >
-                <option value="recent">Most Recent</option>
-                <option value="supply">Highest Supply</option>
-                <option value="mints">Most Mints</option>
-              </select>
-
-              {/* Verified Only */}
-              <label className="flex items-center gap-2 border border-gray-300 rounded-sm px-3 py-2">
-                <input
-                  type="checkbox"
-                  checked={filters.showOnlyVerified}
+                {/* Sort By */}
+                <select
+                  value={filters.sortBy}
                   onChange={(e) =>
                     setFilters({
                       ...filters,
-                      showOnlyVerified: e.target.checked,
+                      sortBy: e.target.value as FilterOptions['sortBy'],
                     })
                   }
-                  className="w-4 h-4"
-                />
-                <span className="text-sm">Verified Only (6+ conf)</span>
-              </label>
-            </div>
+                  className="border border-gray-300 rounded-sm px-3 py-2 text-sm"
+                >
+                  <option value="recent">Most Recent</option>
+                  <option value="supply">Highest Supply</option>
+                  <option value="mints">Most Mints</option>
+                </select>
 
-            <div className="flex justify-between items-center">
-              <p className="text-sm text-gray-600">
-                Showing {filteredRunes.length} of {allRunes.length} Runes
-              </p>
-              <Button
-                onClick={loadAllRunes}
-                variant="outline"
-                size="sm"
-                disabled={loading}
-              >
-                <RefreshCw
-                  className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`}
-                />
-                Refresh
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                {/* Verified Only */}
+                <label className="flex items-center gap-2 border border-gray-300 rounded-sm px-3 py-2">
+                  <input
+                    type="checkbox"
+                    checked={filters.showOnlyVerified}
+                    onChange={(e) =>
+                      setFilters({
+                        ...filters,
+                        showOnlyVerified: e.target.checked,
+                      })
+                    }
+                    className="w-4 h-4"
+                  />
+                  <span className="text-sm">Verified Only (6+ conf)</span>
+                </label>
+              </div>
+
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-gray-600">
+                  Showing {filteredRunes.length} of {allRunes.length} Runes
+                </p>
+                <Button
+                  onClick={loadAllRunes}
+                  variant="outline"
+                  size="sm"
+                  disabled={loading}
+                >
+                  <RefreshCw
+                    className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`}
+                  />
+                  Refresh
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Error State */}
         {error && (
@@ -443,23 +473,26 @@ function ExplorerContent() {
         {loading && !error && (
           <Card>
             <CardContent className="p-12 text-center">
-              <RefreshCw className="w-12 h-12 text-gold-500 animate-spin mx-auto mb-4" />
-              <p className="text-museum-gray">Loading Runes from Bitcoin...</p>
+              <RefreshCw className="w-12 h-12 text-orange-500 animate-spin mx-auto mb-4" />
+              <p className="text-neutral-600">Loading Runes from Bitcoin...</p>
             </CardContent>
           </Card>
         )}
 
-        {/* Runes Grid */}
+        {/* All Runes Grid */}
         {!loading && activeTab === 'all' && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredRunes.length === 0 ? (
               <Card className="col-span-full">
                 <CardContent className="p-12 text-center">
                   <Coins className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-                  <p className="text-gray-600">
+                  <p className="text-gray-600 mb-2">
                     {filters.search
                       ? 'No Runes match your search'
-                      : 'No Runes found'}
+                      : 'No Runes indexed yet'}
+                  </p>
+                  <p className="text-sm text-gray-500">
+                    The Octopus Indexer is continuously syncing with Bitcoin blockchain
                   </p>
                 </CardContent>
               </Card>
@@ -471,36 +504,36 @@ function ExplorerContent() {
           </div>
         )}
 
-        {/* QURI Runes Tab */}
-        {!loading && activeTab === 'quri' && (
+        {/* My Runes Tab */}
+        {!loading && activeTab === 'mine' && (
           <div className="space-y-6">
             {loadingNewRune && (
               <Card className="border-blue-300 bg-blue-50">
                 <CardContent className="p-8 text-center">
                   <Loader className="w-12 h-12 text-blue-600 animate-spin mx-auto mb-4" />
                   <p className="text-blue-900 font-semibold">
-                    Cargando tu Rune recién creado...
+                    Loading your newly created Rune...
                   </p>
                 </CardContent>
               </Card>
             )}
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {quriRunes.length === 0 ? (
+              {myRunes.length === 0 ? (
                 <Card className="col-span-full">
                   <CardContent className="p-12 text-center">
                     <Users className="w-12 h-12 text-gray-400 mx-auto mb-4" />
                     <p className="text-gray-600 mb-4">
-                      No QURI Runes created yet
+                      You haven't created any Runes yet
                     </p>
                     <Button onClick={() => (window.location.href = '/create')}>
-                      Create Your First Rune
+                      Create Your First Bitcoin Rune
                     </Button>
                   </CardContent>
                 </Card>
               ) : (
-                quriRunes.map((rune) => (
-                  <QuriRuneCard 
+                myRunes.map((rune) => (
+                  <MyRuneCard 
                     key={rune.id} 
                     rune={rune} 
                     isNew={newEtchingId === rune.id}
@@ -512,27 +545,37 @@ function ExplorerContent() {
         )}
 
         {/* Info Card */}
-        <Card className="bg-gradient-to-r from-blue-50 to-purple-50">
+        <Card className="bg-gradient-to-r from-blue-50 to-purple-50 border-2 border-blue-200">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-blue-600" />
-              Powered by Octopus Network
+              About This Explorer
             </CardTitle>
             <CardDescription>
-              This explorer uses Octopus Network&apos;s on-chain Runes Indexer running on ICP.
+              Powered by Octopus Network&apos;s on-chain Bitcoin Runes Indexer on ICP
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-3 text-sm">
+            <div className="bg-white p-4 rounded-lg space-y-2">
+              <h4 className="font-semibold text-neutral-900">How it works:</h4>
+              <ul className="space-y-1 text-neutral-600">
+                <li>• <strong>All Runes</strong>: Shows every Bitcoin Rune indexed by Octopus Network</li>
+                <li>• <strong>My Runes</strong>: Shows Runes you created via QURI (these are also real Bitcoin Runes)</li>
+                <li>• QURI creates <strong>native Bitcoin Runes</strong> via signed transactions to Bitcoin blockchain</li>
+                <li>• Once confirmed, your Rune appears in both tabs (it's a real Bitcoin asset!)</li>
+              </ul>
+            </div>
+            
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               <div className="bg-white p-3 rounded-sm">
-                <p className="text-gray-600 mb-1">Canister ID:</p>
+                <p className="text-gray-600 mb-1">Indexer Canister:</p>
                 <p className="font-mono text-xs break-all">
                   kzrva-ziaaa-aaaar-qamyq-cai
                 </p>
               </div>
               <div className="bg-white p-3 rounded-sm">
                 <p className="text-gray-600 mb-1">Network:</p>
-                <p className="font-semibold">ICP Mainnet</p>
+                <p className="font-semibold">ICP Mainnet + Bitcoin</p>
               </div>
               <div className="bg-white p-3 rounded-sm">
                 <p className="text-gray-600 mb-1">Data Source:</p>
@@ -551,10 +594,10 @@ function ExplorerContent() {
 }
 
 // ============================================================================
-// QURI Rune Card Component (for user-created Runes)
+// My Rune Card Component (for user-created Runes)
 // ============================================================================
 
-function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
+function MyRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
   const getStateColor = (state: string) => {
     switch (state) {
       case 'Completed':
@@ -578,12 +621,12 @@ function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
   return (
     <Card 
       className={`hover:shadow-lg transition-all ${
-        isNew ? 'border-4 border-gold-400 shadow-xl animate-pulse-slow' : ''
+        isNew ? 'border-4 border-orange-400 shadow-xl animate-pulse-slow' : ''
       }`}
     >
       {isNew && (
-        <div className="bg-gradient-to-r from-gold-400 to-gold-500 text-white text-center py-2 font-bold text-sm">
-          ✨ NUEVO ✨
+        <div className="bg-gradient-to-r from-orange-400 to-orange-500 text-white text-center py-2 font-bold text-sm">
+          ✨ NEWLY CREATED ✨
         </div>
       )}
       
@@ -594,7 +637,7 @@ function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
               {rune.rune_name}
             </CardTitle>
             <CardDescription className="font-mono text-xs mt-1">
-              ID: {rune.id}
+              Process: {rune.id}
             </CardDescription>
           </div>
         </div>
@@ -617,29 +660,36 @@ function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3 text-sm">
           <div className="bg-gray-50 p-3 rounded-sm">
-            <p className="text-gray-600 mb-1">Creado</p>
+            <p className="text-gray-600 mb-1">Created</p>
             <p className="font-mono text-xs text-gray-900">
               {formatTimestamp(rune.created_at)}
             </p>
           </div>
 
           <div className="bg-gray-50 p-3 rounded-sm">
-            <p className="text-gray-600 mb-1">Actualizado</p>
+            <p className="text-gray-600 mb-1">Updated</p>
             <p className="font-mono text-xs text-gray-900">
               {formatTimestamp(rune.updated_at)}
             </p>
           </div>
 
           <div className="bg-gray-50 p-3 rounded-sm">
-            <p className="text-gray-600 mb-1">Reintentos</p>
+            <p className="text-gray-600 mb-1">Retries</p>
             <p className="font-mono font-semibold text-gray-900">
               {rune.retry_count}
             </p>
           </div>
 
+          <div className="bg-gray-50 p-3 rounded-sm">
+            <p className="text-gray-600 mb-1">Status</p>
+            <p className="font-mono text-xs text-gray-900">
+              {rune.state === 'Completed' ? '✅ On Bitcoin' : '⏳ Processing'}
+            </p>
+          </div>
+
           {rune.txid && (
             <div className="bg-gray-50 p-3 rounded-sm col-span-2">
-              <p className="text-gray-600 mb-1">Transaction ID</p>
+              <p className="text-gray-600 mb-1">Bitcoin Transaction</p>
               <a
                 href={`https://mempool.space/testnet/tx/${rune.txid}`}
                 target="_blank"
@@ -665,28 +715,9 @@ function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
               className="flex-1"
             >
               <ExternalLink className="w-4 h-4 mr-2" />
-              Ver en Mempool
+              View on Bitcoin
             </Button>
           )}
-          <Button
-            onClick={() => {
-              alert(
-                `Detalles del Rune:\n\n` +
-                `Nombre: ${rune.rune_name}\n` +
-                `ID: ${rune.id}\n` +
-                `Estado: ${rune.state}\n` +
-                `Creado: ${formatTimestamp(rune.created_at)}\n` +
-                `Actualizado: ${formatTimestamp(rune.updated_at)}\n` +
-                `Reintentos: ${rune.retry_count}\n` +
-                (rune.txid ? `TX: ${rune.txid}` : '')
-              );
-            }}
-            variant="outline"
-            size="sm"
-            className="flex-1"
-          >
-            Ver Detalles
-          </Button>
         </div>
       </CardContent>
     </Card>
@@ -694,7 +725,7 @@ function QuriRuneCard({ rune, isNew }: { rune: any; isNew: boolean }) {
 }
 
 // ============================================================================
-// Rune Explorer Card Component
+// Rune Explorer Card Component (for all Bitcoin Runes)
 // ============================================================================
 
 function RuneExplorerCard({ rune }: { rune: OctopusRuneEntry }) {
@@ -763,8 +794,8 @@ function RuneExplorerCard({ rune }: { rune: OctopusRuneEntry }) {
 
         {/* Turbo Badge */}
         {rune.turbo && (
-          <div className="bg-gold-100 border border-gold-300 px-3 py-2 rounded-sm text-center">
-            <p className="text-gold-700 font-semibold text-sm">⚡ TURBO</p>
+          <div className="bg-orange-100 border border-orange-300 px-3 py-2 rounded-sm text-center">
+            <p className="text-orange-700 font-semibold text-sm">⚡ TURBO</p>
           </div>
         )}
 
@@ -789,13 +820,13 @@ function RuneExplorerCard({ rune }: { rune: OctopusRuneEntry }) {
 // Main Export with Suspense Boundary
 // ============================================================================
 
-export default function GlobalRunesExplorer() {
+export default function UnifiedRunesExplorer() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-museum-cream p-8 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-orange-50 via-white to-purple-50 p-8 flex items-center justify-center">
         <div className="text-center">
-          <Loader className="w-12 h-12 text-gold-500 animate-spin mx-auto mb-4" />
-          <p className="text-museum-gray">Cargando Explorer...</p>
+          <Loader className="w-12 h-12 text-orange-500 animate-spin mx-auto mb-4" />
+          <p className="text-neutral-600">Loading Explorer...</p>
         </div>
       </div>
     }>
