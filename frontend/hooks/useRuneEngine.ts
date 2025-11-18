@@ -81,6 +81,34 @@ export function useRuneEngine() {
   );
 
   /**
+   * Get all etchings created by the current user
+   *
+   * @returns Array of etching processes owned by caller
+   *
+   * @example
+   * ```tsx
+   * const { getMyEtchings } = useRuneEngine();
+   * const myEtchings = await getMyEtchings();
+   * console.log(`You have ${myEtchings.length} etchings`);
+   * ```
+   */
+  const getMyEtchings = useCallback(async (): Promise<EtchingProcessView[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRuneEngineActor();
+      const etchings = await actor.get_my_etchings();
+      return etchings;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get my etchings';
+      setError(errorMsg);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
    * List all etching processes with pagination
    */
   const listProcesses = useCallback(
@@ -342,16 +370,47 @@ export function useRuneEngine() {
       setLoading(true);
       setError(null);
       const actor = getRuneEngineActor();
-      const result = await actor.get_role(principal);
+      const result = await actor.get_user_role(principal);
 
-      if (result.length > 0) {
-        return result[0];
+      if ('Ok' in result) {
+        return result.Ok;
       }
       return null;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to get role';
       setError(errorMsg);
       return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get current user's role
+   *
+   * @returns Role of the calling principal
+   *
+   * @example
+   * ```tsx
+   * const { getMyRole } = useRuneEngine();
+   * const role = await getMyRole();
+   * if ('Admin' in role) {
+   *   // Show admin features
+   * }
+   * ```
+   */
+  const getMyRole = useCallback(async (): Promise<Role> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRuneEngineActor();
+      const role = await actor.get_my_role();
+      return role;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get my role';
+      setError(errorMsg);
+      // Default to User role on error
+      return { User: null };
     } finally {
       setLoading(false);
     }
@@ -365,12 +424,120 @@ export function useRuneEngine() {
       setLoading(true);
       setError(null);
       const actor = getRuneEngineActor();
-      const assignments = await actor.list_role_assignments();
-      return assignments;
+      const result = await actor.list_roles();
+      if ('Ok' in result) {
+        return result.Ok;
+      }
+      return [];
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to list role assignments';
       setError(errorMsg);
       return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get canister owner principal
+   *
+   * @returns Owner principal or null if not set
+   */
+  const getOwner = useCallback(async (): Promise<string | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRuneEngineActor();
+      const result = await actor.get_owner();
+      if (result.length > 0) {
+        return result[0].toText();
+      }
+      return null;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get owner';
+      setError(errorMsg);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  // ============================================================================
+  // LOGGING & DEBUGGING
+  // ============================================================================
+
+  /**
+   * Get recent error logs for debugging
+   *
+   * @param limit - Maximum number of logs to return (default: 50)
+   * @returns Array of error log entries or null on failure
+   */
+  const getRecentErrors = useCallback(async (limit = 50n): Promise<any[] | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRuneEngineActor();
+      const result = await actor.get_recent_errors(limit);
+
+      if ('Ok' in result) {
+        return result.Ok;
+      }
+      return null;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get recent errors';
+      setError(errorMsg);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get recent logs (all levels)
+   *
+   * @param limit - Maximum number of logs to return (default: 100)
+   * @returns Array of log entries or null on failure
+   */
+  const getRecentLogs = useCallback(async (limit = 100n): Promise<any[] | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRuneEngineActor();
+      const result = await actor.get_recent_logs(limit);
+
+      if ('Ok' in result) {
+        return result.Ok;
+      }
+      return null;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get recent logs';
+      setError(errorMsg);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get cycles usage history for monitoring
+   *
+   * @returns Array of cycles snapshots or null on failure
+   */
+  const getCyclesHistory = useCallback(async (): Promise<any[] | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRuneEngineActor();
+      const result = await actor.get_cycles_history();
+
+      if ('Ok' in result) {
+        return result.Ok;
+      }
+      return null;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get cycles history';
+      setError(errorMsg);
+      return null;
     } finally {
       setLoading(false);
     }
@@ -385,6 +552,7 @@ export function useRuneEngine() {
     // Core operations
     etchRune,
     getEtchingStatus,
+    getMyEtchings, // ✅ NEW - Get current user's etchings
     listProcesses,
     retryFailedEtching,
 
@@ -403,6 +571,13 @@ export function useRuneEngine() {
     assignRole,
     revokeRole,
     getRole,
+    getMyRole, // ✅ NEW - Get current user's role
     listRoleAssignments,
+    getOwner, // ✅ NEW - Get canister owner
+
+    // Logging & Debugging
+    getRecentErrors, // ✅ NEW - Get error logs
+    getRecentLogs, // ✅ NEW - Get all logs
+    getCyclesHistory, // ✅ NEW - Get cycles usage history
   };
 }

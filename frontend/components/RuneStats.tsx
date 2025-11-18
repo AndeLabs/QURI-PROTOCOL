@@ -36,7 +36,7 @@ export function RuneStats({ refreshInterval = 30000 }: RuneStatsProps) {
         error: null,
       });
       
-      logger.info('Loaded registry stats', registryStats);
+      logger.info('Loaded registry stats', registryStats as any);
     } catch (error) {
       logger.error('Failed to load stats', error instanceof Error ? error : undefined);
       setStats(prev => ({

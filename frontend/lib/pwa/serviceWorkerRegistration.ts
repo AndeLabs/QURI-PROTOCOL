@@ -234,7 +234,32 @@ export async function getCacheStatus() {
  * Hook for React components
  */
 export function useServiceWorker(config?: Config) {
-  if (typeof window === 'undefined') {
+  const [isRegistered, setIsRegistered] = React.useState(false);
+  const [hasUpdate, setHasUpdate] = React.useState(false);
+  const isServer = typeof window === 'undefined';
+
+  React.useEffect(() => {
+    if (isServer || !('serviceWorker' in navigator)) {
+      return;
+    }
+
+    register({
+      onSuccess: (reg) => {
+        setIsRegistered(true);
+        config?.onSuccess?.(reg);
+      },
+      onUpdate: (reg) => {
+        setHasUpdate(true);
+        config?.onUpdate?.(reg);
+      },
+      onWaiting: (reg) => {
+        setHasUpdate(true);
+        config?.onWaiting?.(reg);
+      },
+    });
+  }, [isServer, config]);
+
+  if (isServer) {
     return {
       isSupported: false,
       isRegistered: false,
@@ -244,28 +269,6 @@ export function useServiceWorker(config?: Config) {
       clearCaches: () => Promise.resolve(),
     };
   }
-
-  const [isRegistered, setIsRegistered] = React.useState(false);
-  const [hasUpdate, setHasUpdate] = React.useState(false);
-
-  React.useEffect(() => {
-    if ('serviceWorker' in navigator) {
-      register({
-        onSuccess: (reg) => {
-          setIsRegistered(true);
-          config?.onSuccess?.(reg);
-        },
-        onUpdate: (reg) => {
-          setHasUpdate(true);
-          config?.onUpdate?.(reg);
-        },
-        onWaiting: (reg) => {
-          setHasUpdate(true);
-          config?.onWaiting?.(reg);
-        },
-      });
-    }
-  }, []);
 
   return {
     isSupported: 'serviceWorker' in navigator,
@@ -278,6 +281,7 @@ export function useServiceWorker(config?: Config) {
 }
 
 // Auto-detect React
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 let React: any;
 if (typeof window !== 'undefined') {
   try {
@@ -286,3 +290,4 @@ if (typeof window !== 'undefined') {
     // React not available, hooks won't work but other functions will
   }
 }
+/* eslint-enable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */

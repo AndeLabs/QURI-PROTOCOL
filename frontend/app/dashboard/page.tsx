@@ -13,23 +13,21 @@ import {
   Repeat,
   ArrowLeftRight,
   Lock,
+  AlertCircle,
+  CheckCircle,
+  Loader,
 } from 'lucide-react';
+import { useRegistry } from '@/hooks/useRegistry';
+import { useRuneEngine } from '@/hooks/useRuneEngine';
 
 interface StatCard {
   title: string;
   value: string;
-  change: string;
+  change?: string;
   icon: any;
-  trend: 'up' | 'down';
+  trend?: 'up' | 'down';
+  loading?: boolean;
 }
-
-// TODO: Load stats from DEX canister
-const getStats = async (): Promise<StatCard[]> => {
-  // const actor = await getDexActor();
-  // const stats = await actor.getProtocolStats();
-  // return stats;
-  return [];
-};
 
 interface QuickAction {
   title: string;
@@ -44,38 +42,126 @@ const quickActions: QuickAction[] = [
     title: 'Create Rune',
     description: 'Etch new Bitcoin Runes',
     icon: Sparkles,
-    href: '/dashboard/create',
+    href: '/create',
     color: 'from-gold-400 to-gold-600',
   },
   {
-    title: 'Trade DEX',
-    description: 'Swap, pools & orderbook',
+    title: 'Explorer',
+    description: 'Browse all Runes',
     icon: Repeat,
-    href: '/dashboard/dex',
+    href: '/explorer',
     color: 'from-blue-400 to-blue-600',
   },
   {
-    title: 'Bridge',
-    description: 'Bitcoin ↔ ICP transfers',
+    title: 'Gallery',
+    description: 'View Rune gallery',
     icon: ArrowLeftRight,
-    href: '/dashboard/bridge',
+    href: '/gallery',
     color: 'from-purple-400 to-purple-600',
   },
   {
-    title: 'Stake',
-    description: 'Earn rewards',
+    title: 'Ecosystem',
+    description: 'Learn about QURI',
     icon: Lock,
-    href: '/dashboard/staking',
+    href: '/ecosystem',
     color: 'from-green-400 to-green-600',
   },
 ];
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<StatCard[]>([]);
+  const {
+    getTotalRunes,
+    getStats,
+    getMyRunes,
+    loading: registryLoading,
+    error: registryError,
+  } = useRegistry();
 
+  const {
+    getMyEtchings,
+    healthCheck,
+    loading: engineLoading,
+    error: engineError,
+  } = useRuneEngine();
+
+  const [stats, setStats] = useState<StatCard[]>([]);
+  const [myRunes, setMyRunes] = useState<any[]>([]);
+  const [myEtchings, setMyEtchings] = useState<any[]>([]);
+  const [systemHealthy, setSystemHealthy] = useState(true);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Load dashboard data
   useEffect(() => {
-    getStats().then(setStats);
+    async function loadDashboardData() {
+      try {
+        setIsLoading(true);
+
+        // Load data in parallel
+        const [totalRunes, registryStats, userRunes, userEtchings, health] = await Promise.all([
+          getTotalRunes(),
+          getStats(),
+          getMyRunes(),
+          getMyEtchings(),
+          healthCheck(),
+        ]);
+
+        // Set my runes and etchings
+        setMyRunes(userRunes);
+        setMyEtchings(userEtchings);
+        setSystemHealthy(health?.healthy || false);
+
+        // Build stats cards
+        const statsCards: StatCard[] = [
+          {
+            title: 'Total Runes',
+            value: totalRunes.toString(),
+            icon: Coins,
+            trend: 'up',
+          },
+          {
+            title: 'My Runes',
+            value: userRunes.length.toString(),
+            icon: Users,
+            trend: 'up',
+          },
+          {
+            title: 'My Etchings',
+            value: userEtchings.length.toString(),
+            icon: Activity,
+          },
+          {
+            title: '24h Volume',
+            value: registryStats?.total_volume_24h
+              ? `${Number(registryStats.total_volume_24h).toLocaleString()}`
+              : '0',
+            icon: TrendingUp,
+            trend: 'up',
+          },
+        ];
+
+        setStats(statsCards);
+      } catch (err) {
+        console.error('Failed to load dashboard data:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    }
+
+    loadDashboardData();
+
+    // Refresh every 30 seconds
+    const interval = setInterval(loadDashboardData, 30000);
+    return () => clearInterval(interval);
   }, []);
+
+  // Get active etchings count
+  const activeEtchings = myEtchings.filter(
+    (e) => e.state === 'Building' || e.state === 'Broadcasting'
+  ).length;
+
+  const completedEtchings = myEtchings.filter((e) => e.state === 'Completed').length;
+
+  const failedEtchings = myEtchings.filter((e) => e.state === 'Failed').length;
 
   return (
     <div className="space-y-8">
@@ -89,10 +175,33 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {/* System Health Alert */}
+      {!isLoading && !systemHealthy && (
+        <div className="bg-red-50 border border-red-200 rounded-xl p-4 flex items-start gap-3">
+          <AlertCircle className="h-5 w-5 text-red-600 flex-shrink-0 mt-0.5" />
+          <div>
+            <h3 className="font-semibold text-red-900">System Health Warning</h3>
+            <p className="text-sm text-red-700 mt-1">
+              One or more backend services are experiencing issues. Some features may be unavailable.
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Stats Grid */}
-      {stats.length > 0 && (
-        <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
-          {stats.map((stat) => {
+      <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-4">
+        {isLoading ? (
+          // Loading skeleton
+          Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="relative overflow-hidden rounded-xl border border-museum-light-gray bg-museum-white p-6 animate-pulse"
+            >
+              <div className="h-20 bg-museum-cream rounded"></div>
+            </div>
+          ))
+        ) : (
+          stats.map((stat) => {
             const Icon = stat.icon;
             return (
               <div
@@ -103,21 +212,23 @@ export default function DashboardPage() {
                   <div className="rounded-lg bg-museum-cream p-2">
                     <Icon className="h-5 w-5 text-museum-charcoal" />
                   </div>
-                  <span
-                    className={`text-sm font-medium ${
-                      stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
-                    {stat.change}
-                  </span>
+                  {stat.change && (
+                    <span
+                      className={`text-sm font-medium ${
+                        stat.trend === 'up' ? 'text-green-600' : 'text-red-600'
+                      }`}
+                    >
+                      {stat.change}
+                    </span>
+                  )}
                 </div>
                 <p className="text-sm text-museum-dark-gray mb-1">{stat.title}</p>
                 <p className="text-3xl font-bold text-museum-black">{stat.value}</p>
               </div>
             );
-          })}
-        </div>
-      )}
+          })
+        )}
+      </div>
 
       {/* Quick Actions */}
       <div>
@@ -134,16 +245,16 @@ export default function DashboardPage() {
                     className={`absolute inset-0 bg-gradient-to-br ${action.color} opacity-0 group-hover:opacity-5 transition-opacity`}
                   />
                   <div className="relative">
-                    <div className={`rounded-lg bg-gradient-to-br ${action.color} p-3 w-12 h-12 flex items-center justify-center mb-4`}>
+                    <div
+                      className={`rounded-lg bg-gradient-to-br ${action.color} p-3 w-12 h-12 flex items-center justify-center mb-4`}
+                    >
                       <Icon className="h-6 w-6 text-white" />
                     </div>
                     <h3 className="font-semibold text-museum-black mb-2 flex items-center justify-between">
                       {action.title}
                       <ArrowUpRight className="h-4 w-4 text-museum-dark-gray group-hover:text-gold-600 transition-colors" />
                     </h3>
-                    <p className="text-sm text-museum-dark-gray">
-                      {action.description}
-                    </p>
+                    <p className="text-sm text-museum-dark-gray">{action.description}</p>
                   </div>
                 </div>
               </Link>
@@ -152,37 +263,114 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* Recent Activity */}
-      {/* TODO: Implement recent activity from DEX canister */}
-      {/* <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-serif text-2xl font-bold text-museum-black">
-            Recent Activity
-          </h2>
-          <Link href="/dashboard/explorer">
-            <Button variant="outline" size="sm">
-              View All
-              <ArrowUpRight className="ml-2 h-4 w-4" />
-            </Button>
-          </Link>
-        </div>
-      </div> */}
+      {/* My Recent Etchings */}
+      {myEtchings.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-serif text-2xl font-bold text-museum-black">
+              My Recent Etchings
+            </h2>
+            <Link href="/explorer?tab=mine">
+              <Button variant="outline" size="sm">
+                View All
+                <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
 
-      {/* Featured Pools */}
-      {/* TODO: Implement top pools from DEX canister */}
-      {/* <div>
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="font-serif text-2xl font-bold text-museum-black">
-            Top Pools
-          </h2>
-          <Link href="/dashboard/dex/pools">
-            <Button variant="outline" size="sm">
-              View All Pools
-              <ArrowUpRight className="ml-2 h-4 w-4" />
+          {/* Etching Summary */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-6">
+            <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <Loader className="h-5 w-5 text-blue-600" />
+                <div>
+                  <p className="text-sm text-blue-700">Active</p>
+                  <p className="text-2xl font-bold text-blue-900">{activeEtchings}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <CheckCircle className="h-5 w-5 text-green-600" />
+                <div>
+                  <p className="text-sm text-green-700">Completed</p>
+                  <p className="text-2xl font-bold text-green-900">{completedEtchings}</p>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-red-50 border border-red-200 rounded-lg p-4">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="h-5 w-5 text-red-600" />
+                <div>
+                  <p className="text-sm text-red-700">Failed</p>
+                  <p className="text-2xl font-bold text-red-900">{failedEtchings}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Recent etchings list */}
+          <div className="grid grid-cols-1 gap-4">
+            {myEtchings.slice(0, 5).map((etching) => (
+              <div
+                key={etching.id}
+                className="border border-museum-light-gray rounded-lg p-4 bg-museum-white hover:border-gold-300 transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex-1">
+                    <h3 className="font-semibold text-museum-black">{etching.rune_name}</h3>
+                    <p className="text-sm text-museum-dark-gray font-mono">{etching.id}</p>
+                  </div>
+                  <div className="flex items-center gap-4">
+                    <div
+                      className={`px-3 py-1 rounded-full text-sm font-medium ${
+                        etching.state === 'Completed'
+                          ? 'bg-green-100 text-green-800'
+                          : etching.state === 'Failed'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      {etching.state}
+                    </div>
+                    {etching.txid && (
+                      <a
+                        href={`https://mempool.space/testnet/tx/${etching.txid}`}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-600 hover:text-blue-800"
+                      >
+                        <ArrowUpRight className="h-4 w-4" />
+                      </a>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Empty state for new users */}
+      {!isLoading && myEtchings.length === 0 && (
+        <div className="border-2 border-dashed border-museum-light-gray rounded-xl p-12 text-center">
+          <Sparkles className="h-12 w-12 text-museum-dark-gray mx-auto mb-4" />
+          <h3 className="font-serif text-xl font-bold text-museum-black mb-2">
+            Start Creating Bitcoin Runes
+          </h3>
+          <p className="text-museum-dark-gray mb-6">
+            You haven&apos;t created any Runes yet. Create your first Bitcoin Rune now!
+          </p>
+          <Link href="/create">
+            <Button size="lg">
+              <Sparkles className="h-5 w-5 mr-2" />
+              Create Your First Rune
             </Button>
           </Link>
         </div>
-      </div> */}
+      )}
     </div>
   );
 }

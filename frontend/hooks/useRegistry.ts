@@ -314,6 +314,148 @@ export function useRegistry() {
     }
   }, []);
 
+  // ============================================================================
+  // ADMIN & MONITORING
+  // ============================================================================
+
+  /**
+   * Get comprehensive canister metrics
+   *
+   * Includes query metrics, performance stats, error rates, and resource usage.
+   * Useful for admin dashboards and monitoring.
+   *
+   * @returns RegistryMetrics object or null on failure
+   *
+   * @example
+   * ```tsx
+   * const { getCanisterMetrics } = useRegistry();
+   * const metrics = await getCanisterMetrics();
+   * console.log(`Total queries: ${metrics.total_queries}`);
+   * console.log(`Error rate: ${metrics.total_errors / metrics.total_queries}`);
+   * ```
+   */
+  const getCanisterMetrics = useCallback(async (): Promise<any | null> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRegistryActor();
+      const metrics = await actor.get_canister_metrics();
+      return metrics;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get canister metrics';
+      setError(errorMsg);
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Check if a principal is whitelisted for rate limiting
+   *
+   * @param principal - Principal to check (as string or Principal object)
+   * @returns true if whitelisted, false otherwise
+   */
+  const isWhitelisted = useCallback(async (principal: string): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRegistryActor();
+      const whitelisted = await actor.is_whitelisted(principal);
+      return whitelisted;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to check whitelist';
+      setError(errorMsg);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Add a principal to the rate limit whitelist (admin only)
+   *
+   * @param principal - Principal to whitelist
+   * @returns true on success, false on failure
+   */
+  const addToWhitelist = useCallback(async (principal: string): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRegistryActor();
+      const result = await actor.add_to_whitelist(principal);
+
+      if ('Ok' in result) {
+        return true;
+      } else {
+        setError(result.Err);
+        return false;
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to add to whitelist';
+      setError(errorMsg);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Remove a principal from the rate limit whitelist (admin only)
+   *
+   * @param principal - Principal to remove from whitelist
+   * @returns true on success, false on failure
+   */
+  const removeFromWhitelist = useCallback(async (principal: string): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRegistryActor();
+      const result = await actor.remove_from_whitelist(principal);
+
+      if ('Ok' in result) {
+        return true;
+      } else {
+        setError(result.Err);
+        return false;
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to remove from whitelist';
+      setError(errorMsg);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Reset rate limit for a specific principal (admin only)
+   *
+   * @param principal - Principal to reset rate limit for
+   * @returns true on success, false on failure
+   */
+  const resetRateLimit = useCallback(async (principal: string): Promise<boolean> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = getRegistryActor();
+      const result = await actor.reset_rate_limit(principal);
+
+      if ('Ok' in result) {
+        return true;
+      } else {
+        setError(result.Err);
+        return false;
+      }
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to reset rate limit';
+      setError(errorMsg);
+      return false;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return {
     // State
     loading,
@@ -324,7 +466,7 @@ export function useRegistry() {
     getRune,
     getRuneByName,
     getMyRunes,
-    listRunes, // ✅ NEW: Advanced pagination with sorting
+    listRunes, // ✅ Advanced pagination with sorting
     searchRunes,
     getTrending,
     getTotalRunes,
@@ -334,5 +476,12 @@ export function useRegistry() {
     registerRune,
     updateVolume,
     updateHolderCount,
+
+    // Admin & Monitoring
+    getCanisterMetrics, // ✅ NEW - Comprehensive canister metrics
+    isWhitelisted, // ✅ NEW - Check whitelist status
+    addToWhitelist, // ✅ NEW - Add to whitelist (admin)
+    removeFromWhitelist, // ✅ NEW - Remove from whitelist (admin)
+    resetRateLimit, // ✅ NEW - Reset rate limit (admin)
   };
 }
