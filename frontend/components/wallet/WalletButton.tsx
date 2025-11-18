@@ -23,10 +23,10 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
 
   const handleConnect = async () => {
     try {
-      // Show popup blocker warning after 1 second
+      // Show popup blocker warning after 3 seconds
       const popupWarningTimeout = setTimeout(() => {
         authToast.popupBlocked();
-      }, 1000);
+      }, 3000);
 
       const success = await connect();
       clearTimeout(popupWarningTimeout);
