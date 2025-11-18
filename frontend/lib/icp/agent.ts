@@ -55,102 +55,71 @@ export async function getAuthClient(): Promise<AuthClient> {
 }
 
 export async function login(): Promise<boolean> {
-  // STEP 1: AUTO-CLEAR CACHE before attempting login
-  // This ensures we don't have stale auth data causing issues
-  await clearAuthCache();
-  
-  // STEP 1.5: Wait for IndexedDB cleanup to fully complete
-  await new Promise(resolve => setTimeout(resolve, 500));
-  
-  // STEP 2: Recreate AuthClient with fresh state
-  authClient = null; // Clear existing reference
-  authClient = await AuthClient.create();
-  const client = authClient;
-  
-  logger.info('AuthClient recreated after cache clear');
-  
-  // Use local Internet Identity in development, mainnet in production
-  const II_CANISTER_ID = process.env.NEXT_PUBLIC_INTERNET_IDENTITY_CANISTER_ID || 'rdmx6-jaaaa-aaaaa-aaadq-cai';
-  
-  // STEP 3: Try multiple URL strategies in order
-  const urlStrategies = IS_LOCAL_DEV ? [
-    // Strategy 1: Subdomain format (recommended by DFINITY)
-    `http://${II_CANISTER_ID}.localhost:8000`,
-    // Strategy 2: Query param format (fallback)
-    `http://localhost:8000?canisterId=${II_CANISTER_ID}`,
-    // Strategy 3: Direct 127.0.0.1 (if localhost DNS fails)
-    `http://${II_CANISTER_ID}.127.0.0.1:8000`,
-  ] : [
-    `https://identity.ic0.app`
-  ];
+  try {
+    const client = await getAuthClient();
 
-  // STEP 4: Try each strategy until one works
-  for (let i = 0; i < urlStrategies.length; i++) {
-    const identityProvider = urlStrategies[i];
-    logger.info(`Login attempt ${i + 1}/${urlStrategies.length}`, { 
-      identityProvider, 
-      canisterId: II_CANISTER_ID 
-    });
+    // Determine identity provider URL
+    const identityProvider = IS_LOCAL_DEV
+      ? `http://localhost:4943?canisterId=rdmx6-jaaaa-aaaaa-aaadq-cai`
+      : 'https://identity.ic0.app';
 
-    const success = await Promise.race([
-      // Main login promise
-      new Promise<boolean>((resolve) => {
-        client.login({
-          identityProvider,
-          maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days in nanoseconds
-          onSuccess: async () => {
-            // Update agent with authenticated identity
-            const identity = client.getIdentity();
-            agent = new HttpAgent({
-              host: IC_HOST,
-              identity,
-            });
+    logger.info('🔐 Starting Internet Identity login...', { identityProvider });
 
-            // Only fetch root key in local development
-            if (IS_LOCAL_DEV) {
-              try {
-                await agent.fetchRootKey();
-                logger.info('Root key fetched after login');
-              } catch (err) {
-                logger.warn('Failed to fetch root key after login', { error: err });
-              }
+    return new Promise((resolve) => {
+      // Set a reasonable timeout (2 minutes for user to complete auth)
+      const timeout = setTimeout(() => {
+        logger.warn('⏱️ Login timed out - user may have closed the popup');
+        resolve(false);
+      }, 120000); // 2 minutes
+
+      client.login({
+        identityProvider,
+        maxTimeToLive: BigInt(7 * 24 * 60 * 60 * 1000 * 1000 * 1000), // 7 days
+        onSuccess: async () => {
+          clearTimeout(timeout);
+
+          // Update agent with authenticated identity
+          const identity = client.getIdentity();
+          agent = new HttpAgent({
+            host: IC_HOST,
+            identity,
+          });
+
+          // Fetch root key only in local development
+          if (IS_LOCAL_DEV) {
+            try {
+              await agent.fetchRootKey();
+              logger.info('Root key fetched after login');
+            } catch (err) {
+              logger.warn('Failed to fetch root key', { error: err });
             }
+          }
 
-            logger.info('✅ Login successful', { strategy: i + 1, identityProvider });
-            resolve(true);
-          },
-          onError: (error) => {
-            logger.warn(`Login strategy ${i + 1} failed`, { 
-              identityProvider,
-              error: typeof error === 'string' ? error : String(error)
-            });
-            resolve(false);
-          },
-        });
-      }),
-      // Timeout promise (30 seconds)
-      new Promise<boolean>((resolve) => {
-        setTimeout(() => {
-          logger.warn(`Login strategy ${i + 1} timed out after 30s`, { identityProvider });
+          logger.info('✅ Login successful', {
+            principal: identity.getPrincipal().toText()
+          });
+          resolve(true);
+        },
+        onError: (error) => {
+          clearTimeout(timeout);
+          logger.error('❌ Login failed', {
+            error: typeof error === 'string' ? error : String(error)
+          });
           resolve(false);
-        }, 30000);
-      })
-    ]);
+        },
+      });
 
-    if (success) {
-      return true; // Success! Exit early
-    }
-
-    // If this wasn't the last strategy, wait a bit before trying next
-    if (i < urlStrategies.length - 1) {
-      logger.info(`Waiting 1s before trying next strategy...`);
-      await new Promise(resolve => setTimeout(resolve, 1000));
-    }
+      // Detect popup blockers
+      setTimeout(() => {
+        // If popup is blocked, the auth window won't open
+        // We can't directly detect this, but we can inform the user
+        logger.info('💡 If nothing happens, please allow popups for this site');
+      }, 1000);
+    });
+  } catch (error) {
+    logger.error('💥 Login error', error instanceof Error ? error : undefined);
+    return false;
   }
-
-  // All strategies failed
-  logger.error('All login strategies failed', new Error('LOGIN_FAILED'));
-  return false;
 }
 
 export async function logout(): Promise<void> {
@@ -168,74 +137,6 @@ export async function logout(): Promise<void> {
   logger.info('Logout successful');
 }
 
-export async function clearAuthCache(): Promise<void> {
-  // Clear all auth-related storage - COMPREHENSIVE CLEANUP
-  if (typeof window !== 'undefined') {
-    try {
-      // 1. Clear ALL localStorage (Internet Identity uses various keys)
-      const keysToRemove = Object.keys(window.localStorage).filter(
-        key => key.includes('ic-') || 
-               key.includes('identity') || 
-               key.includes('delegation') ||
-               key.includes('auth')
-      );
-      keysToRemove.forEach(key => {
-        try {
-          window.localStorage.removeItem(key);
-          logger.debug(`Removed localStorage key: ${key}`);
-        } catch (e) {
-          logger.warn(`Failed to remove localStorage key: ${key}`, { error: e });
-        }
-      });
-      
-      // 2. Clear IndexedDB databases used by auth-client
-      if (window.indexedDB) {
-        const dbNames = ['auth-client-db', 'ic-keyval'];
-        for (const dbName of dbNames) {
-          try {
-            const deleteRequest = window.indexedDB.deleteDatabase(dbName);
-            await new Promise<void>((resolve, reject) => {
-              deleteRequest.onsuccess = () => {
-                logger.debug(`Deleted IndexedDB: ${dbName}`);
-                resolve();
-              };
-              deleteRequest.onerror = () => reject(deleteRequest.error);
-              deleteRequest.onblocked = () => {
-                logger.warn(`IndexedDB deletion blocked: ${dbName}`);
-                resolve(); // Don't fail, just warn
-              };
-            });
-          } catch (e) {
-            logger.warn(`Failed to delete IndexedDB: ${dbName}`, { error: e });
-          }
-        }
-      }
-      
-      // 3. Clear sessionStorage as well
-      const sessionKeys = Object.keys(window.sessionStorage).filter(
-        key => key.includes('ic-') || 
-               key.includes('identity') || 
-               key.includes('delegation') ||
-               key.includes('auth')
-      );
-      sessionKeys.forEach(key => {
-        try {
-          window.sessionStorage.removeItem(key);
-          logger.debug(`Removed sessionStorage key: ${key}`);
-        } catch (e) {
-          logger.warn(`Failed to remove sessionStorage key: ${key}`, { error: e });
-        }
-      });
-      
-      logger.info('✅ Auth cache cleared completely', {
-        localStorageKeys: keysToRemove.length,
-        sessionStorageKeys: sessionKeys.length
-      });
-    } catch (error) {
-      logger.error('Failed to clear auth cache', error instanceof Error ? error : new Error(String(error)));
-    }
-  }
-}
 
 export async function isAuthenticated(): Promise<boolean> {
   const client = await getAuthClient();
