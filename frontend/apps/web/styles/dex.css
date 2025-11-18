@@ -1,0 +1,410 @@
+/* DEX Components Styling */
+
+/* Swap Interface */
+.swap-interface {
+  @apply space-y-6;
+}
+
+.swap-header {
+  @apply flex items-center justify-between mb-6;
+}
+
+.slippage-settings {
+  @apply flex items-center gap-2;
+}
+
+.slippage-settings label {
+  @apply text-sm text-museum-dark-gray;
+}
+
+.slippage-settings select {
+  @apply rounded-lg border border-museum-light-gray bg-museum-white px-3 py-1.5 text-sm focus:border-gold-500 focus:outline-none;
+}
+
+.swap-form {
+  @apply space-y-4;
+}
+
+.token-input {
+  @apply rounded-xl border border-museum-light-gray bg-museum-white p-4;
+}
+
+.token-input-header {
+  @apply flex items-center justify-between mb-3 text-sm;
+}
+
+.token-input-header .balance {
+  @apply text-museum-dark-gray;
+}
+
+.token-input-main {
+  @apply flex items-center gap-3;
+}
+
+.token-input-main input {
+  @apply flex-1 text-2xl font-semibold bg-transparent border-none focus:outline-none text-museum-black;
+}
+
+.token-select {
+  @apply flex items-center gap-2 rounded-lg border border-museum-light-gray bg-museum-cream px-4 py-2 hover:border-gold-400 transition-colors;
+}
+
+.token-select img {
+  @apply w-6 h-6 rounded-full;
+}
+
+.swap-flip {
+  @apply flex justify-center -my-2 relative z-10;
+}
+
+.flip-button {
+  @apply w-10 h-10 rounded-full border-2 border-museum-light-gray bg-museum-white flex items-center justify-center hover:border-gold-400 hover:bg-gold-50 transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.swap-details {
+  @apply rounded-xl border border-museum-light-gray bg-museum-cream p-4 space-y-2;
+}
+
+.detail-row {
+  @apply flex items-center justify-between text-sm;
+}
+
+.detail-row span:first-child {
+  @apply text-museum-dark-gray;
+}
+
+.detail-row span:last-child {
+  @apply text-museum-black font-medium;
+}
+
+.error-message {
+  @apply rounded-lg bg-red-50 border border-red-200 p-4 text-sm text-red-700;
+}
+
+.swap-button {
+  @apply w-full rounded-xl bg-gold-500 hover:bg-gold-600 text-white font-semibold py-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+}
+
+/* Liquidity Pools */
+.liquidity-pools {
+  @apply space-y-6;
+}
+
+.pool-list,
+.user-positions {
+  @apply space-y-4;
+}
+
+.pools-table,
+.positions-table {
+  @apply w-full border-collapse;
+}
+
+.pools-table thead tr,
+.positions-table thead tr {
+  @apply border-b border-museum-light-gray;
+}
+
+.pools-table th,
+.positions-table th {
+  @apply text-left text-sm font-medium text-museum-dark-gray pb-3;
+}
+
+.pools-table td,
+.positions-table td {
+  @apply py-4 text-museum-black;
+}
+
+.pools-table tr:hover,
+.positions-table tr:hover {
+  @apply bg-museum-cream;
+}
+
+.pools-table .apy {
+  @apply text-green-600 font-semibold;
+}
+
+.add-liquidity-form {
+  @apply mt-6 rounded-xl border border-museum-light-gray bg-museum-white p-6 space-y-4;
+}
+
+.input-group {
+  @apply space-y-2;
+}
+
+.input-group label {
+  @apply block text-sm font-medium text-museum-dark-gray;
+}
+
+.input-group input {
+  @apply w-full rounded-lg border border-museum-light-gray bg-museum-white px-4 py-2.5 focus:border-gold-500 focus:outline-none;
+}
+
+.button-group {
+  @apply flex gap-3;
+}
+
+/* Orderbook Trading */
+.orderbook-trading {
+  @apply space-y-6;
+}
+
+.trading-layout {
+  @apply grid grid-cols-1 lg:grid-cols-3 gap-6;
+}
+
+.orderbook-panel {
+  @apply lg:col-span-1 rounded-xl border border-museum-light-gray bg-museum-white overflow-hidden;
+}
+
+.orderbook-panel h3 {
+  @apply px-4 py-3 border-b border-museum-light-gray font-semibold text-museum-black;
+}
+
+.asks,
+.bids {
+  @apply max-h-[300px] overflow-y-auto;
+}
+
+.asks table,
+.bids table {
+  @apply w-full text-sm;
+}
+
+.asks thead,
+.bids thead {
+  @apply sticky top-0 bg-museum-white border-b border-museum-light-gray;
+}
+
+.asks th,
+.bids th {
+  @apply text-left px-4 py-2 text-xs font-medium text-museum-dark-gray;
+}
+
+.asks td,
+.bids td {
+  @apply px-4 py-2;
+}
+
+.ask-row {
+  @apply hover:bg-red-50 transition-colors;
+}
+
+.bid-row {
+  @apply hover:bg-green-50 transition-colors;
+}
+
+.price-sell {
+  @apply text-red-600 font-medium;
+}
+
+.price-buy {
+  @apply text-green-600 font-medium;
+}
+
+.spread {
+  @apply px-4 py-3 border-y border-museum-light-gray bg-museum-cream;
+}
+
+.mid-price {
+  @apply text-center font-semibold text-museum-black mb-1;
+}
+
+.spread-value {
+  @apply text-center text-sm text-museum-dark-gray;
+}
+
+.order-form-panel {
+  @apply lg:col-span-1 space-y-4;
+}
+
+.order-side-selector {
+  @apply flex gap-2 p-1 rounded-lg bg-museum-cream;
+}
+
+.order-side-selector button {
+  @apply flex-1 rounded-md px-4 py-2.5 font-medium transition-all;
+}
+
+.order-side-selector button.buy {
+  @apply text-museum-dark-gray hover:text-green-700;
+}
+
+.order-side-selector button.buy.active {
+  @apply bg-green-600 text-white;
+}
+
+.order-side-selector button.sell {
+  @apply text-museum-dark-gray hover:text-red-700;
+}
+
+.order-side-selector button.sell.active {
+  @apply bg-red-600 text-white;
+}
+
+.form-group {
+  @apply space-y-2;
+}
+
+.form-group label {
+  @apply block text-sm font-medium text-museum-dark-gray;
+}
+
+.form-group input,
+.form-group select {
+  @apply w-full rounded-lg border border-museum-light-gray bg-museum-white px-4 py-2.5 focus:border-gold-500 focus:outline-none;
+}
+
+.order-button {
+  @apply w-full rounded-xl font-semibold py-4 transition-colors disabled:opacity-50 disabled:cursor-not-allowed;
+}
+
+.order-button.buy {
+  @apply bg-green-600 hover:bg-green-700 text-white;
+}
+
+.order-button.sell {
+  @apply bg-red-600 hover:bg-red-700 text-white;
+}
+
+.trades-panel {
+  @apply lg:col-span-1 rounded-xl border border-museum-light-gray bg-museum-white overflow-hidden;
+}
+
+.trades-table {
+  @apply w-full text-sm;
+}
+
+.trades-table thead {
+  @apply border-b border-museum-light-gray bg-museum-cream;
+}
+
+.trades-table th {
+  @apply text-left px-4 py-3 text-xs font-medium text-museum-dark-gray;
+}
+
+.trades-table td {
+  @apply px-4 py-2;
+}
+
+.trades-table tr:hover {
+  @apply bg-museum-cream;
+}
+
+.trades-table td.buy {
+  @apply text-green-600 font-medium;
+}
+
+.trades-table td.sell {
+  @apply text-red-600 font-medium;
+}
+
+.user-orders-panel {
+  @apply mt-6 rounded-xl border border-museum-light-gray bg-museum-white p-6;
+}
+
+.user-orders-table {
+  @apply w-full text-sm;
+}
+
+.user-orders-table thead {
+  @apply border-b border-museum-light-gray;
+}
+
+.user-orders-table th {
+  @apply text-left px-4 py-3 text-xs font-medium text-museum-dark-gray;
+}
+
+.user-orders-table td {
+  @apply px-4 py-3;
+}
+
+.user-orders-table tr:hover {
+  @apply bg-museum-cream;
+}
+
+/* Bridge Interface */
+.bridge-interface {
+  @apply space-y-6;
+}
+
+.subtitle {
+  @apply text-museum-dark-gray;
+}
+
+.direction-selector {
+  @apply flex gap-2 p-1 rounded-lg bg-museum-cream max-w-md mx-auto;
+}
+
+.direction-selector button {
+  @apply flex-1 rounded-md px-6 py-3 font-medium transition-all text-museum-dark-gray;
+}
+
+.direction-selector button.active {
+  @apply bg-museum-white border border-museum-light-gray text-museum-black shadow-sm;
+}
+
+.bridge-form {
+  @apply space-y-4;
+}
+
+.bridge-form .form-group {
+  @apply space-y-2;
+}
+
+.bridge-form label {
+  @apply block text-sm font-medium text-museum-dark-gray;
+}
+
+.bridge-form input,
+.bridge-form select {
+  @apply w-full rounded-lg border border-museum-light-gray bg-museum-white px-4 py-2.5 focus:border-gold-500 focus:outline-none;
+}
+
+.bridge-form .limits {
+  @apply text-xs text-museum-dark-gray mt-1;
+}
+
+.bridge-button {
+  @apply w-full rounded-xl bg-gold-500 hover:bg-gold-600 text-white font-semibold py-4 disabled:opacity-50 disabled:cursor-not-allowed transition-colors;
+}
+
+.transaction-history {
+  @apply space-y-4;
+}
+
+.transactions-table {
+  @apply w-full;
+}
+
+.transactions-table thead {
+  @apply border-b border-museum-light-gray;
+}
+
+.transactions-table th {
+  @apply text-left py-3 text-sm font-medium text-museum-dark-gray;
+}
+
+.transactions-table td {
+  @apply py-3;
+}
+
+.transactions-table tr:hover {
+  @apply bg-museum-cream;
+}
+
+.status {
+  @apply inline-block px-2 py-1 rounded-full text-xs font-medium;
+}
+
+.status.completed {
+  @apply bg-green-100 text-green-700;
+}
+
+.status.pending {
+  @apply bg-yellow-100 text-yellow-700;
+}
+
+.status.failed {
+  @apply bg-red-100 text-red-700;
+}
