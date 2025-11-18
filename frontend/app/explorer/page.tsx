@@ -14,6 +14,7 @@ import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
 import { ButtonPremium } from '@/components/ui/ButtonPremium';
 import { RuneGrid, RuneFilters, EtchingCard, type FilterState } from '@/components/runes';
+import { Breadcrumb, BreadcrumbPresets } from '@/components/Breadcrumb';
 import {
   Home,
   Coins,
@@ -206,15 +207,9 @@ export default function ExplorerPagePremium() {
       exit="exit"
       variants={reducedMotion ? undefined : pageTransition}
     >
-      {/* Back to Home */}
+      {/* Breadcrumb Navigation */}
       <motion.div variants={reducedMotion ? undefined : fadeInUp}>
-        <Link
-          href="/"
-          className="inline-flex items-center gap-2 text-museum-dark-gray hover:text-museum-black transition-colors group"
-        >
-          <Home className="h-5 w-5 group-hover:-translate-x-1 transition-transform" />
-          Back to Home
-        </Link>
+        <Breadcrumb items={BreadcrumbPresets.explorer} showDashboardHome={true} />
       </motion.div>
 
       {/* Header */}

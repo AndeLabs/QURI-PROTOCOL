@@ -42,39 +42,27 @@ const navigation: NavItem[] = [
   },
   {
     name: 'Create Rune',
-    href: '/dashboard/create',
+    href: '/create',
     icon: Sparkles,
     description: 'Etch new Bitcoin Runes',
   },
   {
-    name: 'DEX Trading',
-    href: '/dashboard/dex',
-    icon: Repeat,
-    description: 'Swap, pools & orderbook',
-  },
-  {
     name: 'Bridge',
-    href: '/dashboard/bridge',
+    href: '/bridge',
     icon: ArrowLeftRight,
     description: 'Bitcoin ↔ ICP transfers',
   },
   {
-    name: 'Staking',
-    href: '/dashboard/staking',
-    icon: Lock,
-    description: 'Stake Runes for rewards',
-  },
-  {
     name: 'Explorer',
-    href: '/dashboard/explorer',
+    href: '/explorer',
     icon: Search,
     description: 'Browse all Runes',
   },
   {
-    name: 'Analytics',
-    href: '/dashboard/analytics',
-    icon: BarChart3,
-    description: 'Stats & insights',
+    name: 'Gallery',
+    href: '/gallery',
+    icon: Coins,
+    description: 'View Runes collection',
   },
 ];
 
@@ -158,8 +146,10 @@ export default function DashboardLayout({
         </nav>
 
         {/* User section */}
-        <div className="border-t border-museum-light-gray p-4">
-          <WalletButton variant="default" />
+        <div className="border-t border-museum-light-gray p-4 overflow-hidden">
+          <div className="w-full">
+            <WalletButton variant="compact" />
+          </div>
         </div>
       </aside>
 
@@ -175,7 +165,7 @@ export default function DashboardLayout({
           </button>
 
           <div className="flex items-center gap-4 ml-auto">
-            <Link href="/dashboard/create">
+            <Link href="/create">
               <Button size="sm" className="bg-gold-500 hover:bg-gold-600 text-white">
                 <Sparkles className="h-4 w-4 mr-2" />
                 Create Rune

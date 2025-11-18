@@ -13,6 +13,7 @@ import { DirectionSelector, AmountInput, StatusTracker } from '@/components/brid
 import { useICP } from '@/lib/icp/ICPProvider';
 import { useBitcoinIntegration } from '@/hooks/useBitcoinIntegration';
 import type { BridgeDirection, BridgeStep } from '@/components/bridge';
+import { Breadcrumb, BreadcrumbPresets } from '@/components/Breadcrumb';
 
 type BridgeStage = 'input' | 'review' | 'processing' | 'completed';
 
@@ -110,14 +111,8 @@ export default function BridgePage() {
       <div className="min-h-screen bg-museum-cream">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="space-y-8">
-            {/* Back to Home */}
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-museum-dark-gray hover:text-museum-black transition-colors"
-            >
-              <Home className="h-5 w-5" />
-              Back to Home
-            </Link>
+            {/* Breadcrumb Navigation */}
+            <Breadcrumb items={BreadcrumbPresets.bridge} showDashboardHome={true} />
 
             {/* Header */}
             <div>
@@ -213,13 +208,8 @@ export default function BridgePage() {
       <div className="min-h-screen bg-museum-cream">
         <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
           <div className="space-y-8">
-            <Link
-              href="/"
-              className="inline-flex items-center gap-2 text-museum-dark-gray hover:text-museum-black transition-colors"
-            >
-              <Home className="h-5 w-5" />
-              Back to Home
-            </Link>
+            {/* Breadcrumb Navigation */}
+            <Breadcrumb items={BreadcrumbPresets.bridge} showDashboardHome={true} />
 
             <div>
               <h1 className="font-serif text-4xl font-bold text-museum-black mb-2">
@@ -291,13 +281,8 @@ export default function BridgePage() {
     <div className="min-h-screen bg-museum-cream">
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-museum-dark-gray hover:text-museum-black transition-colors"
-          >
-            <Home className="h-5 w-5" />
-            Back to Home
-          </Link>
+          {/* Breadcrumb Navigation */}
+          <Breadcrumb items={BreadcrumbPresets.bridge} showDashboardHome={true} />
 
           <div>
             <h1 className="font-serif text-4xl font-bold text-museum-black mb-2">
