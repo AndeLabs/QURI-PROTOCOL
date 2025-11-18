@@ -1,6 +1,6 @@
 use crate::{BitcoinUtilsError, Result};
 use quri_types::BitcoinNetwork;
-use secp256k1::XOnlyPublicKey;
+use bitcoin::secp256k1::XOnlyPublicKey;
 
 /// Derive a P2TR (Pay-to-Taproot) Bitcoin address from a Schnorr public key
 pub fn derive_p2tr_address(public_key: &[u8], network: BitcoinNetwork) -> Result<String> {

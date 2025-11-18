@@ -4,7 +4,7 @@ use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemor
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
-use quri_types::{RuneEtching, RuneId, RuneMetadata};
+use quri_types::{RuneEtching, RuneKey, RuneMetadata};
 
 mod block_tracker;
 mod config;
@@ -22,21 +22,18 @@ mod state;
 mod validators;
 
 use etching_flow::EtchingOrchestrator;
-use process_id::ProcessId;
 use rbac::Role;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
-type RuneStorage = StableBTreeMap<RuneId, RuneMetadata, Memory>;
+// NOTA: RuneStorage ya no se usa - RuneMetadata.key contiene el RuneKey
+// Los runes se almacenan en el registry canister, no aquí
 
 thread_local! {
     static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
         RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 
-    static RUNES: RefCell<RuneStorage> = RefCell::new(
-        StableBTreeMap::init(
-            MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
-        )
-    );
+    // MEMORIA 0: Ya no se usa - reservada para futuras extensiones
+    // Los runes se almacenan en el registry canister con RuneKey
 }
 
 #[init]

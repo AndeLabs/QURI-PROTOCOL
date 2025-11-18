@@ -1,4 +1,4 @@
-use secp256k1::{Secp256k1, XOnlyPublicKey};
+use bitcoin::secp256k1::{self, Secp256k1, XOnlyPublicKey};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 

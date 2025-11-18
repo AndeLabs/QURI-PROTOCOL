@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize, Principal};
-use quri_types::{BitcoinNetwork, RuneEtching};
+use quri_types::RuneEtching;
 
 use crate::config::EtchingConfig;
 use crate::errors::{EtchingError, EtchingResult};

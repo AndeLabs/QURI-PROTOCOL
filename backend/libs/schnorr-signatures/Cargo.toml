@@ -10,8 +10,10 @@ repository.workspace = true
 # Internal
 quri-types = { path = "../quri-types" }
 
+# Bitcoin (includes secp256k1)
+bitcoin.workspace = true
+
 # Crypto
-secp256k1.workspace = true
 sha2.workspace = true
 
 # Utilities
