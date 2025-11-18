@@ -25,7 +25,6 @@ schnorr-signatures = { path = "../../libs/schnorr-signatures" }
 
 # Bitcoin
 bitcoin.workspace = true
-secp256k1.workspace = true
 
 # Crypto
 sha2.workspace = true
@@ -42,3 +41,8 @@ hex.workspace = true
 
 [dev-dependencies]
 mockall.workspace = true
+
+[features]
+default = ["testnet"]
+mainnet = []
+testnet = []

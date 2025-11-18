@@ -13,9 +13,8 @@ quri-types = { path = "../quri-types" }
 # ICP (for types)
 ic-cdk.workspace = true
 
-# Bitcoin
+# Bitcoin (includes secp256k1)
 bitcoin.workspace = true
-secp256k1.workspace = true
 
 # Crypto
 sha2.workspace = true

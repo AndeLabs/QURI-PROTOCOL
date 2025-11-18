@@ -55,7 +55,6 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 use std::time::Duration;
 
-use crate::process_id::ProcessId;
 use crate::state::{get_process_by_string, update_process_state, EtchingState};
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;

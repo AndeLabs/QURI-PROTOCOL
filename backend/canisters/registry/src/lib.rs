@@ -17,7 +17,7 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableVec};
 use std::cell::RefCell;
 
 use quri_types::{
-    BondingCurve, Page, PagedResponse, RegistryEntry, RuneKey, RuneMetadata, RuneSortBy,
+    Page, PagedResponse, RegistryEntry, RuneKey, RuneMetadata, RuneSortBy,
     SortOrder,
 };
 

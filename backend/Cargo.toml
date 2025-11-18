@@ -31,11 +31,11 @@ ic-cdk-timers = "0.7"
 ic-stable-structures = "0.6"
 ic-ledger-types = "0.11"
 
-# Bitcoin & Crypto (matching DFINITY examples)
+# Bitcoin & Crypto (Following DFINITY's basic_bitcoin example)
+# Use bitcoin crate without custom features - works OOTB with WASM
 bitcoin = "0.32.7"
-secp256k1 = "0.29"
-sha2 = "0.10"
-ripemd = "0.1"
+sha2 = { version = "0.10", default-features = false }
+ripemd = { version = "0.1", default-features = false }
 
 # Serialization
 serde = { version = "1.0", features = ["derive"] }

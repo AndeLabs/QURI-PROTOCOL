@@ -58,7 +58,7 @@ use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use std::borrow::Cow;
 
-use crate::{RegistryEntry, RuneId, RuneKey, RuneMetadata, UserSession};
+use crate::{RegistryEntry, RuneId, RuneMetadata, UserSession};
 
 // ========================================================================
 // 🎓 IMPLEMENTACIÓN 1: RuneId
