@@ -9,6 +9,7 @@ import Link from 'next/link';
 import { Home, Wallet, ArrowUpRight } from 'lucide-react';
 import { WalletButton, BalanceCard, TransactionHistory } from '@/components/wallet';
 import { useICP } from '@/lib/icp/ICPProvider';
+import { Breadcrumb, BreadcrumbPresets } from '@/components/Breadcrumb';
 
 export default function WalletPage() {
   const { isConnected, principal } = useICP();
@@ -17,14 +18,8 @@ export default function WalletPage() {
     <div className="min-h-screen bg-museum-cream">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <div className="space-y-8">
-          {/* Back to Home */}
-          <Link
-            href="/"
-            className="inline-flex items-center gap-2 text-museum-dark-gray hover:text-museum-black transition-colors"
-          >
-            <Home className="h-5 w-5" />
-            Back to Home
-          </Link>
+          {/* Breadcrumb Navigation */}
+          <Breadcrumb items={BreadcrumbPresets.wallet} showDashboardHome={true} />
 
           {/* Header */}
           <div className="flex items-center justify-between">

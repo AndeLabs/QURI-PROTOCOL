@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useRuneEngine } from '@/hooks/useRuneEngine';
 import type { RuneEtching, MintTerms } from '@/types/canisters';
+import { Breadcrumb, BreadcrumbPresets } from '@/components/Breadcrumb';
 
 export default function CreateRunePage() {
   const router = useRouter();
@@ -174,6 +175,9 @@ export default function CreateRunePage() {
   if (processId) {
     return (
       <div className="max-w-2xl mx-auto space-y-8">
+        {/* Breadcrumb Navigation */}
+        <Breadcrumb items={BreadcrumbPresets.create} showDashboardHome={true} />
+
         <div>
           <h1 className="font-serif text-4xl font-bold text-museum-black mb-2">
             Creating Rune
@@ -268,6 +272,9 @@ export default function CreateRunePage() {
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
+      {/* Breadcrumb Navigation */}
+      <Breadcrumb items={BreadcrumbPresets.create} showDashboardHome={true} />
+
       {/* Header */}
       <div>
         <h1 className="font-serif text-4xl font-bold text-museum-black mb-2">

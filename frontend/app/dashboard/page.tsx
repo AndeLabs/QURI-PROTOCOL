@@ -53,17 +53,17 @@ const quickActions: QuickAction[] = [
     color: 'from-blue-400 to-blue-600',
   },
   {
-    title: 'Gallery',
-    description: 'View Rune gallery',
+    title: 'Bridge',
+    description: 'Transfer BTC ↔ ICP',
     icon: ArrowLeftRight,
-    href: '/gallery',
+    href: '/bridge',
     color: 'from-purple-400 to-purple-600',
   },
   {
-    title: 'Ecosystem',
-    description: 'Learn about QURI',
+    title: 'My Wallet',
+    description: 'Manage your assets',
     icon: Lock,
-    href: '/ecosystem',
+    href: '/wallet',
     color: 'from-green-400 to-green-600',
   },
 ];
@@ -96,19 +96,26 @@ export default function DashboardPage() {
       try {
         setIsLoading(true);
 
-        // Load data in parallel
-        const [totalRunes, registryStats, userRunes, userEtchings, health] = await Promise.all([
+        // Load data in parallel - health check separate to not block
+        const [totalRunes, registryStats, userRunes, userEtchings] = await Promise.all([
           getTotalRunes(),
           getStats(),
           getMyRunes(),
           getMyEtchings(),
-          healthCheck(),
         ]);
+
+        // Check health separately (non-blocking)
+        try {
+          const health = await healthCheck();
+          setSystemHealthy(health?.healthy !== false);
+        } catch {
+          // If health check fails, assume healthy (don't block UI)
+          setSystemHealthy(true);
+        }
 
         // Set my runes and etchings
         setMyRunes(userRunes);
         setMyEtchings(userEtchings);
-        setSystemHealthy(health?.healthy || false);
 
         // Build stats cards
         const statsCards: StatCard[] = [
