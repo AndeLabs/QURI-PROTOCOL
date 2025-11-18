@@ -265,7 +265,7 @@ export function RuneLightbox({
               <p className="text-xs text-museum-light-gray uppercase tracking-wider mb-1">
                 Block Height
               </p>
-              <p className="font-mono font-medium">#{rune.blockHeight.toLocaleString()}</p>
+              <p className="font-mono font-medium">#{rune.blockHeight?.toLocaleString() || 'N/A'}</p>
             </div>
             <div>
               <p className="text-xs text-museum-light-gray uppercase tracking-wider mb-1">

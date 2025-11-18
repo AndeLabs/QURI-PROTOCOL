@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { useICP } from '@/lib/icp/ICPProvider';
 import { Button } from '@/components/ui/Button';
+import { WalletButton } from '@/components/wallet';
 import {
   Sparkles,
   Home,
@@ -16,6 +16,7 @@ import {
   Settings,
   Menu,
   X,
+  Wallet,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -32,6 +33,12 @@ const navigation: NavItem[] = [
     href: '/dashboard',
     icon: Home,
     description: 'Dashboard home',
+  },
+  {
+    name: 'My Wallet',
+    href: '/wallet',
+    icon: Wallet,
+    description: 'Manage assets',
   },
   {
     name: 'Create Rune',
@@ -77,16 +84,7 @@ export default function DashboardLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
-  const { isConnected, connect, disconnect, principal, isLoading } = useICP();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-
-  const handleAuthClick = async () => {
-    if (isConnected) {
-      await disconnect();
-    } else {
-      await connect();
-    }
-  };
 
   return (
     <div className="min-h-screen bg-museum-cream">
@@ -161,37 +159,7 @@ export default function DashboardLayout({
 
         {/* User section */}
         <div className="border-t border-museum-light-gray p-4">
-          {isConnected && principal ? (
-            <div className="space-y-3">
-              <div className="rounded-lg bg-museum-cream p-3">
-                <div className="flex items-center gap-2 text-xs text-museum-dark-gray mb-1">
-                  <div className="h-2 w-2 rounded-full bg-green-500" />
-                  <span>Connected</span>
-                </div>
-                <p className="font-mono text-xs text-museum-black">
-                  {principal.toText().slice(0, 12)}...
-                  {principal.toText().slice(-8)}
-                </p>
-              </div>
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={handleAuthClick}
-                className="w-full"
-              >
-                Disconnect
-              </Button>
-            </div>
-          ) : (
-            <Button
-              size="sm"
-              onClick={handleAuthClick}
-              isLoading={isLoading}
-              className="w-full bg-museum-black hover:bg-museum-charcoal text-museum-white"
-            >
-              Connect Wallet
-            </Button>
-          )}
+          <WalletButton variant="default" />
         </div>
       </aside>
 
@@ -207,13 +175,13 @@ export default function DashboardLayout({
           </button>
 
           <div className="flex items-center gap-4 ml-auto">
-            {/* Quick actions or notifications can go here */}
             <Link href="/dashboard/create">
               <Button size="sm" className="bg-gold-500 hover:bg-gold-600 text-white">
                 <Sparkles className="h-4 w-4 mr-2" />
                 Create Rune
               </Button>
             </Link>
+            <WalletButton variant="compact" />
           </div>
         </header>
 
