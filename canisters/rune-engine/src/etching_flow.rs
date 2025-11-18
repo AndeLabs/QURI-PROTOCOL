@@ -3,6 +3,7 @@ use quri_types::{BitcoinNetwork, RuneEtching};
 
 use crate::config::EtchingConfig;
 use crate::errors::{EtchingError, EtchingResult};
+use crate::process_id::ProcessId;
 use crate::state::{EtchingProcess, EtchingState};
 use crate::validators::EtchingValidator;
 
@@ -33,13 +34,13 @@ impl EtchingOrchestrator {
         caller: Principal,
         etching: RuneEtching,
     ) -> EtchingResult<EtchingProcess> {
-        // Generate unique process ID
-        let process_id = self.generate_process_id(&caller, &etching);
+        // Generate unique process ID (async for random bytes)
+        let process_id = self.generate_process_id().await?;
 
         // Check for duplicate (idempotency)
         if let Some(existing) = crate::state::get_process(&process_id) {
             if !existing.state.is_terminal() {
-                return Err(EtchingError::EtchingInProgress(process_id));
+                return Err(EtchingError::EtchingInProgress(process_id.to_string()));
             }
         }
 
@@ -368,28 +369,17 @@ impl EtchingOrchestrator {
         )
     }
 
-    /// Generate unique process ID
-    fn generate_process_id(&self, caller: &Principal, etching: &RuneEtching) -> String {
-        let timestamp = ic_cdk::api::time();
-        self.generate_process_id_with_time(caller, etching, timestamp)
+    /// Generate unique process ID using random UUID
+    async fn generate_process_id(&self) -> EtchingResult<ProcessId> {
+        ProcessId::new()
+            .await
+            .map_err(|e| EtchingError::InternalError(format!("Failed to generate ProcessId: {}", e)))
     }
 
-    /// Generate unique process ID with specific timestamp (testable)
-    fn generate_process_id_with_time(
-        &self,
-        caller: &Principal,
-        etching: &RuneEtching,
-        timestamp: u64,
-    ) -> String {
-        use sha2::{Digest, Sha256};
-
-        let mut hasher = Sha256::new();
-        hasher.update(caller.as_slice());
-        hasher.update(etching.rune_name.as_bytes());
-        hasher.update(timestamp.to_le_bytes());
-
-        let hash = hasher.finalize();
-        format!("etch_{}", hex::encode(&hash[..16]))
+    /// Generate deterministic process ID for testing
+    #[cfg(test)]
+    fn generate_process_id_for_test(seed: u64) -> ProcessId {
+        ProcessId::from_seed(seed)
     }
 
     /// Save process state
@@ -405,29 +395,17 @@ mod tests {
 
     #[test]
     fn test_generate_process_id() {
-        let config = EtchingConfig::default();
-        let orchestrator = EtchingOrchestrator::new(config);
+        let id1 = EtchingOrchestrator::generate_process_id_for_test(12345);
+        let id2 = EtchingOrchestrator::generate_process_id_for_test(12346);
+        let id3 = EtchingOrchestrator::generate_process_id_for_test(12345);
 
-        let caller = Principal::from_text("aaaaa-aa").unwrap();
-        let etching = RuneEtching {
-            rune_name: "TEST".to_string(),
-            symbol: "TST".to_string(),
-            divisibility: 8,
-            premine: 1000,
-            terms: None,
-        };
-
-        let timestamp = 1_000_000_000u64;
-        let id1 = orchestrator.generate_process_id_with_time(&caller, &etching, timestamp);
-        assert!(id1.starts_with("etch_"));
-        assert_eq!(id1.len(), 5 + 32); // "etch_" + 32 hex chars
-
-        // Different timestamp = different ID
-        let id2 = orchestrator.generate_process_id_with_time(&caller, &etching, timestamp + 1);
+        // Different seeds = different IDs
         assert_ne!(id1, id2);
 
-        // Same inputs = same ID
-        let id3 = orchestrator.generate_process_id_with_time(&caller, &etching, timestamp);
+        // Same seed = same ID (deterministic)
         assert_eq!(id1, id3);
+
+        // Verify it's a valid UUID format
+        assert_eq!(id1.to_string().len(), 36); // UUID with hyphens
     }
 }

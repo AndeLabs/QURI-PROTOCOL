@@ -58,7 +58,7 @@ use ic_stable_structures::storable::Bound;
 use ic_stable_structures::Storable;
 use std::borrow::Cow;
 
-use crate::{RegistryEntry, RuneId, RuneMetadata, UserSession};
+use crate::{RegistryEntry, RuneId, RuneKey, RuneMetadata, UserSession};
 
 // ========================================================================
 // 🎓 IMPLEMENTACIÓN 1: RuneId
@@ -121,11 +121,13 @@ impl Storable for RuneMetadata {
 }
 
 // ========================================================================
-// 🎓 IMPLEMENTACIÓN 3: RegistryEntry
+// 🎓 IMPLEMENTACIÓN 3: RegistryEntry (NEW - con RuneKey)
 // ========================================================================
 //
 // RegistryEntry es la estructura más grande
-// Contiene RuneMetadata + BondingCurve opcional + stats
+// Contiene RuneMetadata + BondingCurve opcional + stats + indexed_at
+//
+// NUEVA VERSIÓN: No contiene rune_id separado, usa metadata.key
 //
 impl Storable for RegistryEntry {
     fn to_bytes(&self) -> Cow<[u8]> {
@@ -137,6 +139,25 @@ impl Storable for RegistryEntry {
     }
 
     // Definitivamente Unbounded por su complejidad
+    const BOUND: Bound = Bound::Unbounded;
+}
+
+// ========================================================================
+// 🎓 IMPLEMENTACIÓN 3b: RegistryEntryLegacy (DEPRECATED)
+// ========================================================================
+//
+// Mantenemos para compatibilidad durante migración
+//
+#[allow(deprecated)]
+impl Storable for crate::RegistryEntryLegacy {
+    fn to_bytes(&self) -> Cow<[u8]> {
+        Cow::Owned(candid::encode_one(self).expect("Failed to encode RegistryEntryLegacy"))
+    }
+
+    fn from_bytes(bytes: Cow<[u8]>) -> Self {
+        candid::decode_one(&bytes).expect("Failed to decode RegistryEntryLegacy")
+    }
+
     const BOUND: Bound = Bound::Unbounded;
 }
 
@@ -202,6 +223,18 @@ impl Storable for UserSession {
 // ```
 //
 // ========================================================================
+
+// ========================================================================
+// 🎓 NOTE: Vec<RuneKey> Storable
+// ========================================================================
+//
+// No podemos implementar Storable para Vec<RuneKey> directamente debido al
+// orphan rule (E0117). En su lugar, el Registry usará un diseño diferente
+// para el CreatorIndex.
+//
+// Solución: Usar composite keys (Principal, RuneKey) -> () en lugar de
+// Principal -> Vec<RuneKey>
+//
 
 // ========================================================================
 // 🎓 TESTS EDUCATIVOS

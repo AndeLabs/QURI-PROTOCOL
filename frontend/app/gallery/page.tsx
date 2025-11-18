@@ -1,26 +1,13 @@
-import { Metadata } from 'next';
-import { RuneGallery } from '@/components/RuneGallery';
-
-export const metadata: Metadata = {
-  title: 'Gallery | QURI Protocol - Bitcoin Runes Collection',
-  description: 'Explore the finest Bitcoin Runes - a curated collection of digital art on the Bitcoin blockchain',
-  openGraph: {
-    title: 'Gallery | QURI Protocol',
-    description: 'Explore the finest Bitcoin Runes collection',
-    type: 'website',
-  },
-};
+import { redirect } from 'next/navigation';
 
 /**
- * Museum-style Gallery Page
- * Showcases Bitcoin Runes as premium digital art pieces
+ * Gallery page is now unified with Explorer
+ * 
+ * All Runes (whether created by QURI or others) are native Bitcoin Runes.
+ * There's no difference between them, so we show everything in one place.
+ * 
+ * Redirecting to /explorer for unified experience.
  */
 export default function GalleryPage() {
-  return (
-    <RuneGallery
-      title="Runes Collection"
-      subtitle="A curated selection of Bitcoin Runes - digital artifacts etched onto the world's most secure blockchain"
-      showFilters={true}
-    />
-  );
+  redirect('/explorer');
 }

@@ -71,5 +71,5 @@ service : (BitcoinNetwork, principal) -> {
     "get_block_height" : () -> (variant { Ok : nat64; Err : text });
 
     // ckBTC operations
-    "get_ckbtc_balance" : (principal) -> (variant { Ok : nat64; Err : text }) query;
+    "get_ckbtc_balance" : (principal) -> (variant { Ok : nat64; Err : text });
 }

@@ -16,11 +16,13 @@ mod fee_manager;
 mod idempotency;
 mod logging;
 mod metrics;
+mod process_id;
 mod rbac;
 mod state;
 mod validators;
 
 use etching_flow::EtchingOrchestrator;
+use process_id::ProcessId;
 use rbac::Role;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
@@ -71,7 +73,11 @@ fn init() {
     let logging_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(8)));
     logging::init_logging(logging_memory);
 
-    // Initialize Bitcoin confirmation tracker
+    // Initialize confirmation tracker storage (MemoryId 9)
+    let confirmation_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(9)));
+    confirmation_tracker::init_confirmation_storage(confirmation_memory);
+
+    // Initialize Bitcoin confirmation tracker timer
     confirmation_tracker::init_confirmation_tracker();
 
     // Initialize dynamic fee manager
@@ -124,6 +130,10 @@ fn post_upgrade() {
     // Reinitialize logging (MemoryId 8)
     let logging_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(8)));
     logging::reinit_logging(logging_memory);
+
+    // Reinitialize confirmation tracker storage (MemoryId 9)
+    let confirmation_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(9)));
+    confirmation_tracker::init_confirmation_storage(confirmation_memory);
 
     // Restart timers
     confirmation_tracker::init_confirmation_tracker();
@@ -178,7 +188,7 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
             let process_id = process.id.clone();
 
             // Record successful request
-            if let Err(e) = idempotency::record_request_success(request_id, caller, process_id.clone()) {
+            if let Err(e) = idempotency::record_request_success(request_id, caller, process_id.to_string()) {
                 ic_cdk::println!("⚠️  Failed to record idempotency: {}", e);
                 // Don't fail the operation, just log it
             }
@@ -187,7 +197,7 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
             metrics::record_rune_created();
             timer.stop(true);
 
-            Ok(process_id)
+            Ok(process_id.to_string())
         }
         Err(e) => {
             let error_msg = e.user_message();
@@ -212,8 +222,8 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
 /// Get etching process status
 #[query]
 fn get_etching_status(process_id: String) -> Option<EtchingProcessView> {
-    state::get_process(&process_id).map(|p| EtchingProcessView {
-        id: p.id,
+    state::get_process_by_string(&process_id).map(|p| EtchingProcessView {
+        id: p.id.to_string(),
         rune_name: p.rune_name,
         state: format!("{:?}", p.state),
         created_at: p.created_at,
@@ -230,7 +240,7 @@ fn get_my_etchings() -> Vec<EtchingProcessView> {
     state::get_caller_processes(caller)
         .into_iter()
         .map(|p| EtchingProcessView {
-            id: p.id,
+            id: p.id.to_string(),
             rune_name: p.rune_name,
             state: format!("{:?}", p.state),
             created_at: p.created_at,
@@ -279,6 +289,44 @@ fn configure_canisters(
 
     ic_cdk::println!(
         "Configured canisters: BTC={}, Registry={} by {}",
+        bitcoin_integration_id,
+        registry_id,
+        ic_cdk::caller()
+    );
+
+    Ok(())
+}
+
+/// Auto-configure canisters for development/testing (PUBLIC, but only works once)
+/// 
+/// This function allows ANYONE to configure the canisters, but ONLY if they haven't
+/// been configured yet. This is useful for Playground deployments where the owner
+/// is the Playground system canister.
+/// 
+/// **Security**: Once configured, this function becomes a no-op. Only the first
+/// caller can configure. After that, only Admin can reconfigure via `configure_canisters`.
+#[update]
+fn auto_configure_canisters(
+    bitcoin_integration_id: Principal,
+    registry_id: Principal,
+) -> Result<(), String> {
+    // Check if already configured
+    if let Some(canister_config) = config::get_canister_config() {
+        if canister_config.bitcoin_integration_id != Principal::anonymous() {
+            return Err("Canisters already configured. Use configure_canisters (admin only) to reconfigure.".to_string());
+        }
+    }
+
+    // Allow first-time configuration by anyone
+    let canister_config = config::CanisterConfig {
+        bitcoin_integration_id,
+        registry_id,
+    };
+
+    config::set_canister_config(canister_config)?;
+
+    ic_cdk::println!(
+        "[AUTO-CONFIG] Canisters configured: BTC={}, Registry={} by {} (first-time setup)",
         bitcoin_integration_id,
         registry_id,
         ic_cdk::caller()

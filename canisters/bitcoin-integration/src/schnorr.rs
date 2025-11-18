@@ -31,9 +31,9 @@
  */
 
 use candid::Principal;
+use crate::config::{get_schnorr_key_id, get_schnorr_cycles_cost};
 
 const SCHNORR_ALGORITHM: &str = "bip340secp256k1";
-const SCHNORR_KEY_ID: &str = "dfx_test_key";
 
 /// Obtiene la public key Schnorr del canister
 pub async fn get_schnorr_public_key(derivation_path: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
@@ -61,14 +61,16 @@ pub async fn get_schnorr_public_key(derivation_path: Vec<Vec<u8>>) -> Result<Vec
         derivation_path,
         key_id: SchnorrKeyId {
             algorithm: SCHNORR_ALGORITHM.to_string(),
-            name: SCHNORR_KEY_ID.to_string(),
+            name: get_schnorr_key_id().to_string(),
         },
     };
 
-    let (result,): (SchnorrPublicKeyResult,) = ic_cdk::call(
+    // Call with cycle payment
+    let (result,): (SchnorrPublicKeyResult,) = ic_cdk::api::call::call_with_payment128(
         Principal::management_canister(),
         "schnorr_public_key",
         (args,),
+        get_schnorr_cycles_cost(),
     )
     .await
     .map_err(|(code, msg)| format!("Failed to get Schnorr public key: {:?} - {}", code, msg))?;
@@ -104,14 +106,16 @@ pub async fn sign_message(
         derivation_path,
         key_id: SchnorrKeyId {
             algorithm: SCHNORR_ALGORITHM.to_string(),
-            name: SCHNORR_KEY_ID.to_string(),
+            name: get_schnorr_key_id().to_string(),
         },
     };
 
-    let (result,): (SignWithSchnorrResult,) = ic_cdk::call(
+    // Call with cycle payment
+    let (result,): (SignWithSchnorrResult,) = ic_cdk::api::call::call_with_payment128(
         Principal::management_canister(),
         "sign_with_schnorr",
         (args,),
+        get_schnorr_cycles_cost(),
     )
     .await
     .map_err(|(code, msg)| format!("Failed to sign with Schnorr: {:?} - {}", code, msg))?;

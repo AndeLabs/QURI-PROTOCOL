@@ -18,10 +18,14 @@ export interface RuneData {
   supply: string;
   divisibility: number;
   creator: string;
-  blockHeight: number;
+  blockHeight?: number;
   timestamp: number;
+  txid?: string;
   imageUrl?: string;
   description?: string;
+  verified?: boolean;
+  holdersCount?: number;
+  volume24h?: number;
 }
 
 interface RuneCardProps {
@@ -29,7 +33,8 @@ interface RuneCardProps {
   onClick?: () => void;
   featured?: boolean;
   onFavorite?: (runeId: string) => void;
-  onShare?: (rune: RuneData) => void;
+  onFavoriteToggle?: () => void;
+  onShare?: (rune: RuneData) => void | Promise<boolean>;
   isFavorited?: boolean;
 }
 
@@ -38,6 +43,7 @@ export function RuneCard({
   onClick,
   featured = false,
   onFavorite,
+  onFavoriteToggle,
   onShare,
   isFavorited = false
 }: RuneCardProps) {
@@ -57,7 +63,11 @@ export function RuneCard({
 
   const handleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onFavorite?.(rune.id);
+    if (onFavoriteToggle) {
+      onFavoriteToggle();
+    } else {
+      onFavorite?.(rune.id);
+    }
   };
 
   const handleShare = (e: React.MouseEvent) => {
@@ -202,12 +212,14 @@ export function RuneCard({
             </span>
           </div>
 
-          <div className="flex items-center justify-between">
-            <span className="text-museum-dark-gray">Block</span>
-            <span className="font-mono text-museum-charcoal font-medium">
-              #{rune.blockHeight.toLocaleString()}
-            </span>
-          </div>
+          {rune.blockHeight && (
+            <div className="flex items-center justify-between">
+              <span className="text-museum-dark-gray">Block</span>
+              <span className="font-mono text-museum-charcoal font-medium">
+                #{rune.blockHeight.toLocaleString()}
+              </span>
+            </div>
+          )}
         </div>
 
         <div className="pt-2 border-t border-museum-light-gray">
@@ -226,11 +238,22 @@ export function RuneCardCompact({
   rune,
   onClick,
   onFavorite,
+  onFavoriteToggle,
+  onShare,
   isFavorited = false
 }: RuneCardProps) {
   const handleFavorite = (e: React.MouseEvent) => {
     e.stopPropagation();
-    onFavorite?.(rune.id);
+    if (onFavoriteToggle) {
+      onFavoriteToggle();
+    } else {
+      onFavorite?.(rune.id);
+    }
+  };
+
+  const handleShare = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    onShare?.(rune);
   };
 
   return (

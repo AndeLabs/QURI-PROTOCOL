@@ -52,7 +52,7 @@ describe('shortenAddress', () => {
   it('should shorten long addresses', () => {
     const address = 'bc1p5d7rjq7g6rdk2yhzks9smlaqtedr4dekq08ge8ztwac72sfr9rusxg3297';
     expect(shortenAddress(address)).toBe('bc1p...3297');
-    expect(shortenAddress(address, 6)).toBe('bc1p5d...g3297');
+    expect(shortenAddress(address, 6)).toBe('bc1p5d...xg3297');
   });
 
   it('should not shorten short addresses', () => {

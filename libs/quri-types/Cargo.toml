@@ -10,10 +10,14 @@ repository.workspace = true
 # ICP
 candid.workspace = true
 ic-stable-structures.workspace = true
+ic-cdk.workspace = true
 
 # Serialization
 serde.workspace = true
 serde_json.workspace = true
+
+# Error handling
+thiserror.workspace = true
 
 # Bitcoin
 bitcoin.workspace = true

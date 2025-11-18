@@ -5,6 +5,7 @@ use std::str::FromStr;
 
 mod bitcoin_api;
 mod ckbtc;
+mod config;
 mod schnorr;
 mod transaction;
 mod utxo;
@@ -31,6 +32,7 @@ fn init(network: BitcoinNetwork, ckbtc_ledger_id: Principal) {
         });
     });
     ic_cdk::println!("Bitcoin Integration canister initialized");
+    config::log_config();
 }
 
 /// Get the canister's Bitcoin P2TR address for receiving payments
@@ -153,7 +155,8 @@ async fn get_block_height() -> Result<u64, String> {
 }
 
 /// Get balance of ckBTC for a specific principal
-#[query]
+/// MUST be update (not query) because it makes inter-canister calls
+#[update]
 async fn get_ckbtc_balance(principal: Principal) -> Result<u64, String> {
     ckbtc::get_balance(principal)
         .await

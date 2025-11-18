@@ -5,39 +5,40 @@ import { RuneCard, RuneCardCompact, RuneData } from './RuneCard';
 import { RuneLightbox } from './RuneLightbox';
 import { RuneGallerySkeleton } from './LoadingSkeletons';
 import { RevealOnScroll } from './Parallax';
-import { Grid3x3, List, Search, SlidersHorizontal } from 'lucide-react';
+import { Grid3x3, List, Search, ArrowLeft } from 'lucide-react';
 import { logger } from '@/lib/logger';
 import { useFavorites } from '@/lib/hooks/useFavorites';
 import { shareRune } from '@/lib/utils/share';
+import Link from 'next/link';
 
 /**
- * Museum-Grade Rune Gallery Component
- * Inspired by Foundation.app curated collections and MoMA digital exhibitions
- * Features generous white space, elegant grid, and sophisticated filtering
+ * Rune Gallery Component
+ * Shows real Runes from Registry canister
  */
 
 type ViewMode = 'grid' | 'list';
-type SortOption = 'recent' | 'oldest' | 'supply-high' | 'supply-low' | 'name';
+type SortOption = 'recent' | 'oldest' | 'name';
 
 interface RuneGalleryProps {
-  initialRunes?: RuneData[];
   title?: string;
   subtitle?: string;
   showFilters?: boolean;
+  showBackButton?: boolean;
 }
 
 export function RuneGallery({
-  initialRunes = [],
   title = 'Runes Collection',
-  subtitle = 'Explore the finest Bitcoin Runes',
+  subtitle = 'Bitcoin Runes registered on the Internet Computer',
   showFilters = true,
+  showBackButton = false,
 }: RuneGalleryProps) {
-  const [runes, setRunes] = useState<RuneData[]>(initialRunes);
-  const [filteredRunes, setFilteredRunes] = useState<RuneData[]>(initialRunes);
+  const [runes, setRunes] = useState<RuneData[]>([]);
+  const [filteredRunes, setFilteredRunes] = useState<RuneData[]>([]);
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
   const [searchQuery, setSearchQuery] = useState('');
   const [sortBy, setSortBy] = useState<SortOption>('recent');
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [selectedRune, setSelectedRune] = useState<RuneData | null>(null);
   const [selectedRuneIndex, setSelectedRuneIndex] = useState<number>(-1);
 
@@ -51,70 +52,128 @@ export function RuneGallery({
     }
   };
 
-  // Load runes from API (placeholder for now)
+  // Load runes from Registry
   useEffect(() => {
-    if (initialRunes.length === 0) {
-      loadRunes();
-    }
+    loadRunes();
   }, []);
 
   const loadRunes = async () => {
     try {
       setLoading(true);
-      logger.info('Loading runes from registry');
+      setError(null);
+      logger.info('Loading runes from Registry');
 
-      // TODO: Implement actual API call to registry canister
-      // Example:
-      // const actor = await getRegistryActor();
-      // const result = await actor.list_runes({ offset: 0, limit: 50 });
-      // setRunes(result.runes);
-      // setFilteredRunes(result.runes);
+      const { getRegistryActor } = await import('@/lib/icp/actors');
+      const actor = getRegistryActor();
+      
+      // Load all runes (offset 0, limit 100)
+      const registryEntries = await actor.list_runes(0n, 100n);
+      
+      logger.info('Loaded registry entries', { count: registryEntries.length });
+      
+      // Convert RegistryEntry to RuneData format
+      const runesData: RuneData[] = registryEntries.map((entry) => ({
+        id: `${entry.rune_id.block}:${entry.rune_id.tx}`,
+        name: entry.metadata.name,
+        symbol: entry.metadata.symbol,
+        supply: entry.metadata.total_supply.toString(),
+        divisibility: Number(entry.metadata.divisibility),
+        creator: entry.metadata.creator.toString(),
+        blockHeight: Number(entry.rune_id.block),
+        timestamp: Number(entry.metadata.created_at) / 1_000_000, // nanoseconds to ms
+        txid: entry.rune_id.name,
+        imageUrl: '',
+        verified: true,
+        description: `Rune ${entry.metadata.name} on block ${entry.rune_id.block}`,
+        holdersCount: Number(entry.holder_count),
+        volume24h: Number(entry.trading_volume_24h),
+      }));
 
-      throw new Error('API integration not yet implemented');
-
-      logger.info('Loaded runes successfully');
+      setRunes(runesData);
+      setFilteredRunes(runesData);
+      
+      if (runesData.length === 0) {
+        setError('No Runes registered yet. Be the first to register one!');
+      }
+      
+      logger.info('Loaded runes successfully', { count: runesData.length });
     } catch (error) {
       logger.error('Failed to load runes', error instanceof Error ? error : undefined);
+      setError('Failed to load Runes. Please try again later.');
     } finally {
       setLoading(false);
     }
   };
 
-  // Filter and sort
+  // Search and filter with debounce
   useEffect(() => {
-    let filtered = [...runes];
+    const searchRunes = async () => {
+      if (!searchQuery.trim()) {
+        // No search, show all with sorting
+        const filtered = [...runes];
+        
+        switch (sortBy) {
+          case 'recent':
+            filtered.sort((a, b) => b.timestamp - a.timestamp);
+            break;
+          case 'oldest':
+            filtered.sort((a, b) => a.timestamp - b.timestamp);
+            break;
+          case 'name':
+            filtered.sort((a, b) => a.name.localeCompare(b.name));
+            break;
+        }
+        
+        setFilteredRunes(filtered);
+        return;
+      }
 
-    // Search filter
-    if (searchQuery) {
-      filtered = filtered.filter(
-        (rune) =>
-          rune.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          rune.symbol.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
+      // Use Registry search API
+      try {
+        const { getRegistryActor } = await import('@/lib/icp/actors');
+        const actor = getRegistryActor();
+        
+        const searchResults = await actor.search_runes(searchQuery);
+        
+        const searchData: RuneData[] = searchResults.map((entry) => ({
+          id: `${entry.rune_id.block}:${entry.rune_id.tx}`,
+          name: entry.metadata.name,
+          symbol: entry.metadata.symbol,
+          supply: entry.metadata.total_supply.toString(),
+          divisibility: Number(entry.metadata.divisibility),
+          creator: entry.metadata.creator.toString(),
+          blockHeight: Number(entry.rune_id.block),
+          timestamp: Number(entry.metadata.created_at) / 1_000_000,
+          txid: entry.rune_id.name,
+          imageUrl: '',
+          verified: true,
+          description: `Rune ${entry.metadata.name} on block ${entry.rune_id.block}`,
+          holdersCount: Number(entry.holder_count),
+          volume24h: Number(entry.trading_volume_24h),
+        }));
+        
+        setFilteredRunes(searchData);
+        logger.userAction('Search Runes', { query: searchQuery, results: searchData.length });
+      } catch (error) {
+        logger.error('Search failed, using local filter', error instanceof Error ? error : undefined);
+        // Fallback to local search
+        const filtered = runes.filter(
+          (rune) =>
+            rune.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            rune.symbol.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            rune.id.toLowerCase().includes(searchQuery.toLowerCase())
+        );
+        setFilteredRunes(filtered);
+      }
+    };
 
-    // Sort
-    switch (sortBy) {
-      case 'recent':
-        filtered.sort((a, b) => b.timestamp - a.timestamp);
-        break;
-      case 'oldest':
-        filtered.sort((a, b) => a.timestamp - b.timestamp);
-        break;
-      case 'supply-high':
-        filtered.sort((a, b) => parseInt(b.supply) - parseInt(a.supply));
-        break;
-      case 'supply-low':
-        filtered.sort((a, b) => parseInt(a.supply) - parseInt(b.supply));
-        break;
-      case 'name':
-        filtered.sort((a, b) => a.name.localeCompare(b.name));
-        break;
-    }
+    // Debounce search - 300ms
+    const timeoutId = setTimeout(() => {
+      searchRunes();
+    }, 300);
 
-    setFilteredRunes(filtered);
-    logger.userAction('Filter/Sort Runes', { query: searchQuery, sort: sortBy, count: filtered.length });
-  }, [runes, searchQuery, sortBy]);
+    return () => clearTimeout(timeoutId);
+  }, [searchQuery, runes, sortBy]);
 
   // Handle rune selection for lightbox
   const handleRuneClick = (rune: RuneData, index: number) => {
@@ -138,172 +197,171 @@ export function RuneGallery({
     }
   };
 
-  const handleShare = async (rune: RuneData) => {
-    const success = await shareRune(rune);
-    if (success) {
-      logger.userAction('Share Rune', { runeId: rune.id });
-    }
-  };
-
   if (loading) {
-    return <RuneGallerySkeleton viewMode={viewMode} />;
+    return <RuneGallerySkeleton />;
   }
 
   return (
-    <div className="min-h-screen bg-museum-white">
-      {/* Header - Museum Title Wall */}
-      <header className="border-b border-museum-light-gray bg-museum-cream">
-        <div className="max-w-screen-2xl mx-auto px-8 py-16 lg:px-16 lg:py-24">
-          <div className="max-w-3xl">
-            <h1 className="font-serif text-5xl lg:text-6xl font-bold text-museum-black mb-4 tracking-tight">
-              {title}
-            </h1>
-            <p className="text-xl text-museum-dark-gray leading-relaxed">
-              {subtitle}
-            </p>
+    <div className="space-y-12">
+      {/* Header */}
+      <div className="text-center space-y-4">
+        {showBackButton && (
+          <div className="flex justify-start mb-6">
+            <Link
+              href="/"
+              className="inline-flex items-center gap-2 text-neutral-600 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-100 transition-colors"
+            >
+              <ArrowLeft className="w-5 h-5" />
+              Back to Home
+            </Link>
           </div>
-        </div>
-      </header>
+        )}
+        <h1 className="text-5xl font-serif tracking-tight">{title}</h1>
+        <p className="text-lg text-neutral-600 dark:text-neutral-400 max-w-2xl mx-auto">
+          {subtitle}
+        </p>
+      </div>
 
-      {/* Filters & Controls - Minimal Design */}
+      {/* Filters & Controls */}
       {showFilters && (
-        <div className="border-b border-museum-light-gray bg-museum-white sticky top-0 z-10 backdrop-blur-sm bg-opacity-95">
-          <div className="max-w-screen-2xl mx-auto px-8 py-6 lg:px-16">
-            <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
-              {/* Search */}
-              <div className="relative flex-1 max-w-md">
-                <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-museum-gray" />
-                <input
-                  type="text"
-                  placeholder="Search runes..."
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  className="
-                    w-full pl-12 pr-4 py-3
-                    bg-museum-cream
-                    border border-museum-light-gray
-                    text-museum-charcoal
-                    placeholder-museum-gray
-                    focus:outline-none focus:border-gold-400
-                    transition-colors duration-200
-                  "
-                />
-              </div>
+        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+          {/* Search */}
+          <div className="relative flex-1 max-w-md">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-neutral-400" />
+            <input
+              type="text"
+              placeholder="Search by name, symbol, or ID..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-10 pr-4 py-2 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 focus:ring-2 focus:ring-orange-500 focus:border-transparent transition-all"
+            />
+          </div>
 
-              {/* Controls */}
-              <div className="flex items-center gap-4">
-                {/* Sort */}
-                <div className="flex items-center gap-2">
-                  <SlidersHorizontal className="w-4 h-4 text-museum-gray" />
-                  <select
-                    value={sortBy}
-                    onChange={(e) => setSortBy(e.target.value as SortOption)}
-                    className="
-                      bg-museum-cream
-                      border border-museum-light-gray
-                      text-museum-charcoal text-sm
-                      px-4 py-2
-                      focus:outline-none focus:border-gold-400
-                      transition-colors duration-200
-                    "
-                  >
-                    <option value="recent">Recently Added</option>
-                    <option value="oldest">Oldest First</option>
-                    <option value="supply-high">Highest Supply</option>
-                    <option value="supply-low">Lowest Supply</option>
-                    <option value="name">Alphabetical</option>
-                  </select>
-                </div>
+          {/* View & Sort Controls */}
+          <div className="flex items-center gap-3">
+            {/* Sort */}
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as SortOption)}
+              className="px-4 py-2 border border-neutral-200 dark:border-neutral-700 rounded-lg bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800 transition-colors"
+            >
+              <option value="recent">Recent First</option>
+              <option value="oldest">Oldest First</option>
+              <option value="name">Name (A-Z)</option>
+            </select>
 
-                {/* View Toggle */}
-                <div className="flex border border-museum-light-gray">
-                  <button
-                    onClick={() => setViewMode('grid')}
-                    className={`
-                      p-2 transition-colors duration-200
-                      ${viewMode === 'grid' ? 'bg-museum-charcoal text-museum-white' : 'bg-museum-cream text-museum-gray hover:text-museum-charcoal'}
-                    `}
-                    aria-label="Grid view"
-                  >
-                    <Grid3x3 className="w-5 h-5" />
-                  </button>
-                  <button
-                    onClick={() => setViewMode('list')}
-                    className={`
-                      p-2 transition-colors duration-200 border-l border-museum-light-gray
-                      ${viewMode === 'list' ? 'bg-museum-charcoal text-museum-white' : 'bg-museum-cream text-museum-gray hover:text-museum-charcoal'}
-                    `}
-                    aria-label="List view"
-                  >
-                    <List className="w-5 h-5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-
-            {/* Results Count */}
-            <div className="mt-4">
-              <p className="text-sm text-museum-dark-gray">
-                {filteredRunes.length} {filteredRunes.length === 1 ? 'rune' : 'runes'}
-                {searchQuery && ` matching "${searchQuery}"`}
-              </p>
+            {/* View Mode */}
+            <div className="flex border border-neutral-200 dark:border-neutral-700 rounded-lg overflow-hidden">
+              <button
+                onClick={() => setViewMode('grid')}
+                className={`p-2 transition-colors ${
+                  viewMode === 'grid'
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                }`}
+                aria-label="Grid view"
+              >
+                <Grid3x3 className="w-5 h-5" />
+              </button>
+              <button
+                onClick={() => setViewMode('list')}
+                className={`p-2 transition-colors ${
+                  viewMode === 'list'
+                    ? 'bg-orange-500 text-white'
+                    : 'bg-white dark:bg-neutral-900 hover:bg-neutral-50 dark:hover:bg-neutral-800'
+                }`}
+                aria-label="List view"
+              >
+                <List className="w-5 h-5" />
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Gallery - Museum Grid Layout */}
-      <main className="max-w-screen-2xl mx-auto px-8 py-12 lg:px-16 lg:py-16">
-        {filteredRunes.length === 0 ? (
-          <div className="text-center py-24">
-            <p className="text-museum-dark-gray font-serif text-xl mb-2">No runes found</p>
-            <p className="text-museum-gray text-sm">Try adjusting your search or filters</p>
-          </div>
-        ) : viewMode === 'grid' ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-8 lg:gap-12">
-            {filteredRunes.map((rune, index) => (
-              <RevealOnScroll key={rune.id} animation="fade" delay={index * 50}>
-                <RuneCard
-                  rune={rune}
-                  onClick={() => handleRuneClick(rune, index)}
-                  featured={index === 0}
-                  onFavorite={handleFavoriteToggle}
-                  onShare={handleShare}
-                  isFavorited={isFavorited(rune.id)}
-                />
-              </RevealOnScroll>
-            ))}
-          </div>
-        ) : (
-          <div className="max-w-4xl mx-auto space-y-0 border border-museum-light-gray">
-            {filteredRunes.map((rune, index) => (
-              <RuneCardCompact
-                key={rune.id}
-                rune={rune}
-                onClick={() => handleRuneClick(rune, index)}
-                onFavorite={handleFavoriteToggle}
-                isFavorited={isFavorited(rune.id)}
-              />
-            ))}
-          </div>
-        )}
-      </main>
+      {/* Results Count */}
+      <div className="text-sm text-neutral-600 dark:text-neutral-400">
+        {filteredRunes.length} {filteredRunes.length === 1 ? 'Rune' : 'Runes'}
+        {searchQuery && ` matching "${searchQuery}"`}
+      </div>
 
-      {/* Lightbox - Full-screen Art Viewing */}
+      {/* Error State */}
+      {error && (
+        <div className="text-center py-20">
+          <p className="text-neutral-600 dark:text-neutral-400 mb-6">{error}</p>
+          <Link
+            href="/create"
+            className="inline-block px-6 py-3 bg-orange-500 hover:bg-orange-600 text-white rounded-lg transition-colors"
+          >
+            Register Your First Rune
+          </Link>
+        </div>
+      )}
+
+      {/* Empty State */}
+      {!error && filteredRunes.length === 0 && (
+        <div className="text-center py-20">
+          <p className="text-neutral-600 dark:text-neutral-400 mb-2">No Runes found</p>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="text-orange-500 hover:text-orange-600 transition-colors"
+            >
+              Clear search
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Gallery Grid */}
+      {!error && filteredRunes.length > 0 && (
+        <>
+          {viewMode === 'grid' ? (
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {filteredRunes.map((rune, index) => (
+                <RevealOnScroll key={rune.id} delay={index * 0.05}>
+                  <RuneCard
+                    rune={rune}
+                    onClick={() => handleRuneClick(rune, index)}
+                    isFavorited={isFavorited(rune.id)}
+                    onFavoriteToggle={() => handleFavoriteToggle(rune.id)}
+                    onShare={() => shareRune(rune)}
+                  />
+                </RevealOnScroll>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              {filteredRunes.map((rune, index) => (
+                <RevealOnScroll key={rune.id} delay={index * 0.03}>
+                  <RuneCardCompact
+                    rune={rune}
+                    onClick={() => handleRuneClick(rune, index)}
+                    isFavorited={isFavorited(rune.id)}
+                    onFavoriteToggle={() => handleFavoriteToggle(rune.id)}
+                    onShare={() => shareRune(rune)}
+                  />
+                </RevealOnScroll>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
+      {/* Lightbox */}
       {selectedRune && (
         <RuneLightbox
           rune={selectedRune}
+          isOpen={!!selectedRune}
           onClose={() => {
             setSelectedRune(null);
             setSelectedRuneIndex(-1);
           }}
-          onNext={handleNextRune}
-          onPrev={handlePrevRune}
-          hasNext={selectedRuneIndex < filteredRunes.length - 1}
-          hasPrev={selectedRuneIndex > 0}
-          onFavorite={handleFavoriteToggle}
-          onShare={handleShare}
+          onNext={selectedRuneIndex < filteredRunes.length - 1 ? handleNextRune : undefined}
+          onPrev={selectedRuneIndex > 0 ? handlePrevRune : undefined}
           isFavorited={isFavorited(selectedRune.id)}
+          onFavoriteToggle={() => handleFavoriteToggle(selectedRune.id)}
+          onShare={() => shareRune(selectedRune)}
         />
       )}
     </div>

@@ -67,8 +67,14 @@ const enhancedEtchingSchema = z.object({
   premine: z.number().int().min(0).default(0),
 
   // Minting Terms (both required if using open mint)
-  mintAmount: z.number().int().min(1).optional(),
-  mintCap: z.number().int().min(1).optional(),
+  mintAmount: z.preprocess(
+    (val) => val === '' || val === null || val === undefined || Number.isNaN(Number(val)) ? undefined : Number(val),
+    z.number().int().min(1).optional()
+  ),
+  mintCap: z.preprocess(
+    (val) => val === '' || val === null || val === undefined || Number.isNaN(Number(val)) ? undefined : Number(val),
+    z.number().int().min(1).optional()
+  ),
 
   // Rich Metadata
   description: z.string().max(1000).optional().or(z.literal('')),
@@ -268,7 +274,7 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
       // Prepare etching data for ICP backend
       const etchingData = {
         rune_name: data.rune_name,
-        symbol: data.symbol,
+        symbol: data.symbol || '', // Empty is OK - backend will use default
         divisibility: data.divisibility,
         premine: BigInt(data.premine),
         terms: data.mintAmount && data.mintCap ? [{

@@ -3,6 +3,8 @@ use ic_stable_structures::memory_manager::VirtualMemory;
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
+use crate::process_id::ProcessId;
+
 type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 /// State of an etching process
@@ -77,7 +79,7 @@ impl EtchingState {
 /// Complete etching process record
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct EtchingProcess {
-    pub id: String,
+    pub id: ProcessId,
     pub caller: candid::Principal,
     pub rune_name: String,
     pub state: EtchingState,
@@ -89,7 +91,7 @@ pub struct EtchingProcess {
 }
 
 impl EtchingProcess {
-    pub fn new(id: String, caller: candid::Principal, rune_name: String) -> Self {
+    pub fn new(id: ProcessId, caller: candid::Principal, rune_name: String) -> Self {
         let now = ic_cdk::api::time();
         Self {
             id,
@@ -107,7 +109,7 @@ impl EtchingProcess {
     /// Create new process with specific timestamp (for testing)
     #[cfg(test)]
     pub fn new_for_test(
-        id: String,
+        id: ProcessId,
         caller: candid::Principal,
         rune_name: String,
         timestamp: u64,
@@ -157,8 +159,8 @@ impl EtchingProcess {
     }
 }
 
-/// Global state manager
-type ProcessStorage = RefCell<Option<StableBTreeMap<Vec<u8>, Vec<u8>, Memory>>>;
+/// Global state manager - NOW USES ProcessId as bounded key
+type ProcessStorage = RefCell<Option<StableBTreeMap<ProcessId, Vec<u8>, Memory>>>;
 
 thread_local! {
     #[allow(unused_doc_comments)]
@@ -175,7 +177,7 @@ pub fn init_state_storage(memory: Memory) {
 
 /// Store etching process
 pub fn store_process(process: &EtchingProcess) -> Result<(), String> {
-    let key = process.id.as_bytes().to_vec();
+    let key = process.id.clone();
     let value =
         candid::encode_one(process).map_err(|e| format!("Failed to encode process: {}", e))?;
 
@@ -190,12 +192,10 @@ pub fn store_process(process: &EtchingProcess) -> Result<(), String> {
 }
 
 /// Get etching process by ID
-pub fn get_process(id: &str) -> Option<EtchingProcess> {
-    let key = id.as_bytes().to_vec();
-
+pub fn get_process(id: &ProcessId) -> Option<EtchingProcess> {
     PROCESSES.with(|p| {
         if let Some(ref map) = *p.borrow() {
-            map.get(&key)
+            map.get(id)
                 .and_then(|bytes| candid::decode_one(&bytes).ok())
         } else {
             None
@@ -203,9 +203,15 @@ pub fn get_process(id: &str) -> Option<EtchingProcess> {
     })
 }
 
+/// Get etching process by ID string (legacy compatibility)
+pub fn get_process_by_string(id_str: &str) -> Option<EtchingProcess> {
+    let id = ProcessId::from_string(id_str).ok()?;
+    get_process(&id)
+}
+
 /// Update process state
 pub fn update_process_state(process: EtchingProcess) {
-    let key = process.id.as_bytes().to_vec();
+    let key = process.id.clone();
 
     // Encode with proper error handling
     let value = match candid::encode_one(&process) {
@@ -304,8 +310,9 @@ mod tests {
     #[test]
     fn test_process_retry_tracking() {
         let caller = candid::Principal::from_text("aaaaa-aa").unwrap();
+        let id = ProcessId::from_seed(12345);
         let mut process = EtchingProcess::new_for_test(
-            "test-1".to_string(),
+            id,
             caller,
             "TEST".to_string(),
             1_000_000,
