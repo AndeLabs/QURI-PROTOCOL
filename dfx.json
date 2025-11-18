@@ -14,14 +14,14 @@
     "rune-engine": {
       "type": "rust",
       "package": "rune-engine",
-      "candid": "canisters/rune-engine/rune_engine.did",
+      "candid": "backend/canisters/rune-engine/rune_engine.did",
       "build": ["cargo build --target wasm32-unknown-unknown --release --package rune-engine"],
       "wasm": "target/wasm32-unknown-unknown/release/rune_engine.wasm"
     },
     "bitcoin-integration": {
       "type": "rust",
       "package": "bitcoin-integration",
-      "candid": "canisters/bitcoin-integration/bitcoin_integration.did",
+      "candid": "backend/canisters/bitcoin-integration/bitcoin_integration.did",
       "build": ["cargo build --target wasm32-unknown-unknown --release --package bitcoin-integration"],
       "wasm": "target/wasm32-unknown-unknown/release/bitcoin_integration.wasm",
       "init_arg": "(variant { Testnet }, principal \"mxzaz-hqaaa-aaaar-qaada-cai\")"
@@ -29,14 +29,14 @@
     "registry": {
       "type": "rust",
       "package": "registry",
-      "candid": "canisters/registry/registry.did",
+      "candid": "backend/canisters/registry/registry.did",
       "build": ["cargo build --target wasm32-unknown-unknown --release --package registry"],
       "wasm": "target/wasm32-unknown-unknown/release/registry.wasm"
     },
     "identity-manager": {
       "type": "rust",
       "package": "identity-manager",
-      "candid": "canisters/identity-manager/identity_manager.did",
+      "candid": "backend/canisters/identity-manager/identity_manager.did",
       "build": ["cargo build --target wasm32-unknown-unknown --release --package identity-manager"],
       "wasm": "target/wasm32-unknown-unknown/release/identity_manager.wasm"
     }

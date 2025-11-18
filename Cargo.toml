@@ -2,25 +2,21 @@
 resolver = "2"
 members = [
     # Core Canisters
-    "canisters/rune-engine",
-    "canisters/bitcoin-integration",
-    "canisters/registry",
-    "canisters/identity-manager",
+    "backend/canisters/rune-engine",
+    "backend/canisters/bitcoin-integration",
+    "backend/canisters/registry",
+    "backend/canisters/identity-manager",
 
     # Shared Libraries
-    "libs/quri-types",
-    "libs/quri-utils",
-    "libs/bitcoin-utils",
-    "libs/runes-utils",
-    "libs/schnorr-signatures",
-
-    # Testing & Tools
-    "tools/deployment",
-    "tools/testing-suite",
+    "backend/libs/quri-types",
+    "backend/libs/quri-utils",
+    "backend/libs/bitcoin-utils",
+    "backend/libs/runes-utils",
+    "backend/libs/schnorr-signatures",
 ]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.3.0"
 edition = "2021"
 authors = ["QURI Protocol Team"]
 license = "MIT"
