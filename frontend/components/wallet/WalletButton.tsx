@@ -10,6 +10,7 @@ import { Wallet, LogOut, Loader } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import { useICP } from '@/lib/icp/ICPProvider';
 import { WalletModal } from './WalletModal';
+import { authToast } from '@/lib/toast';
 
 interface WalletButtonProps {
   variant?: 'default' | 'compact';
@@ -22,21 +23,34 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
 
   const handleConnect = async () => {
     try {
+      // Show popup blocker warning after 1 second
+      const popupWarningTimeout = setTimeout(() => {
+        authToast.popupBlocked();
+      }, 1000);
+
       const success = await connect();
-      if (success) {
+      clearTimeout(popupWarningTimeout);
+
+      if (success && principal) {
+        authToast.connected(principal.toText());
         setShowModal(true);
+      } else {
+        authToast.cancelled();
       }
     } catch (error) {
       console.error('Failed to connect:', error);
+      authToast.failed(error instanceof Error ? error.message : undefined);
     }
   };
 
   const handleDisconnect = async () => {
     try {
       await disconnect();
+      authToast.disconnected();
       setShowModal(false);
     } catch (error) {
       console.error('Failed to disconnect:', error);
+      authToast.failed('Unable to disconnect');
     }
   };
 

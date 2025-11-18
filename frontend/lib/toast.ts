@@ -185,6 +185,67 @@ export const sessionToast = {
 };
 
 // ============================================================================
+// AUTH-SPECIFIC TOASTS
+// ============================================================================
+
+export const authToast = {
+  /**
+   * Login success
+   */
+  connected: (principal: string, opts?: ExternalToast) => {
+    return toast.success('Connected successfully!', {
+      ...opts,
+      description: `Principal: ${principal.slice(0, 12)}...`,
+      duration: 4000,
+    });
+  },
+
+  /**
+   * Popup blocked warning
+   */
+  popupBlocked: (opts?: ExternalToast) => {
+    return toast.warning('Popup may be blocked', {
+      ...opts,
+      description: 'Please allow popups for this site and try again',
+      duration: 8000,
+    });
+  },
+
+  /**
+   * Login cancelled
+   */
+  cancelled: (opts?: ExternalToast) => {
+    return toast.info('Login cancelled', {
+      ...opts,
+      description: 'You closed the authentication window',
+      duration: 3000,
+    });
+  },
+
+  /**
+   * Login failed
+   */
+  failed: (error?: string, opts?: ExternalToast) => {
+    return toast.error('Connection failed', {
+      ...opts,
+      description: error || 'Unable to connect to Internet Identity',
+      duration: 6000,
+    });
+  },
+
+  /**
+   * Disconnected
+   */
+  disconnected: (opts?: ExternalToast) => {
+    return toast.success('Disconnected', {
+      ...opts,
+      description: 'You have been logged out',
+      duration: 3000,
+    });
+  },
+};
+
+// ============================================================================
 // BITCOIN-SPECIFIC TOASTS
 // ============================================================================
 

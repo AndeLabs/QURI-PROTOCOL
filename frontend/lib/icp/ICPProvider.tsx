@@ -52,8 +52,7 @@ export function ICPProvider({ children }: { children: ReactNode }) {
     try {
       setIsLoading(true);
       logger.info('🔐 Starting Internet Identity login...');
-      
-      // The login function now handles auto-retry with multiple strategies
+
       const success = await login();
 
       if (success) {
@@ -63,17 +62,23 @@ export function ICPProvider({ children }: { children: ReactNode }) {
         logger.info('✅ User connected successfully', {
           principal: userPrincipal?.toText(),
         });
+        return true;
       } else {
-        logger.warn('❌ User connection cancelled or all login strategies failed');
-        // Connection failed, but don't show error to user if they cancelled
+        logger.warn('❌ Login cancelled or failed');
+        // Reset loading state immediately when cancelled/failed
+        setIsLoading(false);
+        return false;
       }
-
-      return success;
     } catch (error) {
       logger.error('💥 Connection error', error instanceof Error ? error : undefined);
+      setIsLoading(false);
       return false;
     } finally {
-      setIsLoading(false);
+      // Only set loading to false if we actually succeeded
+      // (otherwise it's already set to false in the error handlers above)
+      if (isConnected) {
+        setIsLoading(false);
+      }
     }
   };
 
