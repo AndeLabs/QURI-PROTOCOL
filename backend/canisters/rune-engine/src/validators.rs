@@ -1,6 +1,60 @@
 use crate::errors::{EtchingError, EtchingResult};
 use quri_types::RuneEtching;
 
+/// Validates if a string is a valid Bitcoin address
+/// Supports P2PKH, P2SH, P2WPKH, P2WSH, and P2TR addresses
+pub fn is_valid_bitcoin_address(address: &str) -> bool {
+    let len = address.len();
+
+    // P2PKH (legacy) - starts with 1, 25-34 chars
+    if address.starts_with('1') && len >= 25 && len <= 34 {
+        return is_base58_valid(address);
+    }
+
+    // P2SH (legacy) - starts with 3, 25-35 chars
+    if address.starts_with('3') && len >= 25 && len <= 35 {
+        return is_base58_valid(address);
+    }
+
+    // Bech32 (native segwit) - starts with bc1q or bc1p (taproot)
+    if address.starts_with("bc1q") && len >= 42 && len <= 62 {
+        return is_bech32_valid(address);
+    }
+
+    // Taproot - starts with bc1p
+    if address.starts_with("bc1p") && len >= 62 && len <= 62 {
+        return is_bech32_valid(address);
+    }
+
+    // Testnet addresses (tb1, m, n, 2)
+    if address.starts_with("tb1") || address.starts_with('m')
+       || address.starts_with('n') || address.starts_with('2') {
+        return len >= 25 && len <= 62;
+    }
+
+    false
+}
+
+fn is_base58_valid(address: &str) -> bool {
+    const BASE58_CHARS: &str = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+    address.chars().all(|c| BASE58_CHARS.contains(c))
+}
+
+fn is_bech32_valid(address: &str) -> bool {
+    const BECH32_CHARS: &str = "qpzry9x8gf2tvdw0s3jn54khce6mua7l";
+    let lowercase = address.to_lowercase();
+
+    // After bc1, all chars must be valid bech32
+    if let Some(rest) = lowercase.strip_prefix("bc1") {
+        return rest.chars().all(|c| BECH32_CHARS.contains(c));
+    }
+    if let Some(rest) = lowercase.strip_prefix("tb1") {
+        return rest.chars().all(|c| BECH32_CHARS.contains(c));
+    }
+
+    false
+}
+
 /// Maximum divisibility allowed (same as Bitcoin's 8 decimals)
 const MAX_DIVISIBILITY: u8 = 18;
 

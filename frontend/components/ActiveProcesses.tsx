@@ -6,8 +6,9 @@
 'use client';
 
 import { useState } from 'react';
-import { useActiveProcessesMonitor, useEtchingProcessesQuery } from '@/hooks/queries';
+import { useActiveProcessesMonitor, useMyEtchingsQuery } from '@/hooks/queries';
 import { ProcessBadge } from './ProcessMonitor';
+import type { EtchingProcessView } from '@/types/canisters';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
 import {
@@ -34,11 +35,11 @@ export function ActiveProcesses({
 }: ActiveProcessesProps) {
   const [expanded, setExpanded] = useState(false);
   const { activeProcesses, totalActive } = useActiveProcessesMonitor();
-  const { data: recentProcesses, isLoading } = useEtchingProcessesQuery(0n, 20n);
+  const { data: recentProcesses, isLoading } = useMyEtchingsQuery();
 
   // Filter processes based on preferences
-  const allProcesses = recentProcesses || [];
-  const filteredProcesses = allProcesses.filter((process) => {
+  const allProcesses: EtchingProcessView[] = recentProcesses || [];
+  const filteredProcesses = allProcesses.filter((process: EtchingProcessView) => {
     const isActive = !['Completed', 'Failed'].includes(process.state);
     const isCompleted = process.state === 'Completed';
     const isFailed = process.state === 'Failed';
@@ -155,13 +156,13 @@ export function ActiveProcesses({
           />
           <SummaryStat
             label="Completed"
-            value={allProcesses.filter((p) => p.state === 'Completed').length}
+            value={allProcesses.filter((p: EtchingProcessView) => p.state === 'Completed').length}
             icon={<CheckCircle2 className="w-4 h-4" />}
             color="text-green-600"
           />
           <SummaryStat
             label="Failed"
-            value={allProcesses.filter((p) => p.state === 'Failed').length}
+            value={allProcesses.filter((p: EtchingProcessView) => p.state === 'Failed').length}
             icon={<XCircle className="w-4 h-4" />}
             color="text-red-600"
           />

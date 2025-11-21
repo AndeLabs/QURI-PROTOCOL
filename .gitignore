@@ -39,6 +39,8 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+pocket-ic
+backend/tests/pocket-ic
 
 # Build artifacts
 dist/

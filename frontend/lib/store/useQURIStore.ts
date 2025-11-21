@@ -203,12 +203,12 @@ export const useQURIStore = create<QURIStore>()(
 
         getSelectedRune: () => {
           const key = get().ui.selectedRuneKey;
-          return key ? get().getRuneByKey(key) : null;
+          return key ? get().getRuneByKey(key) ?? null : null;
         },
 
         getSelectedProcess: () => {
           const id = get().ui.selectedProcessId;
-          return id ? get().getProcessById(id) : null;
+          return id ? get().getProcessById(id) ?? null : null;
         },
 
         // ====================================================================
@@ -269,8 +269,11 @@ export const useQURIStore = create<QURIStore>()(
           set((state) => {
             const rune = state.entities.runes[key];
             if (rune) {
-              const creatorKey = principalToString(rune.creator);
-              
+              // Convert creator to string - handle both Principal and plain object
+              const creatorKey = typeof rune.creator === 'object' && 'toText' in rune.creator
+                ? rune.creator.toText()
+                : String(rune.creator);
+
               // Remove from entities
               delete state.entities.runes[key];
 
@@ -481,44 +484,36 @@ export const useQURIStore = create<QURIStore>()(
 
 /**
  * Hook to get a single rune by key
- * Memoized - only re-renders if the specific rune changes
  */
 export function useRune(key: string | null) {
   return useQURIStore(
-    (state) => key ? state.getRuneByKey(key) : null,
-    (a, b) => a?.key === b?.key && a?.created_at === b?.created_at
+    (state) => key ? state.getRuneByKey(key) : null
   );
 }
 
 /**
  * Hook to get runes by creator
- * Memoized - only re-renders if creator's runes change
  */
 export function useRunesByCreator(creator: Principal | null) {
   return useQURIStore(
-    (state) => creator ? state.getRunesByCreator(creator) : [],
-    (a, b) => a.length === b.length && a.every((r, i) => r.key === b[i]?.key)
+    (state) => creator ? state.getRunesByCreator(creator) : []
   );
 }
 
 /**
  * Hook to get active processes
- * Memoized - only re-renders if active processes change
  */
 export function useActiveProcesses() {
   return useQURIStore(
-    (state) => state.getActiveProcesses(),
-    (a, b) => a.length === b.length && a.every((p, i) => p.id === b[i]?.id && p.status === b[i]?.status)
+    (state) => state.getActiveProcesses()
   );
 }
 
 /**
  * Hook to get UTXO balance for address
- * Memoized - only re-renders if balance changes
  */
 export function useUtxoBalance(address: string | null) {
   return useQURIStore(
-    (state) => address ? state.getUtxoBalance(address) : 0n,
-    (a, b) => a === b
+    (state) => address ? state.getUtxoBalance(address) : 0n
   );
 }

@@ -1,6 +1,5 @@
-use candid::{CandidType, Deserialize};
 use ic_cdk::api::management_canister::bitcoin::Utxo as ICPUtxo;
-use quri_types::BitcoinNetwork;
+use quri_types::{BitcoinNetwork, OutPoint, Utxo, UtxoSelection};
 
 use crate::bitcoin_api;
 
@@ -11,13 +10,16 @@ pub struct UtxoWithMetadata {
     pub value_per_vbyte: f64, // value/size ratio for efficiency
 }
 
-/// Result of UTXO selection
-#[derive(CandidType, Deserialize, Clone, Debug)]
-pub struct UtxoSelection {
-    pub selected: Vec<ICPUtxo>,
-    pub total_value: u64,
-    pub estimated_fee: u64,
-    pub change: u64,
+/// Convert ICP UTXO to quri-types UTXO
+fn icp_utxo_to_quri(utxo: &ICPUtxo) -> Utxo {
+    Utxo {
+        outpoint: OutPoint {
+            txid: utxo.outpoint.txid.clone(),
+            vout: utxo.outpoint.vout,
+        },
+        value: utxo.value,
+        height: utxo.height,
+    }
 }
 
 /// Get UTXOs for canister's Bitcoin address
@@ -65,8 +67,11 @@ pub async fn select_utxos_for_etching(
         if total_value >= amount_needed + estimated_fee {
             let change = total_value - amount_needed - estimated_fee;
 
+            // Convert ICPUtxos to quri-types Utxos
+            let selected_utxos: Vec<Utxo> = selected.iter().map(icp_utxo_to_quri).collect();
+
             return Ok(UtxoSelection {
-                selected,
+                selected: selected_utxos,
                 total_value,
                 estimated_fee,
                 change,
@@ -128,7 +133,7 @@ fn find_exact_match(
 
         if value >= target + fee && value <= target + fee + tolerance {
             return Some(UtxoSelection {
-                selected: single,
+                selected: single.iter().map(icp_utxo_to_quri).collect(),
                 total_value: value,
                 estimated_fee: fee,
                 change: value - target - fee,
@@ -145,7 +150,7 @@ fn find_exact_match(
 
             if value >= target + fee && value <= target + fee + tolerance {
                 return Some(UtxoSelection {
-                    selected: pair,
+                    selected: pair.iter().map(icp_utxo_to_quri).collect(),
                     total_value: value,
                     estimated_fee: fee,
                     change: value - target - fee,

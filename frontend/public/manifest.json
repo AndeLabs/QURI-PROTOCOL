@@ -1,74 +1,24 @@
 {
   "name": "QURI Protocol",
   "short_name": "QURI",
-  "description": "Bitcoin Runes etching platform on Internet Computer",
+  "description": "Professional Bitcoin Runes launchpad on Internet Computer Protocol",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#667eea",
+  "background_color": "#FAFAFA",
+  "theme_color": "#F59E0B",
   "orientation": "portrait-primary",
   "icons": [
     {
-      "src": "/icon-72.png",
-      "sizes": "72x72",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-96.png",
-      "sizes": "96x96",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-128.png",
-      "sizes": "128x128",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-144.png",
-      "sizes": "144x144",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-152.png",
-      "sizes": "152x152",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-192.png",
+      "src": "/images/brand/logo.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any maskable"
     },
     {
-      "src": "/icon-384.png",
-      "sizes": "384x384",
-      "type": "image/png",
-      "purpose": "any"
-    },
-    {
-      "src": "/icon-512.png",
+      "src": "/images/brand/logo.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any maskable"
-    }
-  ],
-  "screenshots": [
-    {
-      "src": "/screenshot-desktop.png",
-      "sizes": "1280x720",
-      "type": "image/png",
-      "form_factor": "wide"
-    },
-    {
-      "src": "/screenshot-mobile.png",
-      "sizes": "750x1334",
-      "type": "image/png",
-      "form_factor": "narrow"
     }
   ],
   "categories": [
@@ -77,25 +27,25 @@
   ],
   "shortcuts": [
     {
-      "name": "Etch Rune",
-      "short_name": "Etch",
-      "description": "Create a new Rune",
-      "url": "/etch",
+      "name": "Create Rune",
+      "short_name": "Create",
+      "description": "Etch a new Bitcoin Rune",
+      "url": "/create",
       "icons": [
         {
-          "src": "/icon-96.png",
+          "src": "/images/brand/logo.png",
           "sizes": "96x96"
         }
       ]
     },
     {
-      "name": "Gallery",
-      "short_name": "Gallery",
-      "description": "Browse Runes",
-      "url": "/gallery",
+      "name": "Explorer",
+      "short_name": "Explorer",
+      "description": "Browse all Runes",
+      "url": "/explorer",
       "icons": [
         {
-          "src": "/icon-96.png",
+          "src": "/images/brand/logo.png",
           "sizes": "96x96"
         }
       ]
@@ -104,12 +54,5 @@
   "prefer_related_applications": false,
   "scope": "/",
   "lang": "en",
-  "dir": "ltr",
-  "iarc_rating_id": "",
-  "related_applications": [],
-  "serviceworker": {
-    "src": "/sw.js",
-    "scope": "/",
-    "update_via_cache": "none"
-  }
+  "dir": "ltr"
 }

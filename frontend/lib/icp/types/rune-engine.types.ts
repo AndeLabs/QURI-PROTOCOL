@@ -36,6 +36,12 @@ export type CyclesStatus =
   | { Low: null }
   | { Healthy: null };
 
+export type SwitchStatus =
+  | { Active: null }
+  | { Expired: null }
+  | { Triggered: null }
+  | { Cancelled: null };
+
 export type Result<T = null> =
   | { Ok: T }
   | { Err: string };
@@ -196,6 +202,104 @@ export interface CyclesMetrics {
 }
 
 // ============================================================================
+// DEAD MAN'S SWITCH TYPES
+// ============================================================================
+
+export interface DeadManSwitch {
+  id: bigint;
+  owner: Principal;
+  beneficiary: string;
+  rune_id: string;
+  amount: bigint;
+  last_checkin: bigint;
+  timeout_ns: bigint;
+  triggered: boolean;
+  created_at: bigint;
+  message: [] | [string];
+}
+
+export interface DeadManSwitchInfo {
+  switch: DeadManSwitch;
+  status: SwitchStatus;
+  time_remaining_ns: bigint;
+  elapsed_percentage: number;
+}
+
+export interface DeadManSwitchStats {
+  total_switches: bigint;
+  active_switches: bigint;
+  triggered_switches: bigint;
+  total_value_protected: bigint;
+}
+
+export interface CreateDeadManSwitchParams {
+  beneficiary: string;
+  rune_id: string;
+  amount: bigint;
+  timeout_days: bigint;
+  message: [] | [string];
+}
+
+// ============================================================================
+// SETTLEMENT TYPES
+// ============================================================================
+
+export interface RuneKey {
+  block: bigint;
+  tx: number;
+}
+
+export type SettlementMode =
+  | { Instant: null }
+  | { Batched: null }
+  | { Scheduled: null }
+  | { Manual: null };
+
+export type SettlementStatus =
+  | { Queued: null }
+  | { Batching: null }
+  | { Signing: null }
+  | { Broadcasting: null }
+  | { Confirming: null }
+  | { Confirmed: null }
+  | { Failed: null };
+
+export interface SettlementRecord {
+  id: string;
+  principal: Principal;
+  rune_key: RuneKey;
+  rune_name: string;
+  amount: bigint;
+  destination_address: string;
+  mode: SettlementMode;
+  status: SettlementStatus;
+  txid: [] | [string];
+  created_at: bigint;
+  updated_at: bigint;
+  confirmations: [] | [number];
+}
+
+// ============================================================================
+// ENCRYPTED METADATA (vetKeys) TYPES
+// ============================================================================
+
+export interface EncryptedRuneMetadata {
+  rune_id: string;
+  encrypted_data: Uint8Array | number[];
+  nonce: Uint8Array | number[];
+  reveal_time: [] | [bigint];
+  owner: Principal;
+  created_at: bigint;
+}
+
+export interface StoreEncryptedMetadataParams {
+  rune_id: string;
+  encrypted_data: Uint8Array | number[];
+  nonce: Uint8Array | number[];
+  reveal_time: [] | [bigint];
+}
+
+// ============================================================================
 // ACTOR INTERFACE
 // ============================================================================
 
@@ -241,6 +345,32 @@ export interface RuneEngineActor {
 
   // Maintenance
   cleanup_old_processes: ActorMethod<[bigint], Result<bigint>>;
+
+  // Dead Man's Switch APIs
+  create_dead_man_switch: ActorMethod<[CreateDeadManSwitchParams], Result<bigint>>;
+  dms_checkin: ActorMethod<[bigint], Result>;
+  cancel_dead_man_switch: ActorMethod<[bigint], Result>;
+  get_dead_man_switch: ActorMethod<[bigint], [] | [DeadManSwitchInfo]>;
+  get_my_dead_man_switches: ActorMethod<[], DeadManSwitchInfo[]>;
+  get_dead_man_switch_stats: ActorMethod<[], DeadManSwitchStats>;
+  process_dead_man_switches: ActorMethod<[], Result<string>>;
+  has_expired_dead_man_switches: ActorMethod<[], boolean>;
+
+  // Encrypted Metadata (vetKeys) APIs
+  store_encrypted_metadata: ActorMethod<[StoreEncryptedMetadataParams], Result>;
+  get_encrypted_metadata: ActorMethod<[string], [] | [EncryptedRuneMetadata]>;
+  get_my_encrypted_metadata: ActorMethod<[], EncryptedRuneMetadata[]>;
+  delete_encrypted_metadata: ActorMethod<[string], Result>;
+  can_decrypt_metadata: ActorMethod<[string], Result<boolean>>;
+  has_encrypted_metadata: ActorMethod<[string], boolean>;
+  get_metadata_reveal_status: ActorMethod<[string], [] | [[boolean, [] | [bigint]]]>;
+  get_vetkd_public_key: ActorMethod<[], Result<Uint8Array | number[]>>;
+  get_encrypted_decryption_key: ActorMethod<[string, Uint8Array | number[]], Result<Uint8Array | number[]>>;
+
+  // Settlement APIs
+  get_settlement_history: ActorMethod<[[] | [bigint], [] | [bigint]], SettlementRecord[]>;
+  get_settlement_status: ActorMethod<[string], [] | [SettlementRecord]>;
+  get_pending_settlement_count: ActorMethod<[], bigint>;
 }
 
 // ============================================================================

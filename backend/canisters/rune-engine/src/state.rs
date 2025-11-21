@@ -4,8 +4,68 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
 use std::cell::RefCell;
 
 use crate::process_id::ProcessId;
+use quri_types::RuneEtching;
 
 type Memory = VirtualMemory<DefaultMemoryImpl>;
+
+// ============================================================================
+// Virtual Rune (ICP-only, fast and cheap)
+// ============================================================================
+
+/// Status of a virtual rune
+#[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
+pub enum VirtualRuneStatus {
+    /// Created on ICP, not yet etched to Bitcoin
+    Virtual,
+    /// Currently being etched to Bitcoin
+    Etching { process_id: String },
+    /// Successfully etched on Bitcoin
+    Etched { txid: String, block_height: u64 },
+    /// Etching failed (can retry)
+    EtchingFailed { reason: String },
+}
+
+/// A virtual rune stored on ICP
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct VirtualRune {
+    pub id: String,
+    pub caller: candid::Principal,
+    pub etching: RuneEtching,
+    pub status: VirtualRuneStatus,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl VirtualRune {
+    pub fn new(id: String, caller: candid::Principal, etching: RuneEtching) -> Self {
+        let now = ic_cdk::api::time();
+        Self {
+            id,
+            caller,
+            etching,
+            status: VirtualRuneStatus::Virtual,
+            created_at: now,
+            updated_at: now,
+        }
+    }
+
+    pub fn update_status(&mut self, new_status: VirtualRuneStatus) {
+        self.status = new_status;
+        self.updated_at = ic_cdk::api::time();
+    }
+
+    pub fn is_virtual(&self) -> bool {
+        matches!(self.status, VirtualRuneStatus::Virtual)
+    }
+
+    pub fn is_etched(&self) -> bool {
+        matches!(self.status, VirtualRuneStatus::Etched { .. })
+    }
+}
+
+// ============================================================================
+// Etching Process (Bitcoin etching flow)
+// ============================================================================
 
 /// State of an etching process
 #[derive(CandidType, Deserialize, Clone, Debug, PartialEq, Eq)]
@@ -162,10 +222,16 @@ impl EtchingProcess {
 /// Global state manager - NOW USES ProcessId as bounded key
 type ProcessStorage = RefCell<Option<StableBTreeMap<ProcessId, Vec<u8>, Memory>>>;
 
+/// Virtual rune storage - uses string ID as key
+type VirtualRuneStorage = RefCell<Option<StableBTreeMap<ProcessId, Vec<u8>, Memory>>>;
+
 thread_local! {
     #[allow(unused_doc_comments)]
-    /// Global state manager
+    /// Global state manager for etching processes
     static PROCESSES: ProcessStorage = const { RefCell::new(None) };
+
+    /// Storage for virtual runes (ICP-only)
+    static VIRTUAL_RUNES: VirtualRuneStorage = const { RefCell::new(None) };
 }
 
 /// Initialize state storage
@@ -173,6 +239,26 @@ pub fn init_state_storage(memory: Memory) {
     PROCESSES.with(|p| {
         *p.borrow_mut() = Some(StableBTreeMap::init(memory));
     });
+}
+
+/// Reset processes storage (clears all data)
+/// WARNING: This will delete all etching processes!
+pub fn reset_processes_storage(memory: Memory) {
+    PROCESSES.with(|p| {
+        // Create a new empty BTreeMap, effectively clearing the old one
+        *p.borrow_mut() = Some(StableBTreeMap::new(memory));
+    });
+}
+
+/// Get process count (safe version that doesn't iterate)
+pub fn get_process_count_safe() -> Result<u64, String> {
+    PROCESSES.with(|p| {
+        if let Some(ref map) = *p.borrow() {
+            Ok(map.len())
+        } else {
+            Err("Process storage not initialized".to_string())
+        }
+    })
 }
 
 /// Store etching process
@@ -280,6 +366,98 @@ pub fn cleanup_old_processes(age_threshold_nanos: u64) -> u64 {
     });
 
     deleted
+}
+
+// ============================================================================
+// Virtual Rune Storage Functions
+// ============================================================================
+
+/// Initialize virtual rune storage
+pub fn init_virtual_rune_storage(memory: Memory) {
+    VIRTUAL_RUNES.with(|v| {
+        *v.borrow_mut() = Some(StableBTreeMap::init(memory));
+    });
+}
+
+/// Store a virtual rune
+pub fn store_virtual_rune(rune: &VirtualRune) -> Result<(), String> {
+    let key = ProcessId::from_string(&rune.id)
+        .map_err(|e| format!("Invalid rune ID: {}", e))?;
+    let value =
+        candid::encode_one(rune).map_err(|e| format!("Failed to encode virtual rune: {}", e))?;
+
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref mut map) = *v.borrow_mut() {
+            map.insert(key, value);
+            Ok(())
+        } else {
+            Err("Virtual rune storage not initialized".to_string())
+        }
+    })
+}
+
+/// Get a virtual rune by ID
+pub fn get_virtual_rune(id: &str) -> Option<VirtualRune> {
+    let key = ProcessId::from_string(id).ok()?;
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref map) = *v.borrow() {
+            map.get(&key)
+                .and_then(|bytes| candid::decode_one(&bytes).ok())
+        } else {
+            None
+        }
+    })
+}
+
+/// Update a virtual rune
+pub fn update_virtual_rune(rune: &VirtualRune) -> Result<(), String> {
+    store_virtual_rune(rune)
+}
+
+/// Get all virtual runes for a caller
+pub fn get_caller_virtual_runes(caller: candid::Principal) -> Vec<VirtualRune> {
+    let mut results = Vec::new();
+
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref map) = *v.borrow() {
+            for (_key, value) in map.iter() {
+                if let Ok(rune) = candid::decode_one::<VirtualRune>(&value) {
+                    if rune.caller == caller {
+                        results.push(rune);
+                    }
+                }
+            }
+        }
+    });
+
+    results
+}
+
+/// Get total count of virtual runes
+pub fn get_virtual_rune_count() -> u64 {
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref map) = *v.borrow() {
+            map.len()
+        } else {
+            0
+        }
+    })
+}
+
+/// Check if a rune name already exists
+pub fn rune_name_exists(name: &str) -> bool {
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref map) = *v.borrow() {
+            for (_key, value) in map.iter() {
+                if let Ok(rune) = candid::decode_one::<VirtualRune>(&value) {
+                    if rune.etching.rune_name == name {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    })
 }
 
 #[cfg(test)]

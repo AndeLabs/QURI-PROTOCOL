@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { Button } from './ui/Button';
 import { TutorialButton } from './OnboardingTutorial';
-import { useICP } from '@/lib/icp/ICPProvider';
+import { useDualAuth } from '@/lib/auth';
 import { ParallaxContainer, RevealOnScroll } from './Parallax';
 import { Sparkles, ArrowRight, Shield, Zap } from 'lucide-react';
 
@@ -13,13 +13,14 @@ import { Sparkles, ArrowRight, Shield, Zap } from 'lucide-react';
  * Emphasizes art, elegance, and white space
  */
 export function Hero() {
-  const { isConnected, connect, disconnect, principal, isLoading } = useICP();
+  const { isConnected, connectICP, disconnect, getPrimaryPrincipal, isLoading } = useDualAuth();
+  const principal = getPrimaryPrincipal();
 
   const handleAuthClick = async () => {
     if (isConnected) {
       await disconnect();
     } else {
-      await connect();
+      await connectICP();
     }
   };
 

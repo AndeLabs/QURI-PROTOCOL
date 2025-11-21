@@ -44,6 +44,17 @@ export interface EtchingProcessView {
   txid: [] | [string];
 }
 
+export interface VirtualRuneView {
+  id: string;
+  rune_name: string;
+  symbol: string;
+  divisibility: number;
+  premine: bigint;
+  status: string;
+  created_at: bigint;
+  updated_at: bigint;
+}
+
 export interface EtchingConfigView {
   network: BitcoinNetwork;
   fee_rate: bigint;
@@ -62,7 +73,7 @@ export interface HealthStatus {
 export type Role = { Owner: null } | { Admin: null } | { Operator: null } | { User: null };
 
 export interface RoleAssignment {
-  target: string;
+  principal: string;
   role: Role;
   granted_at: bigint;
   granted_by: string;
@@ -222,6 +233,56 @@ export interface PagedResponse<T> {
   has_more: boolean;
 }
 
+export interface SearchResult<T> {
+  results: T[];
+  total_matches: bigint;
+  offset: bigint;
+  limit: bigint;
+}
+
+export interface PaginatedResult {
+  results: RegistryEntry[];
+  total_count: bigint;
+  offset: bigint;
+  limit: bigint;
+}
+
+// Fee estimation types
+export interface FeeEstimatesView {
+  slow: bigint;
+  medium: bigint;
+  fast: bigint;
+  updated_at: bigint;
+}
+
+export type FeePriority = { Slow: null } | { Medium: null } | { Fast: null };
+
+// Confirmation tracking
+export interface PendingTransaction {
+  txid: string;
+  process_id: string;
+  current_confirmations: number;
+  required_confirmations: number;
+  last_check: bigint;
+  registered_at: bigint;
+}
+
+// Log types
+export interface LogEntry {
+  timestamp: bigint;
+  level: string;
+  function_name: string;
+  message: string;
+  data: [] | [string];
+}
+
+export interface LogStats {
+  total_logs: bigint;
+  errors: bigint;
+  warnings: bigint;
+  infos: bigint;
+}
+
 // ============================================================================
 // IDENTITY MANAGER TYPES
 // ============================================================================
@@ -253,15 +314,23 @@ export interface UserStats {
 
 export interface RuneEngineService {
   // Core etching operations
-  etch_rune: (etching: RuneEtching) => Promise<Result<string>>;
+  create_rune: (etching: RuneEtching) => Promise<Result<string>>;
+  etch_to_bitcoin: (rune_id: string) => Promise<Result<string>>;
   get_etching_status: (process_id: string) => Promise<[] | [EtchingProcessView]>;
-  list_processes: (offset: bigint, limit: bigint) => Promise<EtchingProcessView[]>;
-  retry_failed_etching: (id: string) => Promise<Result<null>>;
+  get_my_etchings: () => Promise<EtchingProcessView[]>;
+
+  // Virtual rune operations
+  get_my_virtual_runes: () => Promise<VirtualRuneView[]>;
+  get_virtual_rune: (rune_id: string) => Promise<[] | [VirtualRuneView]>;
+  get_virtual_rune_count: () => Promise<bigint>;
 
   // Configuration
-  get_etching_config: () => Promise<EtchingConfigView>;
-  update_fee_rate: (fee_rate: bigint) => Promise<Result<null>>;
+  update_etching_config: (config: EtchingConfigView) => Promise<Result<null>>;
   configure_canisters: (
+    bitcoin_integration_id: string,
+    registry_id: string
+  ) => Promise<Result<null>>;
+  auto_configure_canisters: (
     bitcoin_integration_id: string,
     registry_id: string
   ) => Promise<Result<null>>;
@@ -269,17 +338,168 @@ export interface RuneEngineService {
   // Health & Monitoring
   health_check: () => Promise<HealthStatus>;
   get_metrics_summary: () => Promise<MetricsSummary>;
-  get_performance_metrics: () => Promise<PerformanceMetrics>;
+  get_performance_metrics: () => Promise<Result<PerformanceMetrics>>;
   get_cycles_metrics: () => Promise<CyclesMetrics>;
+  get_cycles_history: () => Promise<Result<Array<{ balance: bigint; timestamp: bigint }>>>;
 
   // Bitcoin integration
-  get_current_block_height: () => Promise<Result<BlockHeightInfo>>;
+  get_bitcoin_block_height: () => Promise<[] | [bigint]>;
+  get_block_height_info: () => Promise<Result<[] | [BlockHeightInfo]>>;
+
+  // Fee estimation
+  get_current_fee_estimates: () => Promise<[] | [FeeEstimatesView]>;
+  get_recommended_fee: (priority: FeePriority) => Promise<bigint>;
+
+  // Confirmation tracking
+  get_pending_confirmations: () => Promise<Result<PendingTransaction[]>>;
+  get_confirmation_status: (txid: string) => Promise<[] | [PendingTransaction]>;
+  pending_confirmation_count: () => Promise<number>;
 
   // RBAC
-  assign_role: (principal: string, role: Role) => Promise<Result<null>>;
-  revoke_role: (principal: string) => Promise<Result<null>>;
-  get_role: (principal: string) => Promise<[] | [Role]>;
-  list_role_assignments: () => Promise<RoleAssignment[]>;
+  grant_role: (target: string, role: Role) => Promise<Result<null>>;
+  revoke_role: (target: string) => Promise<Result<null>>;
+  get_my_role: () => Promise<Role>;
+  get_user_role: (principal: string) => Promise<Result<Role>>;
+  list_roles: () => Promise<Result<RoleAssignment[]>>;
+  get_owner: () => Promise<[] | [string]>;
+
+  // Logging
+  get_recent_logs: (limit: bigint) => Promise<Result<LogEntry[]>>;
+  get_recent_errors: (limit: bigint) => Promise<Result<LogEntry[]>>;
+  get_log_stats: () => Promise<LogStats>;
+  search_logs: (keyword: string, limit: bigint) => Promise<Result<LogEntry[]>>;
+
+  // Maintenance
+  cleanup_old_processes: (age_days: bigint) => Promise<Result<bigint>>;
+  cleanup_expired_idempotency: () => Promise<Result<bigint>>;
+  get_idempotency_request_count: () => Promise<Result<bigint>>;
+
+  // Settlement operations
+  settle_to_bitcoin: (request: {
+    rune_key: { block: bigint; tx: number };
+    amount: bigint;
+    destination_address: string;
+    mode: string;
+    fee_rate: [] | [number];
+  }) => Promise<Result<{ txid: [] | [string] }>>;
+
+  get_settlement_history: (
+    limit: [] | [bigint],
+    offset: [] | [bigint]
+  ) => Promise<Array<{
+    id: string;
+    principal: { toText: () => string };
+    rune_key: { block: bigint; tx: number };
+    rune_name: string;
+    amount: bigint;
+    destination_address: string;
+    mode: { Instant: null } | { Batched: null } | { Scheduled: null } | { Manual: null };
+    status: { Queued: null } | { Batching: null } | { Signing: null } | { Broadcasting: null } | { Confirming: null } | { Confirmed: null } | { Failed: null };
+    txid: [] | [string];
+    created_at: bigint;
+    updated_at: bigint;
+    confirmations: [] | [number];
+  }>>;
+
+  get_settlement_status: (settlement_id: string) => Promise<[] | [{
+    id: string;
+    principal: { toText: () => string };
+    rune_key: { block: bigint; tx: number };
+    rune_name: string;
+    amount: bigint;
+    destination_address: string;
+    mode: { Instant: null } | { Batched: null } | { Scheduled: null } | { Manual: null };
+    status: { Queued: null } | { Batching: null } | { Signing: null } | { Broadcasting: null } | { Confirming: null } | { Confirmed: null } | { Failed: null };
+    txid: [] | [string];
+    created_at: bigint;
+    updated_at: bigint;
+    confirmations: [] | [number];
+  }]>;
+
+  get_pending_settlement_count: () => Promise<bigint>;
+
+  // Dead Man's Switch operations
+  create_dead_man_switch: (params: {
+    beneficiary: string;
+    rune_id: string;
+    amount: bigint;
+    timeout_days: bigint;
+    message: [] | [string];
+  }) => Promise<Result<bigint>>;
+  dms_checkin: (switch_id: bigint) => Promise<Result<null>>;
+  cancel_dead_man_switch: (switch_id: bigint) => Promise<Result<null>>;
+  get_dead_man_switch: (switch_id: bigint) => Promise<[] | [{
+    switch: {
+      id: bigint;
+      owner: { toText: () => string };
+      beneficiary: string;
+      rune_id: string;
+      amount: bigint;
+      last_checkin: bigint;
+      timeout_ns: bigint;
+      triggered: boolean;
+      created_at: bigint;
+      message: [] | [string];
+    };
+    status: { Active: null } | { Expired: null } | { Triggered: null } | { Cancelled: null };
+    time_remaining_ns: bigint;
+    elapsed_percentage: number;
+  }]>;
+  get_my_dead_man_switches: () => Promise<Array<{
+    switch: {
+      id: bigint;
+      owner: { toText: () => string };
+      beneficiary: string;
+      rune_id: string;
+      amount: bigint;
+      last_checkin: bigint;
+      timeout_ns: bigint;
+      triggered: boolean;
+      created_at: bigint;
+      message: [] | [string];
+    };
+    status: { Active: null } | { Expired: null } | { Triggered: null } | { Cancelled: null };
+    time_remaining_ns: bigint;
+    elapsed_percentage: number;
+  }>>;
+  get_dead_man_switch_stats: () => Promise<{
+    total_switches: bigint;
+    active_switches: bigint;
+    triggered_switches: bigint;
+    total_value_protected: bigint;
+  }>;
+  process_dead_man_switches: () => Promise<Result<string>>;
+  has_expired_dead_man_switches: () => Promise<boolean>;
+
+  // Encrypted Metadata (vetKeys) operations
+  store_encrypted_metadata: (params: {
+    rune_id: string;
+    encrypted_data: number[];
+    nonce: number[];
+    reveal_time: [] | [bigint];
+  }) => Promise<Result<null>>;
+  get_encrypted_metadata: (rune_id: string) => Promise<[] | [{
+    rune_id: string;
+    encrypted_data: Uint8Array;
+    nonce: Uint8Array;
+    reveal_time: [] | [bigint];
+    owner: { toText: () => string };
+    created_at: bigint;
+  }]>;
+  get_my_encrypted_metadata: () => Promise<Array<{
+    rune_id: string;
+    encrypted_data: Uint8Array;
+    nonce: Uint8Array;
+    reveal_time: [] | [bigint];
+    owner: { toText: () => string };
+    created_at: bigint;
+  }>>;
+  delete_encrypted_metadata: (rune_id: string) => Promise<Result<null>>;
+  can_decrypt_metadata: (rune_id: string) => Promise<Result<boolean>>;
+  has_encrypted_metadata: (rune_id: string) => Promise<boolean>;
+  get_metadata_reveal_status: (rune_id: string) => Promise<[] | [[boolean, [] | [bigint]]]>;
+  get_vetkd_public_key: () => Promise<Result<number[]>>;
+  get_encrypted_decryption_key: (rune_id: string, public_key: number[]) => Promise<Result<number[]>>;
 }
 
 export interface BitcoinIntegrationService {
@@ -444,21 +664,93 @@ export interface QuriBackendService {
   update_config: (new_config: CanisterConfig) => Promise<Result<null>>;
 }
 
+// Indexer types
+export interface RuneIdentifier {
+  block: bigint;
+  tx_index: number;
+}
+
+export interface IndexedRune {
+  id: RuneIdentifier;
+  name: string;
+  symbol: string;
+  decimals: number;
+  premine: bigint;
+  total_supply: bigint;
+  txid: string;
+  etcher: string;
+  timestamp: bigint;
+  block_height: bigint;
+  terms: [] | [{ amount: bigint; cap: bigint; height_start: [] | [bigint]; height_end: [] | [bigint] }];
+}
+
+export interface IndexerStats {
+  total_runes: bigint;
+  total_etchings: bigint;
+  last_indexed_block: bigint;
+  indexing_errors: bigint;
+}
+
+export interface SyncResponse {
+  fetched: number;
+  stored: number;
+  errors: number;
+  total_available: bigint;
+}
+
+export interface IndexedSearchResult {
+  results: IndexedRune[];
+  total_matches: bigint;
+  offset: bigint;
+  limit: bigint;
+}
+
 export interface RegistryService {
   // Core registry functions
-  register_rune: (metadata: RuneMetadata) => Promise<Result<null>>;
-  get_rune: (rune_id: RuneId) => Promise<[] | [RegistryEntry]>;
-  list_runes: (offset: bigint, limit: bigint) => Promise<RegistryEntry[]>;
-  search_runes: (query: string) => Promise<RegistryEntry[]>;
-  get_trending: (limit: bigint) => Promise<RegistryEntry[]>;
+  register_rune: (metadata: RuneMetadata) => Promise<Result<RuneKey>>;
+  get_rune: (key: RuneKey) => Promise<[] | [RegistryEntry]>;
+  get_rune_by_name: (name: string) => Promise<[] | [RegistryEntry]>;
+  get_my_runes: () => Promise<RegistryEntry[]>;
+  list_runes: (page: [] | [Page]) => Promise<Result<PagedResponse<RegistryEntry>>>;
+  search_runes: (query: string, offset: bigint, limit: bigint) => Promise<SearchResult<RegistryEntry>>;
+  get_trending: (offset: bigint, limit: bigint) => Promise<PaginatedResult>;
 
   // Analytics updates
-  update_volume: (rune_id: RuneId, volume: bigint) => Promise<Result<null>>;
-  update_holder_count: (rune_id: RuneId, count: bigint) => Promise<Result<null>>;
+  update_volume: (key: RuneKey, volume_delta: bigint) => Promise<Result<null>>;
+  update_holder_count: (key: RuneKey, new_count: bigint) => Promise<Result<null>>;
 
   // Statistics
   total_runes: () => Promise<bigint>;
   get_stats: () => Promise<RegistryStats>;
+
+  // Metrics and rate limiting
+  get_canister_metrics: () => Promise<RegistryMetrics>;
+  add_to_whitelist: (principal: string) => Promise<Result<null>>;
+  remove_from_whitelist: (principal: string) => Promise<Result<null>>;
+  is_whitelisted: (principal: string) => Promise<boolean>;
+  reset_rate_limit: (principal: string) => Promise<Result<null>>;
+
+  // Indexer functions
+  list_indexed_runes: (offset: bigint, limit: bigint) => Promise<IndexedRune[]>;
+  get_indexed_rune: (id: RuneIdentifier) => Promise<[] | [IndexedRune]>;
+  get_indexer_stats: () => Promise<IndexerStats>;
+  search_indexed_runes: (query: string, offset: bigint, limit: bigint) => Promise<IndexedSearchResult>;
+
+  // Hiro API sync
+  sync_runes_from_hiro: (offset: number, limit: number) => Promise<Result<SyncResponse>>;
+  batch_sync_runes: (start_offset: number, total_to_fetch: number) => Promise<Result<SyncResponse>>;
+  get_hiro_total: () => Promise<Result<bigint>>;
+}
+
+// Registry metrics type
+export interface RegistryMetrics {
+  query_count: bigint;
+  total_query_duration_ns: bigint;
+  avg_query_duration_ns: bigint;
+  error_count: bigint;
+  errors_by_type: { [key: string]: bigint };
+  total_runes: bigint;
+  total_volume: bigint;
 }
 
 export interface IdentityManagerService {

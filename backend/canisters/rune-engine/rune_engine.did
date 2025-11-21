@@ -1,205 +1,387 @@
-// Rune Engine Canister - Production-grade Rune etching orchestrator
-// Handles complete etching flow with state management and error recovery
-
-type BitcoinNetwork = variant {
-    Mainnet;
-    Testnet;
-    Regtest;
-};
-
-type MintTerms = record {
-    amount : nat64;
-    cap : nat64;
-    height_start : opt nat64;
-    height_end : opt nat64;
-    offset_start : opt nat64;
-    offset_end : opt nat64;
-};
-
-type RuneEtching = record {
-    rune_name : text;
-    symbol : text;
-    divisibility : nat8;
-    premine : nat64;
-    terms : opt MintTerms;
-};
-
-type EtchingProcessView = record {
-    id : text;
-    rune_name : text;
-    state : text;
-    created_at : nat64;
-    updated_at : nat64;
-    retry_count : nat32;
-    txid : opt text;
-};
-
-type EtchingConfigView = record {
-    network : BitcoinNetwork;
-    fee_rate : nat64;
-    required_confirmations : nat32;
-    enable_retries : bool;
-};
-
-type HealthStatus = record {
-    healthy : bool;
-    etching_config_initialized : bool;
-    bitcoin_integration_configured : bool;
-    registry_configured : bool;
-    canister_id : principal;
-};
-
-type Role = variant {
-    Owner;
-    Admin;
-    Operator;
-    User;
-};
-
-type RoleAssignment = record {
-    target : principal;
-    role : Role;
-    granted_at : nat64;
-    granted_by : principal;
-};
-
+type BitcoinNetwork = variant { Mainnet; Regtest; Testnet };
 type BlockHeightInfo = record {
-    height : nat64;
-    network : BitcoinNetwork;
-    age_seconds : nat64;
+  height : nat64;
+  network : BitcoinNetwork;
+  age_seconds : nat64;
 };
-
-type MetricsSummary = record {
-    total_runes_created : nat64;
-    total_errors : nat64;
-    success_rate_percent : nat32;
-    avg_etching_latency_ms : nat64;
-    active_processes : nat32;
-    pending_processes : nat32;
+type CreateDeadManSwitchParams = record {
+  beneficiary : text;
+  message : opt text;
+  amount : nat;
+  timeout_days : nat64;
+  rune_id : text;
 };
-
-type ErrorBreakdown = record {
-    validation_errors : nat64;
-    balance_errors : nat64;
-    utxo_errors : nat64;
-    signing_errors : nat64;
-    broadcast_errors : nat64;
-    confirmation_errors : nat64;
-    unknown_errors : nat64;
-};
-
-type PerformanceMetrics = record {
-    total_runes_created : nat64;
-    total_errors : nat64;
-    total_retries : nat64;
-    total_confirmations_tracked : nat64;
-    errors_by_type : ErrorBreakdown;
-    avg_etching_latency_ns : nat64;
-    avg_signing_latency_ns : nat64;
-    avg_broadcast_latency_ns : nat64;
-    active_processes : nat32;
-    pending_processes : nat32;
-    last_updated : nat64;
-};
-
-type LatencyPercentiles = record {
-    p50 : nat64;
-    p90 : nat64;
-    p95 : nat64;
-    p99 : nat64;
-    min : nat64;
-    max : nat64;
-    count : nat64;
-};
-
-type LogLevel = variant {
-    Debug;
-    Info;
-    Warn;
-    Error;
-};
-
-type LogEntry = record {
-    id : nat64;
-    level : LogLevel;
-    message : text;
-    caller : opt principal;
-    module : text;
-    context : opt text;
-    timestamp : nat64;
-};
-
-type LogStats = record {
-    total_errors : nat64;
-    total_warns : nat64;
-    total_infos : nat64;
-    total_debugs : nat64;
-    last_error_timestamp : opt nat64;
-};
-
-type CyclesStatus = variant {
-    Critical;
-    Warning;
-    Low;
-    Healthy;
-};
-
-type CyclesSnapshot = record {
-    balance : nat;
-    status : CyclesStatus;
-    timestamp : nat64;
-};
-
 type CyclesMetrics = record {
-    current_balance : nat;
-    status : CyclesStatus;
-    burn_rate_per_second : nat;
-    time_until_depletion_seconds : opt nat64;
-    last_check : nat64;
-    total_snapshots : nat64;
+  burn_rate_per_second : nat;
+  status : CyclesStatus;
+  current_balance : nat;
+  total_snapshots : nat64;
+  time_until_depletion_seconds : opt nat64;
+  last_check : nat64;
 };
-
-service : {
-    // Main etching API - create a new Rune on Bitcoin
-    "create_rune" : (RuneEtching) -> (variant { Ok : text; Err : text });
-
-    // Query APIs - check status and history
-    "get_etching_status" : (text) -> (opt EtchingProcessView) query;
-    "get_my_etchings" : () -> (vec EtchingProcessView) query;
-    "health_check" : () -> (HealthStatus) query;
-
-    // Bitcoin block height tracking
-    "get_bitcoin_block_height" : () -> (opt nat64) query;
-    "get_block_height_info" : () -> (variant { Ok : opt BlockHeightInfo; Err : text }) query;
-
-    // Performance metrics
-    "get_metrics_summary" : () -> (MetricsSummary) query;
-    "get_performance_metrics" : () -> (variant { Ok : PerformanceMetrics; Err : text }) query;
-    "get_latency_percentiles" : (text) -> (variant { Ok : opt LatencyPercentiles; Err : text }) query;
-
-    // Logging APIs
-    "get_recent_logs" : (nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
-    "get_recent_errors" : (nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
-    "get_log_stats" : () -> (LogStats) query;
-    "search_logs" : (text, nat64) -> (variant { Ok : vec LogEntry; Err : text }) query;
-
-    // Cycles monitoring
-    "get_cycles_metrics" : () -> (CyclesMetrics) query;
-    "get_cycles_history" : () -> (variant { Ok : vec CyclesSnapshot; Err : text }) query;
-
-    // Configuration APIs (admin/deployment only)
-    "configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
-    "auto_configure_canisters" : (principal, principal) -> (variant { Ok : null; Err : text });
-    "update_etching_config" : (EtchingConfigView) -> (variant { Ok : null; Err : text });
-
-    // RBAC Management APIs
-    "grant_role" : (principal, Role) -> (variant { Ok : null; Err : text });
-    "revoke_role" : (principal) -> (variant { Ok : null; Err : text });
-    "get_my_role" : () -> (Role) query;
-    "get_user_role" : (principal) -> (variant { Ok : Role; Err : text }) query;
-    "list_roles" : () -> (variant { Ok : vec RoleAssignment; Err : text }) query;
-    "get_owner" : () -> (opt principal) query;
-
-    // Maintenance API - cleanup old completed processes
-    "cleanup_old_processes" : (nat64) -> (variant { Ok : nat64; Err : text });
+type CyclesSnapshot = record {
+  status : CyclesStatus;
+  balance : nat;
+  timestamp : nat64;
+};
+type CyclesStatus = variant { Low; Healthy; Critical; Warning };
+type DeadManSwitch = record {
+  id : nat64;
+  owner : principal;
+  beneficiary : text;
+  created_at : nat64;
+  timeout_ns : nat64;
+  message : opt text;
+  last_checkin : nat64;
+  amount : nat;
+  triggered : bool;
+  rune_id : text;
+};
+type DeadManSwitchInfo = record {
+  status : SwitchStatus;
+  elapsed_percentage : nat8;
+  switch : DeadManSwitch;
+  time_remaining_ns : nat64;
+};
+type DeadManSwitchStats = record {
+  total_value_protected : nat;
+  total_switches : nat64;
+  triggered_switches : nat64;
+  active_switches : nat64;
+};
+type EncryptedRuneMetadata = record {
+  encrypted_data : blob;
+  owner : principal;
+  created_at : nat64;
+  nonce : blob;
+  rune_id : text;
+  reveal_time : opt nat64;
+};
+type ErrorBreakdown = record {
+  confirmation_errors : nat64;
+  balance_errors : nat64;
+  signing_errors : nat64;
+  broadcast_errors : nat64;
+  utxo_errors : nat64;
+  unknown_errors : nat64;
+  validation_errors : nat64;
+};
+type EtchingConfigView = record {
+  network : BitcoinNetwork;
+  required_confirmations : nat32;
+  fee_rate : nat64;
+  enable_retries : bool;
+};
+type EtchingProcessView = record {
+  id : text;
+  updated_at : nat64;
+  retry_count : nat32;
+  txid : opt text;
+  rune_name : text;
+  created_at : nat64;
+  state : text;
+};
+type FeeEstimatesView = record {
+  low : nat64;
+  high : nat64;
+  network : BitcoinNetwork;
+  medium : nat64;
+  age_seconds : nat64;
+};
+type FeePriority = variant { Low; High; Medium };
+type HealthStatus = record {
+  canister_id : principal;
+  healthy : bool;
+  bitcoin_integration_configured : bool;
+  registry_configured : bool;
+  etching_config_initialized : bool;
+};
+type HttpHeader = record { value : text; name : text };
+type HttpResponse = record {
+  status : nat;
+  body : blob;
+  headers : vec HttpHeader;
+};
+type LatencyPercentiles = record {
+  max : nat64;
+  min : nat64;
+  p50 : nat64;
+  p90 : nat64;
+  p95 : nat64;
+  p99 : nat64;
+  count : nat64;
+};
+type LogEntry = record {
+  id : nat64;
+  context : opt text;
+  level : LogLevel;
+  message : text;
+  timestamp : nat64;
+  caller : opt principal;
+  module : text;
+};
+type LogLevel = variant { Error; Info; Warn; Debug };
+type LogStats = record {
+  last_error_timestamp : opt nat64;
+  total_infos : nat64;
+  total_warns : nat64;
+  total_errors : nat64;
+  total_debugs : nat64;
+};
+type MetricsSummary = record {
+  success_rate_percent : nat32;
+  active_processes : nat32;
+  total_runes_created : nat64;
+  total_errors : nat64;
+  avg_etching_latency_ms : nat64;
+  pending_processes : nat32;
+};
+type MintTerms = record {
+  cap : nat64;
+  offset_start : opt nat64;
+  height_end : opt nat64;
+  offset_end : opt nat64;
+  amount : nat64;
+  height_start : opt nat64;
+};
+type PendingTransaction = record {
+  txid : text;
+  network : BitcoinNetwork;
+  required_confirmations : nat32;
+  current_confirmations : nat32;
+  last_checked : nat64;
+  process_id : text;
+  started_at : nat64;
+};
+type PerformanceMetrics = record {
+  avg_broadcast_latency_ns : nat64;
+  active_processes : nat32;
+  last_updated : nat64;
+  total_confirmations_tracked : nat64;
+  total_runes_created : nat64;
+  total_retries : nat64;
+  total_errors : nat64;
+  avg_signing_latency_ns : nat64;
+  avg_etching_latency_ns : nat64;
+  pending_processes : nat32;
+  errors_by_type : ErrorBreakdown;
+};
+type Result = variant { Ok : text; Err : text };
+type Result_1 = variant { Ok; Err : text };
+type Result_10 = variant { Ok : vec LogEntry; Err : text };
+type Result_11 = variant { Ok : Role; Err : text };
+type Result_12 = variant { Ok : vec RoleAssignment; Err : text };
+type Result_13 = variant { Ok : vec nat64; Err : text };
+type Result_2 = variant { Ok : bool; Err : text };
+type Result_3 = variant { Ok : nat64; Err : text };
+type Result_4 = variant { Ok : opt BlockHeightInfo; Err : text };
+type Result_5 = variant { Ok : vec CyclesSnapshot; Err : text };
+type Result_6 = variant { Ok : blob; Err : text };
+type Result_7 = variant { Ok : opt LatencyPercentiles; Err : text };
+type Result_8 = variant { Ok : vec PendingTransaction; Err : text };
+type Result_9 = variant { Ok : PerformanceMetrics; Err : text };
+type Role = variant { Operator; User; Admin; Owner };
+type RoleAssignment = record {
+  "principal" : principal;
+  role : Role;
+  granted_at : nat64;
+  granted_by : principal;
+};
+type RuneEtching = record {
+  terms : opt MintTerms;
+  premine : nat64;
+  rune_name : text;
+  divisibility : nat8;
+  symbol : text;
+};
+type RuneKey = record { tx : nat32; block : nat64 };
+type SettlementMode = variant { Instant; Batched; Scheduled; Manual };
+type SettlementRecord = record {
+  id : text;
+  destination_address : text;
+  confirmations : opt nat32;
+  status : SettlementStatus;
+  updated_at : nat64;
+  "principal" : principal;
+  mode : SettlementMode;
+  txid : opt text;
+  rune_name : text;
+  created_at : nat64;
+  amount : nat64;
+  rune_key : RuneKey;
+};
+type SettlementStatus = variant {
+  Queued;
+  Signing;
+  Failed;
+  Batching;
+  Broadcasting;
+  Confirmed;
+  Confirming;
+};
+type StoreEncryptedMetadataParams = record {
+  encrypted_data : blob;
+  nonce : blob;
+  rune_id : text;
+  reveal_time : opt nat64;
+};
+type SwitchStatus = variant { Active; Triggered; Cancelled; Expired };
+type TransformArgs = record { context : blob; response : HttpResponse };
+type VirtualRuneView = record {
+  id : text;
+  status : text;
+  updated_at : nat64;
+  premine : nat64;
+  rune_name : text;
+  divisibility : nat8;
+  created_at : nat64;
+  symbol : text;
+};
+service : () -> {
+  // Reset the processes storage (Admin only)
+  // WARNING: This will delete ALL etching process data!
+  // Use this only to fix corrupted storage.
+  admin_reset_processes_storage : () -> (Result);
+  // Auto-configure canisters for development/testing (PUBLIC, but only works once)
+  // 
+  // This function allows ANYONE to configure the canisters, but ONLY if they haven't
+  // been configured yet. This is useful for Playground deployments where the owner
+  // is the Playground system canister.
+  // 
+  // **Security**: Once configured, this function becomes a no-op. Only the first
+  // caller can configure. After that, only Admin can reconfigure via `configure_canisters`.
+  auto_configure_canisters : (principal, principal) -> (Result_1);
+  // Check if caller can decrypt metadata
+  can_decrypt_metadata : (text) -> (Result_2) query;
+  // Cancel a Dead Man's Switch
+  cancel_dead_man_switch : (nat64) -> (Result_1);
+  // Cleanup expired idempotency requests (Admin only)
+  // Returns number of requests removed
+  cleanup_expired_idempotency : () -> (Result_3);
+  // Cleanup old completed/failed processes (Admin only)
+  cleanup_old_processes : (nat64) -> (Result_3);
+  // Configure canister IDs (admin only, usually called after deployment)
+  configure_canisters : (principal, principal) -> (Result_1);
+  // Create a new Dead Man's Switch
+  create_dead_man_switch : (CreateDeadManSwitchParams) -> (Result_3);
+  // Create a new Virtual Rune (ICP-only, fast and cheap)
+  // 
+  // This creates a rune on ICP without touching Bitcoin.
+  // Call `etch_to_bitcoin` later to etch it on the Bitcoin network.
+  // 
+  // This function is idempotent - calling it multiple times with the same parameters
+  // will return the same result without creating duplicate runes.
+  create_rune : (RuneEtching) -> (Result);
+  // Delete encrypted metadata (owner only)
+  delete_encrypted_metadata : (text) -> (Result_1);
+  // Check in to reset the Dead Man's Switch timer
+  dms_checkin : (nat64) -> (Result_1);
+  // Etch a virtual rune to the Bitcoin network
+  // 
+  // This initiates the Bitcoin etching process for an existing virtual rune.
+  // Requires ckBTC for transaction fees.
+  etch_to_bitcoin : (text) -> (Result);
+  // Get current Bitcoin block height (cached)
+  get_bitcoin_block_height : () -> (opt nat64) query;
+  // Get detailed block height info (for debugging - Admin only)
+  get_block_height_info : () -> (Result_4) query;
+  // Get confirmation tracking status for a specific transaction
+  get_confirmation_status : (text) -> (opt PendingTransaction) query;
+  // Get current fee estimates from Bitcoin network
+  // 
+  // Returns cached fee estimates (updated every 10 minutes) or None if not yet fetched.
+  // Useful for users to see current network conditions before creating a Rune.
+  get_current_fee_estimates : () -> (opt FeeEstimatesView) query;
+  // Get cycles balance history (Admin only)
+  get_cycles_history : () -> (Result_5) query;
+  // Get cycles metrics
+  get_cycles_metrics : () -> (CyclesMetrics) query;
+  // Get information about a specific switch
+  get_dead_man_switch : (nat64) -> (opt DeadManSwitchInfo) query;
+  // Get Dead Man's Switch statistics
+  get_dead_man_switch_stats : () -> (DeadManSwitchStats) query;
+  // Get encrypted decryption key (for authorized callers)
+  get_encrypted_decryption_key : (text, blob) -> (Result_6);
+  // Get encrypted metadata for a Rune
+  get_encrypted_metadata : (text) -> (opt EncryptedRuneMetadata) query;
+  // Get etching process status
+  get_etching_status : (text) -> (opt EtchingProcessView) query;
+  // Get idempotency request count (Admin only)
+  get_idempotency_request_count : () -> (Result_3) query;
+  // Get latency percentiles for an operation (Admin only)
+  get_latency_percentiles : (text) -> (Result_7) query;
+  // Get log statistics
+  get_log_stats : () -> (LogStats) query;
+  // Get metadata reveal status
+  get_metadata_reveal_status : (text) -> (opt record { bool; opt nat64 }) query;
+  // Get performance metrics summary (public)
+  get_metrics_summary : () -> (MetricsSummary) query;
+  // Get all switches for the caller
+  get_my_dead_man_switches : () -> (vec DeadManSwitchInfo) query;
+  // Get all encrypted metadata owned by caller
+  get_my_encrypted_metadata : () -> (vec EncryptedRuneMetadata) query;
+  // Get all etching processes for caller
+  get_my_etchings : () -> (vec EtchingProcessView) query;
+  // Get caller's role
+  get_my_role : () -> (Role) query;
+  // Get all virtual runes for caller
+  get_my_virtual_runes : () -> (vec VirtualRuneView) query;
+  // Get the canister owner
+  get_owner : () -> (opt principal) query;
+  // Get all pending transactions being tracked for confirmations (Admin only)
+  get_pending_confirmations : () -> (Result_8) query;
+  // Get pending settlement count for caller
+  get_pending_settlement_count : () -> (nat64) query;
+  // Get detailed performance metrics (Admin only)
+  get_performance_metrics : () -> (Result_9) query;
+  // Get process count without iterating (safe for corrupted storage)
+  get_process_count : () -> (Result_3) query;
+  // Get recent errors only (Admin only)
+  get_recent_errors : (nat64) -> (Result_10) query;
+  // Get recent logs (Admin only)
+  get_recent_logs : (nat64) -> (Result_10) query;
+  // Get recommended fee rate for a specific priority
+  // 
+  // This is an update call because it may trigger a background fee update.
+  // Returns fee rate in sat/vbyte.
+  get_recommended_fee : (FeePriority) -> (nat64);
+  // Get settlement history for the caller
+  get_settlement_history : (opt nat64, opt nat64) -> (
+      vec SettlementRecord,
+    ) query;
+  // Get settlement by ID
+  get_settlement_status : (text) -> (opt SettlementRecord) query;
+  // Get a specific principal's role (Admin only)
+  get_user_role : (principal) -> (Result_11) query;
+  // Get vetKD public key for encryption
+  get_vetkd_public_key : () -> (Result_6);
+  // Get a specific virtual rune by ID
+  get_virtual_rune : (text) -> (opt VirtualRuneView) query;
+  // Get total count of virtual runes created
+  get_virtual_rune_count : () -> (nat64) query;
+  // Grant a role to a principal (Owner/Admin only)
+  grant_role : (principal, Role) -> (Result_1);
+  // Check if encrypted metadata exists for a Rune
+  has_encrypted_metadata : (text) -> (bool) query;
+  // Check if there are any expired switches
+  has_expired_dead_man_switches : () -> (bool) query;
+  // Check canister health and configuration status
+  health_check : () -> (HealthStatus) query;
+  // List all roles (Admin only)
+  list_roles : () -> (Result_12) query;
+  // Get count of pending confirmation checks (useful for monitoring)
+  pending_confirmation_count : () -> (nat64) query;
+  // Manually trigger processing of expired switches (admin only)
+  process_dead_man_switches : () -> (Result_13);
+  // Revoke a role from a principal (Admin only)
+  revoke_role : (principal) -> (Result_1);
+  // Search logs by keyword (Admin only)
+  search_logs : (text, nat64) -> (Result_10) query;
+  // Store encrypted metadata for a Rune
+  store_encrypted_metadata : (StoreEncryptedMetadataParams) -> (Result_1);
+  // Transform function for HTTPS outcalls
+  // Strips unnecessary headers and processes response before consensus
+  transform_http_response : (TransformArgs) -> (HttpResponse) query;
+  // Update etching configuration (admin only)
+  update_etching_config : (EtchingConfigView) -> (Result_1);
 }

@@ -245,8 +245,9 @@ function branchAndBound(
   }
 
   // Build result
-  const selectedUtxos = bestSelection.map(i => sortedUtxos[i]);
-  const totalInput = selectedUtxos.reduce((sum, utxo) => sum + utxo.amount, 0n);
+  const selection = bestSelection as number[];
+  const selectedUtxos = selection.map((i: number) => sortedUtxos[i]);
+  const totalInput = selectedUtxos.reduce((sum: bigint, utxo: UTXO) => sum + utxo.amount, 0n);
   const fee = calculateFee(selectedUtxos, feeRate, true);
   const change = totalInput - targetAmount - fee;
 

@@ -41,10 +41,10 @@ interface RuneState {
 }
 
 /**
- * Generate unique key for a Rune
+ * Generate unique key for a Rune from its metadata key
  */
-function getRuneKey(runeId: RuneId): string {
-  return `${runeId.block}-${runeId.tx}`;
+function getRuneKey(rune: RegistryEntry): string {
+  return `${rune.metadata.key.block}-${rune.metadata.key.tx}`;
 }
 
 export const useRuneStore = create<RuneState>()(
@@ -61,7 +61,7 @@ export const useRuneStore = create<RuneState>()(
       addRune: (rune) =>
         set((state) => {
           const newRunes = new Map(state.runes);
-          const key = getRuneKey(rune.rune_id);
+          const key = getRuneKey(rune);
           newRunes.set(key, rune);
           return { runes: newRunes };
         }),
@@ -70,7 +70,7 @@ export const useRuneStore = create<RuneState>()(
         set((state) => {
           const runesMap = new Map(state.runes);
           newRunes.forEach((rune) => {
-            const key = getRuneKey(rune.rune_id);
+            const key = getRuneKey(rune);
             runesMap.set(key, rune);
           });
           return { runes: runesMap };
@@ -139,31 +139,36 @@ export const useRuneStore = create<RuneState>()(
     }),
     {
       name: 'quri-rune-storage',
-      storage: createJSONStorage(() => localStorage),
+      storage: {
+        getItem: (name: string) => {
+          const str = localStorage.getItem(name);
+          if (!str) return null;
+          const parsed = JSON.parse(str);
+          return {
+            ...parsed,
+            state: {
+              ...parsed.state,
+              runes: new Map(parsed.state.runes || []),
+            },
+          };
+        },
+        setItem: (name: string, value: unknown) => {
+          const valueObj = value as { state: RuneState };
+          const serialized = JSON.stringify({
+            state: {
+              ...valueObj.state,
+              runes: Array.from(valueObj.state.runes.entries()),
+            },
+            version: (value as Record<string, unknown>).version,
+          });
+          localStorage.setItem(name, serialized);
+        },
+        removeItem: (name: string) => localStorage.removeItem(name),
+      },
       // Only persist runes data, not UI state
       partialize: (state) => ({
-        runes: Array.from(state.runes.entries()),
+        runes: state.runes,
       }),
-      // Custom serialization for Map
-      serialize: (state) => {
-        return JSON.stringify({
-          ...state,
-          state: {
-            ...state.state,
-            runes: Array.from((state.state as any).runes),
-          },
-        });
-      },
-      deserialize: (str) => {
-        const parsed = JSON.parse(str);
-        return {
-          ...parsed,
-          state: {
-            ...parsed.state,
-            runes: new Map(parsed.state.runes),
-          },
-        };
-      },
     }
   )
 );

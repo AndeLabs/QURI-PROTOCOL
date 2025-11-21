@@ -1,5 +1,5 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_cdk_macros::{init, update};
+use ic_cdk_macros::{init, post_upgrade, update};
 use std::cell::RefCell;
 use std::str::FromStr;
 
@@ -11,7 +11,7 @@ mod transaction;
 mod utxo;
 
 use bitcoin_utils::address::derive_p2tr_address;
-use quri_types::{BitcoinAddress, BitcoinNetwork, RuneEtching};
+use quri_types::{BitcoinAddress, BitcoinNetwork, FeeEstimates, RuneEtching, UtxoSelection};
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Config {
@@ -33,6 +33,28 @@ fn init(network: BitcoinNetwork, ckbtc_ledger_id: Principal) {
     });
     ic_cdk::println!("Bitcoin Integration canister initialized");
     config::log_config();
+}
+
+#[post_upgrade]
+fn post_upgrade() {
+    // Config needs to be re-initialized after upgrade
+    // Call configure() after upgrade to set the config
+    ic_cdk::println!("Bitcoin Integration canister upgraded - call configure() to set network");
+}
+
+/// Admin function to configure/reconfigure the canister
+/// Can be called after upgrade to reinitialize config
+#[update]
+fn configure(network: BitcoinNetwork, ckbtc_ledger_id: Principal) -> Result<String, String> {
+    CONFIG.with(|config| {
+        *config.borrow_mut() = Some(Config {
+            network,
+            ckbtc_ledger_id,
+        });
+    });
+    ic_cdk::println!("Bitcoin Integration canister configured");
+    config::log_config();
+    Ok(format!("Configured for {:?} with ckBTC ledger {}", network, ckbtc_ledger_id))
 }
 
 /// Get the canister's Bitcoin P2TR address for receiving payments
@@ -67,7 +89,7 @@ async fn get_fee_estimates() -> Result<FeeEstimates, String> {
 
 /// Select UTXOs for a specific amount
 #[update]
-async fn select_utxos(amount_needed: u64, fee_rate: u64) -> Result<utxo::UtxoSelection, String> {
+async fn select_utxos(amount_needed: u64, fee_rate: u64) -> Result<UtxoSelection, String> {
     let network = get_network()?;
     utxo::select_utxos_for_etching(network, amount_needed, fee_rate)
         .await
@@ -78,7 +100,7 @@ async fn select_utxos(amount_needed: u64, fee_rate: u64) -> Result<utxo::UtxoSel
 #[update]
 async fn build_and_sign_etching_tx(
     etching: RuneEtching,
-    utxo_selection: utxo::UtxoSelection,
+    utxo_selection: UtxoSelection,
 ) -> Result<Vec<u8>, String> {
     // Validate etching parameters
     validate_etching(&etching)?;
@@ -193,13 +215,6 @@ fn convert_network(network: BitcoinNetwork) -> bitcoin::Network {
         BitcoinNetwork::Testnet => bitcoin::Network::Testnet,
         BitcoinNetwork::Regtest => bitcoin::Network::Regtest,
     }
-}
-
-#[derive(CandidType, Deserialize, Clone, Debug)]
-pub struct FeeEstimates {
-    pub slow: u64,   // sat/vbyte
-    pub medium: u64, // sat/vbyte
-    pub fast: u64,   // sat/vbyte
 }
 
 ic_cdk::export_candid!();

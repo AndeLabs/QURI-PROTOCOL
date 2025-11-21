@@ -11,12 +11,19 @@
  * - Icon support
  */
 
-import { ButtonHTMLAttributes, ReactNode, useRef, MouseEvent } from 'react';
+import { ButtonHTMLAttributes, ReactNode, useRef, MouseEvent, useState, useEffect } from 'react';
 import { motion, useMotionValue, useSpring } from 'framer-motion';
 import { Loader2 } from 'lucide-react';
 import { prefersReducedMotion, durations, easings } from '@/design-system/motion/presets';
 
-export interface ButtonPremiumProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+// Omit drag and animation props that conflict with Framer Motion
+type ButtonBaseProps = Omit<
+  ButtonHTMLAttributes<HTMLButtonElement>,
+  | 'onDrag' | 'onDragStart' | 'onDragEnd' | 'onDragOver' | 'onDragEnter' | 'onDragLeave' | 'onDrop'
+  | 'onAnimationStart' | 'onAnimationEnd' | 'onAnimationIteration'
+>;
+
+export interface ButtonPremiumProps extends ButtonBaseProps {
   children: ReactNode;
   variant?: 'primary' | 'secondary' | 'ghost' | 'gold' | 'danger';
   size?: 'sm' | 'md' | 'lg';
@@ -44,7 +51,14 @@ export function ButtonPremium({
   ...props
 }: ButtonPremiumProps) {
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const reducedMotion = prefersReducedMotion();
+  const [isMounted, setIsMounted] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(true); // Default to true for SSR
+
+  // Set mounted state and check reduced motion on client
+  useEffect(() => {
+    setIsMounted(true);
+    setReducedMotion(prefersReducedMotion());
+  }, []);
 
   // Motion values for magnetic effect
   const x = useMotionValue(0);
@@ -133,7 +147,7 @@ export function ButtonPremium({
       className={`${baseStyles} ${variantStyles[variant]} ${sizeStyles[size]} ${className}`}
       disabled={disabled || loading}
       style={
-        reducedMotion || !enableMagnetic
+        !isMounted || reducedMotion || !enableMagnetic
           ? undefined
           : {
               x: xSpring,
@@ -141,7 +155,7 @@ export function ButtonPremium({
             }
       }
       whileHover={
-        reducedMotion || disabled || loading
+        !isMounted || reducedMotion || disabled || loading
           ? undefined
           : {
               scale: 1.02,
@@ -152,7 +166,7 @@ export function ButtonPremium({
             }
       }
       whileTap={
-        reducedMotion || disabled || loading
+        !isMounted || reducedMotion || disabled || loading
           ? undefined
           : {
               scale: 0.98,
@@ -167,7 +181,7 @@ export function ButtonPremium({
       {...props}
     >
       {/* Shimmer effect overlay */}
-      {!disabled && !loading && (
+      {isMounted && !disabled && !loading && (
         <motion.div
           className="absolute inset-0 pointer-events-none"
           initial={{ backgroundPosition: '-200% 0' }}
@@ -179,7 +193,7 @@ export function ButtonPremium({
             },
           }}
           style={{
-            background:
+            backgroundImage:
               variant === 'gold'
                 ? 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.3), transparent)'
                 : 'linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.1), transparent)',

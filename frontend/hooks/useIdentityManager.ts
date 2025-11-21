@@ -29,7 +29,7 @@ export function useIdentityManager() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getIdentityManagerActor();
+        const actor = await getIdentityManagerActor();
         const result = await actor.create_session(permissions, durationNs);
 
         if ('Ok' in result) {
@@ -56,11 +56,11 @@ export function useIdentityManager() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getIdentityManagerActor();
+      const actor = await getIdentityManagerActor();
       const result = await actor.get_session();
 
       if (result.length > 0) {
-        return result[0];
+        return result[0] ?? null;
       }
       return null;
     } catch (err) {
@@ -79,7 +79,7 @@ export function useIdentityManager() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getIdentityManagerActor();
+      const actor = await getIdentityManagerActor();
       const isValid = await actor.validate_session(principal);
       return isValid;
     } catch (err) {
@@ -98,7 +98,7 @@ export function useIdentityManager() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getIdentityManagerActor();
+      const actor = await getIdentityManagerActor();
       const result = await actor.revoke_session();
 
       if ('Ok' in result) {
@@ -123,7 +123,7 @@ export function useIdentityManager() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getIdentityManagerActor();
+      const actor = await getIdentityManagerActor();
       const hasPermission = await actor.check_permission(permission);
       return hasPermission;
     } catch (err) {
@@ -156,7 +156,7 @@ export function useIdentityManager() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getIdentityManagerActor();
+      const actor = await getIdentityManagerActor();
       const stats = await actor.get_user_stats(principal);
       return stats;
     } catch (err) {

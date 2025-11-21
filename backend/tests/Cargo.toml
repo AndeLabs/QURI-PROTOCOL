@@ -1,0 +1,25 @@
+[package]
+name = "quri-integration-tests"
+version.workspace = true
+edition.workspace = true
+publish = false
+
+[[test]]
+name = "integration_test"
+path = "integration_test.rs"
+harness = true
+
+[dependencies]
+# ICP Testing
+pocket-ic.workspace = true
+candid.workspace = true
+
+# Serialization
+serde.workspace = true
+serde_json.workspace = true
+
+# Utilities
+hex.workspace = true
+
+# Internal (for type definitions)
+quri-types = { path = "../libs/quri-types" }

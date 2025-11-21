@@ -11,9 +11,10 @@
  * - Premium animations
  */
 
-import { useRef, useState, MouseEvent } from 'react';
+import { useRef, useState, useEffect, MouseEvent } from 'react';
 import { motion, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import { ArrowUpRight, Coins, Users, Activity, ExternalLink } from 'lucide-react';
 import type { RegistryEntry } from '@/types/canisters';
 import {
@@ -44,6 +45,21 @@ export function RuneCardPremium({
   const { metadata } = rune;
   const cardRef = useRef<HTMLDivElement>(null);
   const [isHovered, setIsHovered] = useState(false);
+  const [reducedMotion, setReducedMotion] = useState(false);
+  const router = useRouter();
+
+  // Check reduced motion preference on client only
+  useEffect(() => {
+    setReducedMotion(prefersReducedMotion());
+  }, []);
+
+  // Generate the detail page URL
+  const detailUrl = `/explorer/rune/${metadata.key.block}:${metadata.key.tx}`;
+
+  // Navigate to detail page
+  const handleCardClick = () => {
+    router.push(detailUrl);
+  };
 
   // Motion values for magnetic effect
   const x = useMotionValue(0);
@@ -57,9 +73,6 @@ export function RuneCardPremium({
   // 3D tilt effect
   const rotateX = useTransform(ySpring, [-0.5, 0.5], [7, -7]);
   const rotateY = useTransform(xSpring, [-0.5, 0.5], [-7, 7]);
-
-  // Check if user prefers reduced motion
-  const reducedMotion = prefersReducedMotion();
 
   // Handle mouse move for magnetic + tilt effect
   const handleMouseMove = (e: MouseEvent<HTMLDivElement>) => {
@@ -94,10 +107,12 @@ export function RuneCardPremium({
 
   // Format supply with divisibility
   const formatSupply = (amount: bigint, divisibility: number): string => {
-    const value = Number(amount) / Math.pow(10, divisibility);
+    // Ensure divisibility is valid (0-20 range for toLocaleString)
+    const safeDivisibility = Math.max(0, Math.min(divisibility || 0, 20));
+    const value = Number(amount) / Math.pow(10, safeDivisibility);
     return value.toLocaleString(undefined, {
       minimumFractionDigits: 0,
-      maximumFractionDigits: Math.min(divisibility, 4),
+      maximumFractionDigits: Math.min(safeDivisibility, 4),
     });
   };
 
@@ -130,9 +145,8 @@ export function RuneCardPremium({
       <motion.div
         ref={cardRef}
         className={`${baseCardClass} rounded-lg p-4 cursor-pointer ${className}`}
-        initial="hidden"
-        animate="visible"
-        variants={reducedMotion ? undefined : museumCardEntrance}
+        initial={{ opacity: 1 }}
+        animate={{ opacity: 1 }}
         whileHover={reducedMotion ? undefined : { y: -4 }}
         style={
           reducedMotion
@@ -148,6 +162,7 @@ export function RuneCardPremium({
         onMouseMove={handleMouseMove}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={handleMouseLeave}
+        onClick={handleCardClick}
         transition={{ duration: durations.fast }}
       >
         {shimmerOverlay}
@@ -175,9 +190,8 @@ export function RuneCardPremium({
       <motion.div
         ref={cardRef}
         className={`${baseCardClass} rounded-xl p-8 cursor-pointer ${className}`}
-        initial="hidden"
-        animate="visible"
-        variants={reducedMotion ? undefined : museumCardEntrance}
+        initial={{ opacity: 1 }}
+        animate={{ opacity: 1 }}
         whileHover={
           reducedMotion
             ? undefined
@@ -201,6 +215,7 @@ export function RuneCardPremium({
         onMouseMove={handleMouseMove}
         onMouseEnter={() => setIsHovered(true)}
         onMouseLeave={handleMouseLeave}
+        onClick={handleCardClick}
         transition={{ duration: durations.normal, ease: easings.smooth }}
       >
         {shimmerOverlay}
@@ -340,6 +355,7 @@ export function RuneCardPremium({
                 className="flex items-center justify-center gap-2 px-6 py-3 border-2 border-gold-300 rounded-xl hover:bg-gold-50 transition-all text-sm font-semibold text-museum-black"
                 whileHover={{ scale: 1.02, borderColor: '#D4AF37' }}
                 whileTap={{ scale: 0.98 }}
+                onClick={(e) => e.stopPropagation()}
               >
                 View on Bitcoin
                 <ExternalLink className="h-4 w-4" />
@@ -356,9 +372,8 @@ export function RuneCardPremium({
     <motion.div
       ref={cardRef}
       className={`${baseCardClass} rounded-xl p-6 cursor-pointer ${className}`}
-      initial="hidden"
-      animate="visible"
-      variants={reducedMotion ? undefined : museumCardEntrance}
+      initial={{ opacity: 1 }}
+      animate={{ opacity: 1 }}
       whileHover={
         reducedMotion
           ? undefined
@@ -382,6 +397,7 @@ export function RuneCardPremium({
       onMouseMove={handleMouseMove}
       onMouseEnter={() => setIsHovered(true)}
       onMouseLeave={handleMouseLeave}
+      onClick={handleCardClick}
       transition={{ duration: durations.normal }}
     >
       {shimmerOverlay}
@@ -447,9 +463,10 @@ export function RuneCardPremium({
             animate={{ opacity: 1 }}
             transition={{ delay: 0.25 }}
             whileHover={{ x: 2 }}
+            onClick={(e) => e.stopPropagation()}
           >
-            View Details
-            <ArrowUpRight className="h-4 w-4" />
+            View on Bitcoin
+            <ExternalLink className="h-4 w-4" />
           </motion.a>
         )}
       </div>

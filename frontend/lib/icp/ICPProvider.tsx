@@ -1,9 +1,15 @@
 'use client';
 
+/**
+ * @deprecated This provider is deprecated. Use DualAuthProvider from '@/lib/auth' instead.
+ * This file is kept for backward compatibility.
+ */
+
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { Principal } from '@dfinity/principal';
 import { getAgent, login, logout, isAuthenticated, getPrincipal } from './agent';
 import { logger } from '@/lib/logger';
+import { useICPAuth } from '@/lib/auth';
 
 interface ICPContextType {
   isConnected: boolean;
@@ -14,6 +20,30 @@ interface ICPContextType {
 }
 
 const ICPContext = createContext<ICPContextType | undefined>(undefined);
+
+/**
+ * @deprecated Use useDualAuth or useICPAuth from '@/lib/auth' instead
+ */
+export function useICP(): ICPContextType {
+  // Try to use new auth system first
+  try {
+    const auth = useICPAuth();
+    return {
+      isConnected: auth.isAuthenticated,
+      principal: auth.principal,
+      connect: auth.connect,
+      disconnect: auth.disconnect,
+      isLoading: auth.isLoading,
+    };
+  } catch {
+    // Fall back to old context if not in new provider
+    const context = useContext(ICPContext);
+    if (context === undefined) {
+      throw new Error('useICP must be used within an ICPProvider or DualAuthProvider');
+    }
+    return context;
+  }
+}
 
 export function ICPProvider({ children }: { children: ReactNode }) {
   const [isConnected, setIsConnected] = useState(false);
@@ -103,10 +133,4 @@ export function ICPProvider({ children }: { children: ReactNode }) {
   );
 }
 
-export function useICP() {
-  const context = useContext(ICPContext);
-  if (context === undefined) {
-    throw new Error('useICP must be used within an ICPProvider');
-  }
-  return context;
-}
+// Note: useICP is now defined above for backward compatibility

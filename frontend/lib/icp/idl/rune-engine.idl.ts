@@ -38,6 +38,17 @@ export const idlFactory = ({ IDL }: any) => {
     txid: IDL.Opt(IDL.Text),
   });
 
+  const VirtualRuneView = IDL.Record({
+    id: IDL.Text,
+    rune_name: IDL.Text,
+    symbol: IDL.Text,
+    divisibility: IDL.Nat8,
+    premine: IDL.Nat64,
+    status: IDL.Text,
+    created_at: IDL.Nat64,
+    updated_at: IDL.Nat64,
+  });
+
   const EtchingConfigView = IDL.Record({
     network: BitcoinNetwork,
     fee_rate: IDL.Nat64,
@@ -167,6 +178,104 @@ export const idlFactory = ({ IDL }: any) => {
   const Result_1 = IDL.Variant({ Ok: IDL.Null, Err: IDL.Text });
   const ResultData = (T: any) => IDL.Variant({ Ok: T, Err: IDL.Text });
 
+  // Dead Man's Switch Types
+  const SwitchStatus = IDL.Variant({
+    Active: IDL.Null,
+    Expired: IDL.Null,
+    Triggered: IDL.Null,
+    Cancelled: IDL.Null,
+  });
+
+  const DeadManSwitch = IDL.Record({
+    id: IDL.Nat64,
+    owner: IDL.Principal,
+    beneficiary: IDL.Text,
+    rune_id: IDL.Text,
+    amount: IDL.Nat,
+    last_checkin: IDL.Nat64,
+    timeout_ns: IDL.Nat64,
+    triggered: IDL.Bool,
+    created_at: IDL.Nat64,
+    message: IDL.Opt(IDL.Text),
+  });
+
+  const DeadManSwitchInfo = IDL.Record({
+    switch: DeadManSwitch,
+    status: SwitchStatus,
+    time_remaining_ns: IDL.Nat64,
+    elapsed_percentage: IDL.Float64,
+  });
+
+  const DeadManSwitchStats = IDL.Record({
+    total_switches: IDL.Nat64,
+    active_switches: IDL.Nat64,
+    triggered_switches: IDL.Nat64,
+    total_value_protected: IDL.Nat,
+  });
+
+  const CreateDeadManSwitchParams = IDL.Record({
+    beneficiary: IDL.Text,
+    rune_id: IDL.Text,
+    amount: IDL.Nat,
+    timeout_days: IDL.Nat64,
+    message: IDL.Opt(IDL.Text),
+  });
+
+  // Encrypted Metadata (vetKeys) Types
+  const EncryptedRuneMetadata = IDL.Record({
+    rune_id: IDL.Text,
+    encrypted_data: IDL.Vec(IDL.Nat8),
+    nonce: IDL.Vec(IDL.Nat8),
+    reveal_time: IDL.Opt(IDL.Nat64),
+    owner: IDL.Principal,
+    created_at: IDL.Nat64,
+  });
+
+  const StoreEncryptedMetadataParams = IDL.Record({
+    rune_id: IDL.Text,
+    encrypted_data: IDL.Vec(IDL.Nat8),
+    nonce: IDL.Vec(IDL.Nat8),
+    reveal_time: IDL.Opt(IDL.Nat64),
+  });
+
+  // Settlement Types
+  const RuneKey = IDL.Record({
+    block: IDL.Nat64,
+    tx: IDL.Nat32,
+  });
+
+  const SettlementMode = IDL.Variant({
+    Instant: IDL.Null,
+    Batched: IDL.Null,
+    Scheduled: IDL.Null,
+    Manual: IDL.Null,
+  });
+
+  const SettlementStatus = IDL.Variant({
+    Queued: IDL.Null,
+    Batching: IDL.Null,
+    Signing: IDL.Null,
+    Broadcasting: IDL.Null,
+    Confirming: IDL.Null,
+    Confirmed: IDL.Null,
+    Failed: IDL.Null,
+  });
+
+  const SettlementRecord = IDL.Record({
+    id: IDL.Text,
+    principal: IDL.Principal,
+    rune_key: RuneKey,
+    rune_name: IDL.Text,
+    amount: IDL.Nat64,
+    destination_address: IDL.Text,
+    mode: SettlementMode,
+    status: SettlementStatus,
+    txid: IDL.Opt(IDL.Text),
+    created_at: IDL.Nat64,
+    updated_at: IDL.Nat64,
+    confirmations: IDL.Opt(IDL.Nat32),
+  });
+
   return IDL.Service({
     // Main etching API
     create_rune: IDL.Func([RuneEtching], [Result], []),
@@ -175,6 +284,12 @@ export const idlFactory = ({ IDL }: any) => {
     get_etching_status: IDL.Func([IDL.Text], [IDL.Opt(EtchingProcessView)], ['query']),
     get_my_etchings: IDL.Func([], [IDL.Vec(EtchingProcessView)], ['query']),
     health_check: IDL.Func([], [HealthStatus], ['query']),
+
+    // Virtual Runes APIs
+    get_my_virtual_runes: IDL.Func([], [IDL.Vec(VirtualRuneView)], ['query']),
+    get_virtual_rune: IDL.Func([IDL.Text], [IDL.Opt(VirtualRuneView)], ['query']),
+    get_virtual_rune_count: IDL.Func([], [IDL.Nat64], ['query']),
+    etch_to_bitcoin: IDL.Func([IDL.Text], [Result], []),
 
     // Bitcoin block height tracking
     get_bitcoin_block_height: IDL.Func([], [IDL.Opt(IDL.Nat64)], ['query']),
@@ -209,5 +324,31 @@ export const idlFactory = ({ IDL }: any) => {
 
     // Maintenance
     cleanup_old_processes: IDL.Func([IDL.Nat64], [ResultData(IDL.Nat64)], []),
+
+    // Dead Man's Switch APIs
+    create_dead_man_switch: IDL.Func([CreateDeadManSwitchParams], [ResultData(IDL.Nat64)], []),
+    dms_checkin: IDL.Func([IDL.Nat64], [Result_1], []),
+    cancel_dead_man_switch: IDL.Func([IDL.Nat64], [Result_1], []),
+    get_dead_man_switch: IDL.Func([IDL.Nat64], [IDL.Opt(DeadManSwitchInfo)], ['query']),
+    get_my_dead_man_switches: IDL.Func([], [IDL.Vec(DeadManSwitchInfo)], ['query']),
+    get_dead_man_switch_stats: IDL.Func([], [DeadManSwitchStats], ['query']),
+    process_dead_man_switches: IDL.Func([], [Result], []),
+    has_expired_dead_man_switches: IDL.Func([], [IDL.Bool], ['query']),
+
+    // Encrypted Metadata (vetKeys) APIs
+    store_encrypted_metadata: IDL.Func([StoreEncryptedMetadataParams], [Result_1], []),
+    get_encrypted_metadata: IDL.Func([IDL.Text], [IDL.Opt(EncryptedRuneMetadata)], ['query']),
+    get_my_encrypted_metadata: IDL.Func([], [IDL.Vec(EncryptedRuneMetadata)], ['query']),
+    delete_encrypted_metadata: IDL.Func([IDL.Text], [Result_1], []),
+    can_decrypt_metadata: IDL.Func([IDL.Text], [ResultData(IDL.Bool)], ['query']),
+    has_encrypted_metadata: IDL.Func([IDL.Text], [IDL.Bool], ['query']),
+    get_metadata_reveal_status: IDL.Func([IDL.Text], [IDL.Opt(IDL.Tuple(IDL.Bool, IDL.Opt(IDL.Nat64)))], ['query']),
+    get_vetkd_public_key: IDL.Func([], [ResultData(IDL.Vec(IDL.Nat8))], []),
+    get_encrypted_decryption_key: IDL.Func([IDL.Text, IDL.Vec(IDL.Nat8)], [ResultData(IDL.Vec(IDL.Nat8))], []),
+
+    // Settlement APIs
+    get_settlement_history: IDL.Func([IDL.Opt(IDL.Nat64), IDL.Opt(IDL.Nat64)], [IDL.Vec(SettlementRecord)], ['query']),
+    get_settlement_status: IDL.Func([IDL.Text], [IDL.Opt(SettlementRecord)], ['query']),
+    get_pending_settlement_count: IDL.Func([], [IDL.Nat64], ['query']),
   });
 };

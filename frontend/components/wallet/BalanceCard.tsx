@@ -8,9 +8,12 @@
 import { useState, useEffect } from 'react';
 import { Wallet, TrendingUp, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { ICPDisplay, CkBTCDisplay, CyclesDisplay, NumberDisplay, InlineNumber } from '@/components/ui/NumberDisplay';
 import { useBitcoinIntegration } from '@/hooks/useBitcoinIntegration';
 import { useRegistry } from '@/hooks/useRegistry';
-import { useICP } from '@/lib/icp/ICPProvider';
+import { useDualAuth } from '@/lib/auth';
+import { getICPLedgerActor, getCyclesLedgerActor } from '@/lib/icp/actors';
+import { formatFullPrecision } from '@/lib/utils/format';
 
 interface BalanceCardProps {
   variant?: 'default' | 'compact';
@@ -23,11 +26,14 @@ export function BalanceCard({
   showRefresh = true,
   className = '',
 }: BalanceCardProps) {
-  const { principal } = useICP();
+  const { getPrimaryPrincipal } = useDualAuth();
+  const principal = getPrimaryPrincipal();
   const { getCkBTCBalance } = useBitcoinIntegration();
   const { getMyRunes } = useRegistry();
 
   const [ckBTCBalance, setCkBTCBalance] = useState<bigint>(0n);
+  const [icpBalance, setIcpBalance] = useState<bigint>(0n);
+  const [cyclesBalance, setCyclesBalance] = useState<bigint>(0n);
   const [myRunes, setMyRunes] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -36,12 +42,29 @@ export function BalanceCard({
       setLoading(true);
       if (!principal) return;
 
-      const [balance, runes] = await Promise.all([
+      // Get ICP and Cycles ledger actors (async)
+      const [icpLedger, cyclesLedger] = await Promise.all([
+        getICPLedgerActor(),
+        getCyclesLedgerActor(),
+      ]);
+
+      const [balance, runes, icpBal, cyclesBal] = await Promise.all([
         getCkBTCBalance(principal.toText()),
         getMyRunes(),
+        icpLedger.icrc1_balance_of({
+          owner: principal,
+          subaccount: [],
+        }).catch(() => 0n),
+        cyclesLedger.icrc1_balance_of({
+          owner: principal,
+          subaccount: [],
+        }).catch(() => 0n),
       ]);
+
       setCkBTCBalance(balance || 0n);
       setMyRunes(runes);
+      setIcpBalance(icpBal);
+      setCyclesBalance(cyclesBal);
     } catch (error) {
       console.error('Failed to load balances:', error);
     } finally {
@@ -50,12 +73,14 @@ export function BalanceCard({
   };
 
   useEffect(() => {
-    loadBalances();
+    if (principal) {
+      loadBalances();
 
-    // Auto-refresh every 30 seconds
-    const interval = setInterval(loadBalances, 30000);
-    return () => clearInterval(interval);
-  }, []);
+      // Auto-refresh every 30 seconds
+      const interval = setInterval(loadBalances, 30000);
+      return () => clearInterval(interval);
+    }
+  }, [principal]);
 
   const formatBalance = (balance: bigint, decimals: number = 8): string => {
     const value = Number(balance) / Math.pow(10, decimals);
@@ -92,14 +117,32 @@ export function BalanceCard({
         </div>
         <div className="space-y-2">
           <div className="flex items-center justify-between">
+            <span className="text-sm text-museum-dark-gray">ICP</span>
+            {loading ? (
+              <span className="font-mono text-sm text-museum-dark-gray">...</span>
+            ) : (
+              <InlineNumber value={icpBalance} decimals={8} unit="ICP" className="text-sm font-semibold text-museum-black" />
+            )}
+          </div>
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-museum-dark-gray">Cycles</span>
+            {loading ? (
+              <span className="font-mono text-sm text-museum-dark-gray">...</span>
+            ) : (
+              <CyclesDisplay value={cyclesBalance} size="sm" />
+            )}
+          </div>
+          <div className="flex items-center justify-between">
             <span className="text-sm text-museum-dark-gray">ckBTC</span>
-            <span className="font-mono text-sm font-semibold text-museum-black">
-              {loading ? '...' : formatBalance(ckBTCBalance)}
-            </span>
+            {loading ? (
+              <span className="font-mono text-sm text-museum-dark-gray">...</span>
+            ) : (
+              <InlineNumber value={ckBTCBalance} decimals={8} unit="ckBTC" className="text-sm font-semibold text-museum-black" />
+            )}
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-museum-dark-gray">Runes</span>
-            <span className="font-mono text-sm font-semibold text-museum-black">
+            <span className="font-mono text-sm font-semibold tabular-nums text-museum-black">
               {loading ? '...' : myRunes.length}
             </span>
           </div>
@@ -127,22 +170,75 @@ export function BalanceCard({
 
       {/* Balance Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* ICP Card */}
+        <div className="border border-museum-light-gray rounded-xl p-6 bg-gradient-to-br from-purple-50 to-purple-100">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-purple-600 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-lg">∞</span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-museum-dark-gray">ICP Balance</p>
+              <p className="text-xs text-museum-dark-gray">Internet Computer</p>
+            </div>
+          </div>
+          <div className="space-y-1">
+            {loading ? (
+              <p className="font-mono font-bold text-3xl text-museum-dark-gray">...</p>
+            ) : (
+              <ICPDisplay value={icpBalance} size="xl" />
+            )}
+          </div>
+          <div className="mt-4 pt-4 border-t border-purple-200">
+            <div className="flex items-center gap-2 text-xs text-purple-700">
+              <TrendingUp className="h-3 w-3" />
+              <span>Native ICP token</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Cycles Card */}
+        <div className="border border-museum-light-gray rounded-xl p-6 bg-gradient-to-br from-cyan-50 to-cyan-100">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-12 h-12 rounded-full bg-cyan-600 flex items-center justify-center flex-shrink-0">
+              <span className="text-white font-bold text-lg">⚡</span>
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm text-museum-dark-gray">Cycles Balance</p>
+              <p className="text-xs text-museum-dark-gray">Computation Power</p>
+            </div>
+          </div>
+          <div className="space-y-1">
+            {loading ? (
+              <p className="font-mono font-bold text-3xl text-museum-dark-gray">...</p>
+            ) : (
+              <CyclesDisplay value={cyclesBalance} size="xl" />
+            )}
+          </div>
+          <div className="mt-4 pt-4 border-t border-cyan-200">
+            <div className="flex items-center gap-2 text-xs text-cyan-700">
+              <TrendingUp className="h-3 w-3" />
+              <span>For canister operations</span>
+            </div>
+          </div>
+        </div>
+
         {/* ckBTC Card */}
         <div className="border border-museum-light-gray rounded-xl p-6 bg-gradient-to-br from-orange-50 to-orange-100">
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-full bg-orange-500 flex items-center justify-center flex-shrink-0">
               <span className="text-white font-bold text-lg">₿</span>
             </div>
-            <div>
+            <div className="min-w-0">
               <p className="text-sm text-museum-dark-gray">ckBTC Balance</p>
               <p className="text-xs text-museum-dark-gray">Chain Key Bitcoin</p>
             </div>
           </div>
           <div className="space-y-1">
-            <p className="font-mono font-bold text-3xl text-museum-black">
-              {loading ? '...' : formatBalance(ckBTCBalance)}
-            </p>
-            <p className="text-sm text-museum-dark-gray">ckBTC</p>
+            {loading ? (
+              <p className="font-mono font-bold text-3xl text-museum-dark-gray">...</p>
+            ) : (
+              <CkBTCDisplay value={ckBTCBalance} size="xl" />
+            )}
           </div>
           <div className="mt-4 pt-4 border-t border-orange-200">
             <div className="flex items-center gap-2 text-xs text-orange-700">
@@ -200,12 +296,11 @@ export function BalanceCard({
                   </div>
                 </div>
                 <div className="text-right">
-                  <p className="font-mono font-semibold text-museum-black">
-                    {formatBalance(
-                      rune.metadata.total_supply,
-                      Number(rune.metadata.divisibility)
-                    )}
-                  </p>
+                  <InlineNumber
+                    value={rune.metadata.total_supply}
+                    decimals={Number(rune.metadata.divisibility)}
+                    className="font-semibold text-museum-black"
+                  />
                   <p className="text-xs text-museum-dark-gray">
                     {rune.metadata.symbol}
                   </p>

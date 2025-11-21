@@ -6,11 +6,11 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useEtchingStatusQuery, useRetryEtchingMutation } from '@/hooks/queries';
+import { useEtchingStatusQuery } from '@/hooks/queries';
 import { Card, CardContent, CardHeader, CardTitle } from './ui/Card';
 import { Button } from './ui/Button';
 import { runeToast } from '@/lib/toast';
-import { Loader2, CheckCircle2, XCircle, RefreshCw, ExternalLink } from 'lucide-react';
+import { Loader2, CheckCircle2, XCircle, ExternalLink } from 'lucide-react';
 
 interface ProcessMonitorProps {
   processId: string;
@@ -20,8 +20,6 @@ interface ProcessMonitorProps {
 export function ProcessMonitor({ processId, onComplete }: ProcessMonitorProps) {
   const { data: status, isLoading } = useEtchingStatusQuery(processId);
   // ✅ Auto-polls every 5 seconds while active
-
-  const retryMutation = useRetryEtchingMutation();
 
   // Show completion toast
   useEffect(() => {
@@ -148,26 +146,13 @@ export function ProcessMonitor({ processId, onComplete }: ProcessMonitorProps) {
           )}
         </div>
 
-        {/* Actions */}
+        {/* Failed State Message */}
         {isFailed && (
-          <Button
-            onClick={() => retryMutation.mutate(processId)}
-            disabled={retryMutation.isPending}
-            className="w-full"
-            variant="outline"
-          >
-            {retryMutation.isPending ? (
-              <>
-                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                Retrying...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Retry Etching
-              </>
-            )}
-          </Button>
+          <div className="pt-4 border-t border-gray-200">
+            <p className="text-sm text-red-700 font-medium">
+              ❌ Process failed. Please try creating a new etching.
+            </p>
+          </div>
         )}
 
         {isCompleted && status.txid[0] && (

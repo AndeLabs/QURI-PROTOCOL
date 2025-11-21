@@ -6,6 +6,7 @@
 
 'use client';
 
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Loader, Coins } from 'lucide-react';
 import { RuneCard } from './RuneCard';
@@ -44,8 +45,12 @@ export function RuneGrid({
   enableMagneticEffect = true,
   enable3DTilt = true,
 }: RuneGridProps) {
-  // Check for reduced motion preference
-  const reducedMotion = prefersReducedMotion();
+  // Check for reduced motion preference (must be in useEffect to avoid hydration mismatch)
+  const [reducedMotion, setReducedMotion] = useState(false);
+
+  useEffect(() => {
+    setReducedMotion(prefersReducedMotion());
+  }, []);
 
   // Select stagger variant based on speed
   const staggerVariant =
@@ -88,26 +93,18 @@ export function RuneGrid({
       ? 'grid grid-cols-1 gap-3'
       : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 md:gap-8'; // Increased gap for museum feel
 
+  // Simple grid - cards handle their own animations
   return (
-    <motion.div
-      className={`${gridClass} ${className}`}
-      initial={reducedMotion ? undefined : 'hidden'}
-      animate={reducedMotion ? undefined : 'visible'}
-      variants={reducedMotion ? undefined : staggerVariant}
-    >
+    <div className={`${gridClass} ${className}`}>
       {runes.map((rune) => (
-        <motion.div
+        <CardComponent
           key={`${rune.metadata.key.block}:${rune.metadata.key.tx}`}
-          variants={reducedMotion ? undefined : staggerItem}
-        >
-          <CardComponent
-            rune={rune}
-            variant={variant}
-            enableMagneticEffect={usePremiumCards && enableMagneticEffect}
-            enable3DTilt={usePremiumCards && enable3DTilt}
-          />
-        </motion.div>
+          rune={rune}
+          variant={variant}
+          enableMagneticEffect={usePremiumCards && enableMagneticEffect}
+          enable3DTilt={usePremiumCards && enable3DTilt}
+        />
       ))}
-    </motion.div>
+    </div>
   );
 }

@@ -27,23 +27,42 @@ const nextConfig = {
     formats: ['image/avif', 'image/webp'],
     deviceSizes: [640, 750, 828, 1080, 1200, 1920, 2048, 3840],
     imageSizes: [16, 32, 48, 64, 96, 128, 256, 384],
-    domains: [
-      'localhost',
-      // Add your image domains here (IPFS gateways, ICP domains, etc)
-      'gateway.pinata.cloud',
-      'ipfs.io',
-      'cloudflare-ipfs.com',
-      'ic0.app',
-      'raw.githubusercontent.com',
-    ],
     remotePatterns: [
+      // ICP domains
       {
         protocol: 'https',
         hostname: '**.ic0.app',
       },
       {
         protocol: 'https',
+        hostname: 'ic0.app',
+      },
+      {
+        protocol: 'https',
         hostname: '**.icp0.io',
+      },
+      // IPFS gateways
+      {
+        protocol: 'https',
+        hostname: 'gateway.pinata.cloud',
+      },
+      {
+        protocol: 'https',
+        hostname: 'ipfs.io',
+      },
+      {
+        protocol: 'https',
+        hostname: 'cloudflare-ipfs.com',
+      },
+      // GitHub
+      {
+        protocol: 'https',
+        hostname: 'raw.githubusercontent.com',
+      },
+      // Local development
+      {
+        protocol: 'http',
+        hostname: 'localhost',
       },
     ],
   },

@@ -35,7 +35,7 @@ export function middleware(request: NextRequest) {
     "style-src 'self' 'unsafe-inline'", // Tailwind requires unsafe-inline
     "img-src 'self' data: blob: https:",
     "font-src 'self' data:",
-    `connect-src 'self' ${localHosts} https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://icp-api.io https://*.icp-api.io https://*.internetcomputer.org https://mempool.space https://api.pinata.cloud https://gateway.pinata.cloud https://ipfs.io https://cloudflare-ipfs.com https://dweb.link wss://ic0.app wss://*.ic0.app`,
+    `connect-src 'self' ${localHosts} https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://icp-api.io https://*.icp-api.io https://*.internetcomputer.org https://mempool.space https://api.hiro.so https://api.pinata.cloud https://gateway.pinata.cloud https://ipfs.io https://cloudflare-ipfs.com https://dweb.link https://min-api.cryptocompare.com wss://ic0.app wss://*.ic0.app`,
     "frame-src 'self' https://ic0.app https://*.ic0.app https://identity.ic0.app",
     "worker-src 'self' blob:",
     "frame-ancestors 'none'",

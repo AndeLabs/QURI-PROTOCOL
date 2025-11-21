@@ -33,7 +33,14 @@
 use candid::Principal;
 use crate::config::{get_schnorr_key_id, get_schnorr_cycles_cost};
 
-const SCHNORR_ALGORITHM: &str = "bip340secp256k1";
+/// Schnorr algorithm variant - must match ICP management canister API
+#[derive(candid::CandidType, Clone, serde::Deserialize)]
+enum SchnorrAlgorithm {
+    #[serde(rename = "bip340secp256k1")]
+    Bip340Secp256k1,
+    #[serde(rename = "ed25519")]
+    Ed25519,
+}
 
 /// Obtiene la public key Schnorr del canister
 pub async fn get_schnorr_public_key(derivation_path: Vec<Vec<u8>>) -> Result<Vec<u8>, String> {
@@ -46,7 +53,7 @@ pub async fn get_schnorr_public_key(derivation_path: Vec<Vec<u8>>) -> Result<Vec
 
     #[derive(candid::CandidType)]
     struct SchnorrKeyId {
-        algorithm: String,
+        algorithm: SchnorrAlgorithm,
         name: String,
     }
 
@@ -60,7 +67,7 @@ pub async fn get_schnorr_public_key(derivation_path: Vec<Vec<u8>>) -> Result<Vec
         canister_id: None,
         derivation_path,
         key_id: SchnorrKeyId {
-            algorithm: SCHNORR_ALGORITHM.to_string(),
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
             name: get_schnorr_key_id().to_string(),
         },
     };
@@ -87,12 +94,12 @@ pub async fn sign_message(
     struct SignWithSchnorrArgs {
         message: Vec<u8>,
         derivation_path: Vec<Vec<u8>>,
-        key_id: SchnorrKeyId,
+        key_id: SignSchnorrKeyId,
     }
 
     #[derive(candid::CandidType)]
-    struct SchnorrKeyId {
-        algorithm: String,
+    struct SignSchnorrKeyId {
+        algorithm: SchnorrAlgorithm,
         name: String,
     }
 
@@ -104,8 +111,8 @@ pub async fn sign_message(
     let args = SignWithSchnorrArgs {
         message,
         derivation_path,
-        key_id: SchnorrKeyId {
-            algorithm: SCHNORR_ALGORITHM.to_string(),
+        key_id: SignSchnorrKeyId {
+            algorithm: SchnorrAlgorithm::Bip340Secp256k1,
             name: get_schnorr_key_id().to_string(),
         },
     };

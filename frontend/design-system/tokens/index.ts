@@ -3,17 +3,23 @@
  * Centralized export of all design tokens
  */
 
-export { colors, type ColorToken } from './colors';
-export { typography, type TypographyToken, type TextStyle } from './typography';
-export { spacing, type SpacingToken } from './spacing';
-export { shadows, type ShadowToken } from './shadows';
-export { animations, type AnimationToken } from './animations';
+import { colors, type ColorToken } from './colors';
+import { typography, type TypographyToken, type TextStyle } from './typography';
+import { spacing, type SpacingToken } from './spacing';
+import { shadows, type ShadowToken } from './shadows';
+import { animations, type AnimationToken } from './animations';
+
+// Re-export individual tokens
+export { colors, typography, spacing, shadows, animations };
+
+// Re-export types
+export type { ColorToken, TypographyToken, TextStyle, SpacingToken, ShadowToken, AnimationToken };
 
 // Re-export all tokens as a single object for convenience
 export const tokens = {
-  colors: colors,
-  typography: typography,
-  spacing: spacing,
-  shadows: shadows,
-  animations: animations,
+  colors,
+  typography,
+  spacing,
+  shadows,
+  animations,
 } as const;

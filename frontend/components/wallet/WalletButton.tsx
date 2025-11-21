@@ -1,6 +1,6 @@
 /**
  * WalletButton Component
- * Connect/Disconnect button for Internet Identity
+ * Connect/Disconnect button for dual auth (ICP + Bitcoin)
  */
 
 'use client';
@@ -8,8 +8,9 @@
 import { useState } from 'react';
 import { Wallet, LogOut, Loader } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
-import { useICP } from '@/lib/icp/ICPProvider';
+import { useDualAuth, useShortenedIdentifier } from '@/lib/auth';
 import { WalletModal } from './WalletModal';
+import { ConnectWalletModal } from './ConnectWalletModal';
 import { authToast } from '@/lib/toast';
 
 interface WalletButtonProps {
@@ -18,29 +19,14 @@ interface WalletButtonProps {
 }
 
 export function WalletButton({ variant = 'default', className = '' }: WalletButtonProps) {
-  const { isConnected, principal, connect, disconnect, isLoading } = useICP();
+  const { isConnected, isLoading, disconnect, getPrimaryPrincipal, bitcoin } = useDualAuth();
+  const shortIdentifier = useShortenedIdentifier();
+  const principal = getPrimaryPrincipal();
   const [showModal, setShowModal] = useState(false);
+  const [showConnectModal, setShowConnectModal] = useState(false);
 
-  const handleConnect = async () => {
-    try {
-      // Show popup blocker warning after 3 seconds
-      const popupWarningTimeout = setTimeout(() => {
-        authToast.popupBlocked();
-      }, 3000);
-
-      const success = await connect();
-      clearTimeout(popupWarningTimeout);
-
-      if (success && principal) {
-        authToast.connected(principal.toText());
-        setShowModal(true);
-      } else {
-        authToast.cancelled();
-      }
-    } catch (error) {
-      console.error('Failed to connect:', error);
-      authToast.failed(error instanceof Error ? error.message : undefined);
-    }
+  const handleConnect = () => {
+    setShowConnectModal(true);
   };
 
   const handleDisconnect = async () => {
@@ -56,7 +42,7 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
 
   // Compact variant for mobile/navbar
   if (variant === 'compact') {
-    if (isConnected && principal) {
+    if (isConnected) {
       return (
         <>
           <button
@@ -65,7 +51,7 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
           >
             <div className="h-2 w-2 rounded-full bg-green-500" />
             <span className="text-sm font-mono text-green-900">
-              {principal.toText().slice(0, 8)}...
+              {shortIdentifier || 'Connected'}
             </span>
           </button>
           <WalletModal
@@ -78,29 +64,35 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
     }
 
     return (
-      <Button
-        onClick={handleConnect}
-        disabled={isLoading}
-        size="sm"
-        className={className}
-      >
-        {isLoading ? (
-          <>
-            <Loader className="h-4 w-4 mr-2 animate-spin" />
-            Connecting...
-          </>
-        ) : (
-          <>
-            <Wallet className="h-4 w-4 mr-2" />
-            Connect
-          </>
-        )}
-      </Button>
+      <>
+        <Button
+          onClick={handleConnect}
+          disabled={isLoading}
+          size="sm"
+          className={className}
+        >
+          {isLoading ? (
+            <>
+              <Loader className="h-4 w-4 mr-2 animate-spin" />
+              Connecting...
+            </>
+          ) : (
+            <>
+              <Wallet className="h-4 w-4 mr-2" />
+              Connect
+            </>
+          )}
+        </Button>
+        <ConnectWalletModal
+          isOpen={showConnectModal}
+          onClose={() => setShowConnectModal(false)}
+        />
+      </>
     );
   }
 
   // Default variant for main pages
-  if (isConnected && principal) {
+  if (isConnected) {
     return (
       <>
         <div className={`space-y-3 ${className}`}>
@@ -110,10 +102,21 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
               <span className="text-sm font-semibold text-green-900">Connected</span>
             </div>
             <div className="space-y-2">
-              <p className="text-xs text-green-700">Principal ID</p>
-              <p className="font-mono text-sm text-green-900 break-all">
-                {principal.toText()}
-              </p>
+              {bitcoin.address ? (
+                <>
+                  <p className="text-xs text-green-700">Bitcoin Address</p>
+                  <p className="font-mono text-sm text-green-900 break-all">
+                    {bitcoin.address}
+                  </p>
+                </>
+              ) : principal ? (
+                <>
+                  <p className="text-xs text-green-700">Principal ID</p>
+                  <p className="font-mono text-sm text-green-900 break-all">
+                    {principal.toText()}
+                  </p>
+                </>
+              ) : null}
             </div>
             <div className="flex gap-2 mt-4">
               <Button
@@ -147,23 +150,29 @@ export function WalletButton({ variant = 'default', className = '' }: WalletButt
   }
 
   return (
-    <Button
-      onClick={handleConnect}
-      disabled={isLoading}
-      size="lg"
-      className={`w-full ${className}`}
-    >
-      {isLoading ? (
-        <>
-          <Loader className="h-5 w-5 mr-2 animate-spin" />
-          Connecting to Internet Identity...
-        </>
-      ) : (
-        <>
-          <Wallet className="h-5 w-5 mr-2" />
-          Connect Wallet
-        </>
-      )}
-    </Button>
+    <>
+      <Button
+        onClick={handleConnect}
+        disabled={isLoading}
+        size="lg"
+        className={`w-full ${className}`}
+      >
+        {isLoading ? (
+          <>
+            <Loader className="h-5 w-5 mr-2 animate-spin" />
+            Connecting...
+          </>
+        ) : (
+          <>
+            <Wallet className="h-5 w-5 mr-2" />
+            Connect Wallet
+          </>
+        )}
+      </Button>
+      <ConnectWalletModal
+        isOpen={showConnectModal}
+        onClose={() => setShowConnectModal(false)}
+      />
+    </>
   );
 }

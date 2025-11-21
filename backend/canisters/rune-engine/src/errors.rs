@@ -123,3 +123,25 @@ impl EtchingError {
 
 /// Result type for etching operations
 pub type EtchingResult<T> = Result<T, EtchingError>;
+
+/// General engine errors for DMS, vetKeys, and other modules
+#[derive(Error, Debug, Clone)]
+pub enum EngineError {
+    #[error("Unauthorized: {0}")]
+    Unauthorized(String),
+
+    #[error("Invalid input: {0}")]
+    InvalidInput(String),
+
+    #[error("Not found: {0}")]
+    NotFound(String),
+
+    #[error("Invalid state: {0}")]
+    InvalidState(String),
+
+    #[error("External call failed: {0}")]
+    ExternalCall(String),
+
+    #[error("Internal error: {0}")]
+    InternalError(String),
+}

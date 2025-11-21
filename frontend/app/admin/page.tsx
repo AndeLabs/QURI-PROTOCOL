@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useRuneEngine } from '@/hooks/useRuneEngine';
 import { useRegistry } from '@/hooks/useRegistry';
+import { useSyncRunes } from '@/hooks/useIndexedRunes';
 import type { Role, CyclesMetrics, PerformanceMetrics } from '@/types/canisters';
 
 export default function AdminDashboardPage() {
@@ -30,7 +31,7 @@ export default function AdminDashboardPage() {
     getCyclesMetrics,
     getPerformanceMetrics,
     listRoleAssignments,
-    assignRole,
+    grantRole,
     revokeRole,
     healthCheck,
     loading: engineLoading,
@@ -64,6 +65,20 @@ export default function AdminDashboardPage() {
   // Whitelist management
   const [whitelistPrincipal, setWhitelistPrincipal] = useState('');
   const [whitelistStatus, setWhitelistStatus] = useState<boolean | null>(null);
+
+  // Rune sync management
+  const { syncRunes, getHiroTotal } = useSyncRunes();
+  const [syncStatus, setSyncStatus] = useState<{
+    syncing: boolean;
+    progress: number;
+    total: number;
+    message: string;
+  }>({
+    syncing: false,
+    progress: 0,
+    total: 0,
+    message: '',
+  });
 
   // Check admin access
   useEffect(() => {
@@ -506,6 +521,185 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       )}
+
+      {/* Rune Synchronization */}
+      <div className="border border-museum-light-gray rounded-xl p-6 bg-museum-white">
+        <h2 className="font-serif text-2xl font-bold text-museum-black mb-6 flex items-center gap-2">
+          <RefreshCw className="h-6 w-6 text-gold-600" />
+          Rune Synchronization
+        </h2>
+
+        <div className="space-y-4">
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+            <p className="text-sm text-blue-900 mb-2">
+              <strong>Current Status:</strong> {syncStatus.progress} / {syncStatus.total} runes synced
+            </p>
+            <p className="text-xs text-blue-700">
+              This will sync all runes from the Hiro API to the canister's indexed storage.
+              The process runs in batches of 60 runes per call (Hiro API limit).
+            </p>
+          </div>
+
+          {syncStatus.message && (
+            <div className={`border rounded-lg p-4 ${
+              syncStatus.syncing
+                ? 'bg-yellow-50 border-yellow-200'
+                : 'bg-green-50 border-green-200'
+            }`}>
+              <p className="text-sm">{syncStatus.message}</p>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <Button
+              onClick={async () => {
+                try {
+                  setSyncStatus(prev => ({ ...prev, syncing: true, message: 'Getting total count...' }));
+                  const total = await getHiroTotal();
+                  setSyncStatus(prev => ({ ...prev, total: Number(total), message: `Found ${total} runes in Hiro API` }));
+                } catch (err) {
+                  setSyncStatus(prev => ({
+                    ...prev,
+                    syncing: false,
+                    message: `Error: ${err instanceof Error ? err.message : 'Unknown error'}`
+                  }));
+                }
+              }}
+              disabled={syncStatus.syncing}
+              variant="outline"
+            >
+              <Database className="h-4 w-4 mr-2" />
+              Check Total
+            </Button>
+
+            <Button
+              onClick={async () => {
+                try {
+                  setSyncStatus(prev => ({ ...prev, syncing: true, message: 'Starting full sync...' }));
+
+                  const total = await getHiroTotal();
+                  const totalNum = Number(total);
+                  const batchSize = 60; // Hiro API limit
+                  let synced = 0;
+
+                  // Sync in batches
+                  for (let offset = 0; offset < totalNum; offset += batchSize) {
+                    const remaining = totalNum - offset;
+                    const limit = Math.min(batchSize, remaining);
+
+                    setSyncStatus(prev => ({
+                      ...prev,
+                      progress: offset,
+                      total: totalNum,
+                      message: `Syncing batch ${Math.floor(offset / batchSize) + 1}... (${offset}/${totalNum})`
+                    }));
+
+                    const result = await syncRunes(offset, limit);
+                    synced += result.stored;
+
+                    // Small delay to avoid rate limits
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                  }
+
+                  setSyncStatus({
+                    syncing: false,
+                    progress: synced,
+                    total: totalNum,
+                    message: `✅ Sync complete! Synced ${synced} runes.`
+                  });
+                } catch (err) {
+                  setSyncStatus(prev => ({
+                    ...prev,
+                    syncing: false,
+                    message: `❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`
+                  }));
+                }
+              }}
+              disabled={syncStatus.syncing}
+              variant="primary"
+            >
+              {syncStatus.syncing ? (
+                <>
+                  <Loader className="h-4 w-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Sync All Runes
+                </>
+              )}
+            </Button>
+
+            <Button
+              onClick={async () => {
+                try {
+                  setSyncStatus(prev => ({ ...prev, syncing: true, message: 'Syncing next 1000...' }));
+
+                  const batchSize = 60;
+                  const totalToSync = 1000;
+                  let synced = 0;
+
+                  // Get current progress
+                  const currentProgress = syncStatus.progress;
+
+                  // Sync 1000 more
+                  for (let i = 0; i < Math.ceil(totalToSync / batchSize); i++) {
+                    const offset = currentProgress + (i * batchSize);
+                    const limit = Math.min(batchSize, totalToSync - (i * batchSize));
+
+                    setSyncStatus(prev => ({
+                      ...prev,
+                      message: `Syncing batch ${i + 1}... (${synced}/${totalToSync})`
+                    }));
+
+                    const result = await syncRunes(offset, limit);
+                    synced += result.stored;
+
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                  }
+
+                  setSyncStatus(prev => ({
+                    ...prev,
+                    syncing: false,
+                    progress: prev.progress + synced,
+                    message: `✅ Synced ${synced} more runes. Total: ${prev.progress + synced}`
+                  }));
+                } catch (err) {
+                  setSyncStatus(prev => ({
+                    ...prev,
+                    syncing: false,
+                    message: `❌ Error: ${err instanceof Error ? err.message : 'Unknown error'}`
+                  }));
+                }
+              }}
+              disabled={syncStatus.syncing}
+              variant="secondary"
+            >
+              {syncStatus.syncing ? (
+                <Loader className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4 mr-2" />
+              )}
+              Sync +1000
+            </Button>
+          </div>
+
+          {syncStatus.syncing && syncStatus.total > 0 && (
+            <div className="mt-4">
+              <div className="w-full bg-gray-200 rounded-full h-2.5">
+                <div
+                  className="bg-gold-600 h-2.5 rounded-full transition-all duration-300"
+                  style={{ width: `${(syncStatus.progress / syncStatus.total) * 100}%` }}
+                />
+              </div>
+              <p className="text-xs text-museum-dark-gray mt-2 text-center">
+                {((syncStatus.progress / syncStatus.total) * 100).toFixed(1)}%
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Errors */}
       {(engineError || registryError) && (

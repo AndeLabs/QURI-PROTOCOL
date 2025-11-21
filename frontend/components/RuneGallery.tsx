@@ -1,19 +1,20 @@
 /**
- * Modern Rune Gallery with Infinite Scroll
+ * Modern Rune Gallery with Pagination
  * Uses React Query for data fetching and caching
  */
 
 'use client';
 
-import { useEffect, useRef } from 'react';
-import { useInfiniteRunesQuery, useSearchRunesQuery } from '@/hooks/queries';
+import { useState, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { useRuneStore } from '@/lib/store/useRuneStore';
 import { useDebouncedValue } from '@/hooks/useDebouncedValue';
+import { getRegistryActor } from '@/lib/icp/actors';
 import { Card, CardContent } from './ui/Card';
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
-import { Loader2, Search, Grid3x3, List, TrendingUp } from 'lucide-react';
-import type { RegistryEntry } from '@/types/canisters';
+import { Loader2, Search, Grid3x3, List, ChevronLeft, ChevronRight } from 'lucide-react';
+import type { RegistryEntry, Page } from '@/types/canisters';
 
 export function ModernRuneGallery() {
   const {
@@ -25,53 +26,62 @@ export function ModernRuneGallery() {
     setSortBy,
   } = useRuneStore();
 
+  const [page, setPage] = useState(0);
+  const pageSize = 20;
+
   // Debounce search with custom hook (more efficient)
   const debouncedSearch = useDebouncedValue(searchQuery, 300);
 
-  // Use search query if present, otherwise use infinite query
-  const searchResults = useSearchRunesQuery(debouncedSearch);
-
-  const infiniteQuery = useInfiniteRunesQuery(20n);
-
-  const observerTarget = useRef<HTMLDivElement>(null);
-
-  // Intersection Observer for infinite scroll
+  // Reset page when search changes
   useEffect(() => {
-    if (debouncedSearch) return; // Don't use infinite scroll when searching
+    setPage(0);
+  }, [debouncedSearch, sortBy]);
 
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (
-          entries[0].isIntersecting &&
-          infiniteQuery.hasNextPage &&
-          !infiniteQuery.isFetchingNextPage
-        ) {
-          infiniteQuery.fetchNextPage();
-        }
-      },
-      { threshold: 1.0 }
-    );
+  // Fetch runes with pagination
+  const { data, isLoading, isFetching } = useQuery({
+    queryKey: ['runes', 'gallery', page, pageSize, sortBy, debouncedSearch],
+    queryFn: async () => {
+      const actor = await getRegistryActor();
 
-    if (observerTarget.current) {
-      observer.observe(observerTarget.current);
-    }
+      // If searching, use search endpoint
+      if (debouncedSearch) {
+        const result = await actor.search_runes(
+          debouncedSearch,
+          BigInt(page * pageSize),
+          BigInt(pageSize)
+        );
+        return {
+          items: result.results,
+          total: BigInt(result.results.length + page * pageSize),
+          hasMore: result.results.length === pageSize,
+        };
+      }
 
-    return () => observer.disconnect();
-  }, [
-    debouncedSearch,
-    infiniteQuery.hasNextPage,
-    infiniteQuery.isFetchingNextPage,
-    infiniteQuery,
-  ]);
+      // Otherwise use list endpoint with sorting
+      const pageParams: Page = {
+        offset: BigInt(page * pageSize),
+        limit: BigInt(pageSize),
+        sort_by: [sortBy === 'volume' ? { Volume: null } : { Block: null }],
+        sort_order: [{ Desc: null }],
+      };
 
-  // Get runes to display
-  const runes: RegistryEntry[] = debouncedSearch
-    ? searchResults.data || []
-    : infiniteQuery.data?.pages.flatMap(page => page.items) || [];
+      const result = await actor.list_runes([pageParams]);
+      if ('Ok' in result) {
+        return {
+          items: result.Ok.items,
+          total: result.Ok.total,
+          hasMore: result.Ok.has_more,
+        };
+      }
 
-  const isLoading = debouncedSearch
-    ? searchResults.isLoading
-    : infiniteQuery.isLoading;
+      return { items: [], total: 0n, hasMore: false };
+    },
+    staleTime: 30000,
+    placeholderData: (previousData) => previousData,
+  });
+
+  const runes = data?.items || [];
+  const totalPages = data?.total ? Math.ceil(Number(data.total) / pageSize) : 0;
 
   return (
     <div className="space-y-6">
@@ -113,7 +123,7 @@ export function ModernRuneGallery() {
         {/* Sort */}
         <select
           value={sortBy}
-          onChange={(e) => setSortBy(e.target.value as any)}
+          onChange={(e) => setSortBy(e.target.value as 'created' | 'volume' | 'trending')}
           className="px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange-500"
         >
           <option value="created">Recently Created</option>
@@ -158,12 +168,38 @@ export function ModernRuneGallery() {
             ))}
           </div>
 
-          {/* Infinite Scroll Trigger */}
-          {!debouncedSearch && (
-            <div ref={observerTarget} className="h-10 flex items-center justify-center">
-              {infiniteQuery.isFetchingNextPage && (
-                <Loader2 className="w-6 h-6 animate-spin text-gray-400" />
-              )}
+          {/* Pagination */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-4 pt-4">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => Math.max(0, p - 1))}
+                disabled={page === 0 || isFetching}
+              >
+                <ChevronLeft className="w-4 h-4 mr-1" />
+                Previous
+              </Button>
+
+              <span className="text-sm text-gray-600">
+                Page {page + 1} of {totalPages}
+              </span>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setPage((p) => p + 1)}
+                disabled={!data?.hasMore || isFetching}
+              >
+                Next
+                <ChevronRight className="w-4 h-4 ml-1" />
+              </Button>
+            </div>
+          )}
+
+          {isFetching && !isLoading && (
+            <div className="flex justify-center">
+              <Loader2 className="w-5 h-5 animate-spin text-gray-400" />
             </div>
           )}
         </>

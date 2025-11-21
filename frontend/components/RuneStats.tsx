@@ -25,7 +25,7 @@ export function RuneStats({ refreshInterval = 30000 }: RuneStatsProps) {
   const loadStats = async () => {
     try {
       const { getRegistryActor } = await import('@/lib/icp/actors');
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       
       const registryStats = await actor.get_stats();
       
