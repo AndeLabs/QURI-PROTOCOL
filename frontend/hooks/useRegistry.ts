@@ -6,6 +6,7 @@
  */
 
 import { useState, useCallback } from 'react';
+import { Principal } from '@dfinity/principal';
 import { getRegistryActor } from '@/lib/icp/actors';
 import type {
   RuneKey,
@@ -32,7 +33,7 @@ export function useRegistry() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getRegistryActor();
+        const actor = await getRegistryActor();
         const result = await actor.register_rune(metadata);
 
         if ('Ok' in result) {
@@ -59,11 +60,11 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const result = await actor.get_rune(key);
 
       if (result.length > 0) {
-        return result[0];
+        return result[0] ?? null;
       }
       return null;
     } catch (err) {
@@ -82,11 +83,11 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const result = await actor.get_rune_by_name(name);
 
       if (result.length > 0) {
-        return result[0];
+        return result[0] ?? null;
       }
       return null;
     } catch (err) {
@@ -105,7 +106,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const runes = await actor.get_my_runes();
       return runes;
     } catch (err) {
@@ -147,7 +148,7 @@ export function useRegistry() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getRegistryActor();
+        const actor = await getRegistryActor();
 
         // Default page if not provided
         const defaultPage: Page = {
@@ -157,8 +158,21 @@ export function useRegistry() {
           sort_order: [{ Desc: null }],
         };
 
-        const response = await actor.list_runes(page ? [page] : [defaultPage]);
-        return response;
+        const result = await actor.list_runes(page ? [page] : [defaultPage]);
+
+        // Handle Result variant
+        if ('Ok' in result) {
+          return result.Ok;
+        } else {
+          setError(result.Err);
+          return {
+            items: [],
+            total: 0n,
+            offset: 0n,
+            limit: 0n,
+            has_more: false,
+          };
+        }
       } catch (err) {
         const errorMsg = err instanceof Error ? err.message : 'Failed to list Runes';
         setError(errorMsg);
@@ -184,7 +198,7 @@ export function useRegistry() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getRegistryActor();
+        const actor = await getRegistryActor();
         const result = await actor.search_runes(query, offset, limit);
         return result.results;
       } catch (err) {
@@ -206,7 +220,7 @@ export function useRegistry() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getRegistryActor();
+        const actor = await getRegistryActor();
         const result = await actor.get_trending(offset, limit);
         return result.results;
       } catch (err) {
@@ -228,7 +242,7 @@ export function useRegistry() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getRegistryActor();
+        const actor = await getRegistryActor();
         const result = await actor.update_volume(key, volume);
 
         if ('Ok' in result) {
@@ -256,7 +270,7 @@ export function useRegistry() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getRegistryActor();
+        const actor = await getRegistryActor();
         const result = await actor.update_holder_count(key, count);
 
         if ('Ok' in result) {
@@ -283,7 +297,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const total = await actor.total_runes();
       return total;
     } catch (err) {
@@ -302,7 +316,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const stats = await actor.get_stats();
       return stats;
     } catch (err) {
@@ -338,7 +352,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const metrics = await actor.get_canister_metrics();
       return metrics;
     } catch (err) {
@@ -360,7 +374,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const whitelisted = await actor.is_whitelisted(principal);
       return whitelisted;
     } catch (err) {
@@ -382,7 +396,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const result = await actor.add_to_whitelist(principal);
 
       if ('Ok' in result) {
@@ -410,7 +424,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const result = await actor.remove_from_whitelist(principal);
 
       if ('Ok' in result) {
@@ -438,7 +452,7 @@ export function useRegistry() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getRegistryActor();
+      const actor = await getRegistryActor();
       const result = await actor.reset_rate_limit(principal);
 
       if ('Ok' in result) {

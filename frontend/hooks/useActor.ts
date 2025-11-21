@@ -51,13 +51,13 @@ export function useActor<T extends CanisterName>(
   return useMemo(() => {
     switch (canisterName) {
       case 'rune-engine':
-        return getRuneEngineActor() as ActorSubclass<ActorType<T>>;
+        return getRuneEngineActor() as unknown as ActorSubclass<ActorType<T>>;
       case 'bitcoin-integration':
-        return getBitcoinIntegrationActor() as ActorSubclass<ActorType<T>>;
+        return getBitcoinIntegrationActor() as unknown as ActorSubclass<ActorType<T>>;
       case 'registry':
-        return getRegistryActor() as ActorSubclass<ActorType<T>>;
+        return getRegistryActor() as unknown as ActorSubclass<ActorType<T>>;
       case 'identity-manager':
-        return getIdentityManagerActor() as ActorSubclass<ActorType<T>>;
+        return getIdentityManagerActor() as unknown as ActorSubclass<ActorType<T>>;
       default:
         throw new Error(`Unknown canister: ${canisterName}`);
     }

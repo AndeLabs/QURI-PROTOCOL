@@ -26,7 +26,7 @@ export function useBitcoinIntegration() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getBitcoinIntegrationActor();
+      const actor = await getBitcoinIntegrationActor();
       const result = await actor.get_p2tr_address();
 
       if ('Ok' in result) {
@@ -51,7 +51,7 @@ export function useBitcoinIntegration() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getBitcoinIntegrationActor();
+      const actor = await getBitcoinIntegrationActor();
       const result = await actor.get_fee_estimates();
 
       if ('Ok' in result) {
@@ -79,7 +79,7 @@ export function useBitcoinIntegration() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getBitcoinIntegrationActor();
+        const actor = await getBitcoinIntegrationActor();
         const result = await actor.select_utxos(amount, feeRate);
 
         if ('Ok' in result) {
@@ -107,7 +107,7 @@ export function useBitcoinIntegration() {
       try {
         setLoading(true);
         setError(null);
-        const actor = getBitcoinIntegrationActor();
+        const actor = await getBitcoinIntegrationActor();
         const result = await actor.build_and_sign_etching_tx(etching, utxos);
 
         if ('Ok' in result) {
@@ -134,7 +134,7 @@ export function useBitcoinIntegration() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getBitcoinIntegrationActor();
+      const actor = await getBitcoinIntegrationActor();
       const result = await actor.broadcast_transaction(txBytes);
 
       if ('Ok' in result) {
@@ -159,7 +159,7 @@ export function useBitcoinIntegration() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getBitcoinIntegrationActor();
+      const actor = await getBitcoinIntegrationActor();
       const result = await actor.get_block_height();
 
       if ('Ok' in result) {
@@ -184,7 +184,7 @@ export function useBitcoinIntegration() {
     try {
       setLoading(true);
       setError(null);
-      const actor = getBitcoinIntegrationActor();
+      const actor = await getBitcoinIntegrationActor();
       const result = await actor.get_ckbtc_balance(principal);
 
       if ('Ok' in result) {

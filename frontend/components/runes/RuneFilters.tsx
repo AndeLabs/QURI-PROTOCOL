@@ -3,7 +3,6 @@
  * Reusable filters for Rune lists
  */
 
-import { useState } from 'react';
 import { Search, Filter, X } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
 import type { RuneSortBy, SortOrder } from '@/types/canisters';
@@ -12,12 +11,17 @@ export interface FilterState {
   search: string;
   sortBy: RuneSortBy;
   sortOrder: SortOrder;
-  showVerifiedOnly: boolean;
+  showVerifiedOnly?: boolean;
 }
 
 interface RuneFiltersProps {
-  onFilterChange: (filters: FilterState) => void;
-  totalCount: number;
+  /** Current filters (controlled component) */
+  filters: FilterState;
+  /** Callback when filters change */
+  onFilterChange: (filters: Partial<FilterState>) => void;
+  /** Total count of runes */
+  totalCount: number | bigint;
+  /** Filtered count */
   filteredCount: number;
   loading?: boolean;
   showSortOptions?: boolean;
@@ -26,6 +30,7 @@ interface RuneFiltersProps {
 }
 
 export function RuneFilters({
+  filters,
   onFilterChange,
   totalCount,
   filteredCount,
@@ -34,17 +39,8 @@ export function RuneFilters({
   showVerifiedFilter = true,
   className = '',
 }: RuneFiltersProps) {
-  const [filters, setFilters] = useState<FilterState>({
-    search: '',
-    sortBy: { Block: null },
-    sortOrder: { Desc: null },
-    showVerifiedOnly: false,
-  });
-
   const handleFilterChange = (newFilters: Partial<FilterState>) => {
-    const updated = { ...filters, ...newFilters };
-    setFilters(updated);
-    onFilterChange(updated);
+    onFilterChange(newFilters);
   };
 
   const clearSearch = () => {
@@ -52,14 +48,12 @@ export function RuneFilters({
   };
 
   const resetFilters = () => {
-    const defaultFilters: FilterState = {
+    onFilterChange({
       search: '',
       sortBy: { Block: null },
       sortOrder: { Desc: null },
       showVerifiedOnly: false,
-    };
-    setFilters(defaultFilters);
-    onFilterChange(defaultFilters);
+    });
   };
 
   return (
@@ -180,7 +174,7 @@ export function RuneFilters({
         <div className="pt-4 border-t border-museum-light-gray">
           <p className="text-sm text-museum-dark-gray">
             Showing <strong className="text-museum-black">{filteredCount}</strong> of{' '}
-            <strong className="text-museum-black">{totalCount}</strong> Runes
+            <strong className="text-museum-black">{typeof totalCount === 'bigint' ? totalCount.toString() : totalCount}</strong> Runes
           </p>
         </div>
       </div>

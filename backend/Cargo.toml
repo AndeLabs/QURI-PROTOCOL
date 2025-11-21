@@ -13,6 +13,9 @@ members = [
     "libs/bitcoin-utils",
     "libs/runes-utils",
     "libs/schnorr-signatures",
+
+    # Integration Tests
+    "tests",
 ]
 
 [workspace.package]
@@ -57,6 +60,7 @@ futures = "0.3"
 # Testing
 mockall = "0.12"
 proptest = "1.4"
+pocket-ic = "5.0"
 
 [profile.release]
 opt-level = 'z'     # Optimize for size

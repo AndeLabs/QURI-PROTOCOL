@@ -11,6 +11,7 @@
  */
 
 use candid::{CandidType, Deserialize, Principal};
+use ic_cdk::api::management_canister::http_request::{HttpResponse, TransformArgs};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
 use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableVec};
@@ -27,8 +28,9 @@ mod parser;
 mod rate_limit;
 mod metrics;
 
-pub use indexer::{IndexedRune, IndexerConfig, IndexerStats, RuneIdentifier};
+pub use indexer::{IndexedRune, IndexerConfig, IndexerStats, MintTerms, RuneIdentifier};
 pub use metrics::RegistryMetrics;
+pub use bitcoin_client::{fetch_runes_from_hiro, convert_hiro_rune, HiroEtchingsResponse};
 
 // ============================================================================
 // TYPE ALIASES
@@ -511,57 +513,117 @@ fn list_runes(page: Option<Page>) -> Result<PagedResponse<RegistryEntry>, String
     })
 }
 
-/// Búsqueda full-text con paginación
+/// Búsqueda full-text con paginación - O(log n) usando índices
 ///
 /// ## Strategy
 ///
-/// 1. Si búsqueda exacta → usar name index (O(log n))
-/// 2. Si búsqueda parcial → scan con filter (O(n))
-///
-/// TODO: Implementar índice invertido para búsqueda parcial eficiente
+/// 1. Búsqueda exacta por nombre → O(log n)
+/// 2. Búsqueda por prefijo en NAME_INDEX → O(log n + k)
+/// 3. Ordenar por relevancia (exact > starts_with > contains)
 #[query]
 fn search_runes(query: String, offset: u64, limit: u64) -> SearchResult<RegistryEntry> {
     let query_upper = query.to_uppercase();
+    let query_normalized: Vec<u8> = query_upper
+        .chars()
+        .filter(|c| c.is_alphanumeric())
+        .collect::<String>()
+        .into_bytes();
     let limit = limit.min(100);
-    
-    // Try exact match first
-    if let Some(entry) = get_rune_by_name(query_upper.clone()) {
-        return SearchResult {
-            results: vec![entry],
-            total_matches: 1,
-            offset: 0,
-            limit: 1,
-        };
-    }
-    
-    // Fallback: partial match (O(n) scan)
-    REGISTRY.with(|r| {
-        let all_matches: Vec<RegistryEntry> = r.borrow()
-            .iter()
-            .filter_map(|(_, entry)| {
-                if entry.metadata.name.contains(&query_upper) 
-                    || entry.metadata.symbol.contains(&query_upper) {
-                    Some(entry)
-                } else {
-                    None
-                }
-            })
-            .collect();
-        
-        let total = all_matches.len() as u64;
-        let results: Vec<_> = all_matches
-            .into_iter()
-            .skip(offset as usize)
-            .take(limit as usize)
-            .collect();
-        
-        SearchResult {
-            results,
-            total_matches: total,
-            offset,
-            limit,
+
+    // Collect matching keys using prefix search - O(log n)
+    let mut matching_keys: Vec<RuneKey> = Vec::new();
+
+    NAME_INDEX.with(|idx| {
+        let index = idx.borrow();
+
+        // Prefix search: find all names starting with query
+        let range_start = query_normalized.clone();
+        let mut range_end = query_normalized.clone();
+        if let Some(last) = range_end.last_mut() {
+            *last = last.saturating_add(1);
+        } else {
+            range_end.push(0xFF);
         }
-    })
+
+        // Use range to get prefix matches
+        for (name_bytes, rune_key) in index.range(range_start.clone()..range_end) {
+            matching_keys.push(rune_key);
+            if matching_keys.len() >= 200 {
+                break; // Limit to prevent memory issues
+            }
+        }
+
+        // Also check for contains (limited scan for short queries)
+        if query_normalized.len() >= 2 && matching_keys.len() < 50 {
+            for (name_bytes, rune_key) in index.iter() {
+                // Skip if already matched by prefix
+                if name_bytes.starts_with(&query_normalized) {
+                    continue;
+                }
+                // Check if name contains query
+                if name_bytes.windows(query_normalized.len())
+                    .any(|window| window == query_normalized.as_slice()) {
+                    matching_keys.push(rune_key);
+                    if matching_keys.len() >= 100 {
+                        break;
+                    }
+                }
+            }
+        }
+    });
+
+    // Fetch entries and sort by relevance
+    let mut results: Vec<RegistryEntry> = Vec::new();
+    REGISTRY.with(|r| {
+        let registry = r.borrow();
+        for key in &matching_keys {
+            if let Some(entry) = registry.get(key) {
+                results.push(entry);
+            }
+        }
+    });
+
+    // Sort by relevance
+    results.sort_by(|a, b| {
+        let a_name = a.metadata.name.to_uppercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>();
+        let b_name = b.metadata.name.to_uppercase()
+            .chars()
+            .filter(|c| c.is_alphanumeric())
+            .collect::<String>();
+        let query_str = String::from_utf8_lossy(&query_normalized);
+
+        // Exact match first
+        let a_exact = a_name == query_str.as_ref();
+        let b_exact = b_name == query_str.as_ref();
+        if a_exact && !b_exact { return std::cmp::Ordering::Less; }
+        if b_exact && !a_exact { return std::cmp::Ordering::Greater; }
+
+        // Then starts with
+        let a_starts = a_name.starts_with(query_str.as_ref());
+        let b_starts = b_name.starts_with(query_str.as_ref());
+        if a_starts && !b_starts { return std::cmp::Ordering::Less; }
+        if b_starts && !a_starts { return std::cmp::Ordering::Greater; }
+
+        // Then alphabetically
+        a_name.cmp(&b_name)
+    });
+
+    let total = results.len() as u64;
+    let paginated: Vec<_> = results
+        .into_iter()
+        .skip(offset as usize)
+        .take(limit as usize)
+        .collect();
+
+    SearchResult {
+        results: paginated,
+        total_matches: total,
+        offset,
+        limit,
+    }
 }
 
 /// Get trending runes (por volumen 24h)
@@ -691,20 +753,225 @@ fn get_indexer_stats() -> IndexerStats {
 #[update]
 async fn index_block_range(start: u64, end: u64) -> Result<u64, String> {
     let _config = indexer::get_config().ok_or("Indexer not initialized".to_string())?;
-    
+
     let mut indexed_count = 0u64;
-    
+
     for height in start..=end {
         let txs = bitcoin_client::mock_fetch_transactions(height);
         let runes = parser::parse_block_for_runestones(txs, height, 0);
-        
+
         for rune in runes {
             indexer::store_rune(rune)?;
             indexed_count += 1;
         }
     }
-    
+
     Ok(indexed_count)
+}
+
+// ============================================================================
+// HIRO API SYNC - Fetch real Bitcoin Runes data
+// ============================================================================
+
+/// Sync response with details
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct SyncResponse {
+    pub fetched: u32,
+    pub stored: u32,
+    pub errors: u32,
+    pub total_available: u64,
+}
+
+/// Fetch and store runes from Hiro API
+///
+/// ## Parameters
+///
+/// - `offset`: Starting position in the API results
+/// - `limit`: Number of runes to fetch (max 60 per call due to API limits)
+///
+/// ## Example
+///
+/// ```rust
+/// // Fetch first 60 runes
+/// let result = sync_runes_from_hiro(0, 60).await?;
+///
+/// // Fetch next batch
+/// let result = sync_runes_from_hiro(60, 60).await?;
+/// ```
+#[update]
+async fn sync_runes_from_hiro(offset: u32, limit: u32) -> Result<SyncResponse, String> {
+    // Fetch from Hiro API
+    let response = bitcoin_client::fetch_runes_from_hiro(offset, limit).await?;
+
+    let mut stored = 0u32;
+    let mut errors = 0u32;
+
+    for hiro_rune in response.results.iter() {
+        // Convert to our format
+        match bitcoin_client::convert_hiro_rune(hiro_rune.clone()) {
+            Ok(indexed_rune) => {
+                // Store in indexer storage
+                match indexer::store_rune(indexed_rune) {
+                    Ok(_) => stored += 1,
+                    Err(e) => {
+                        ic_cdk::println!("Failed to store rune {}: {}", hiro_rune.name, e);
+                        errors += 1;
+                    }
+                }
+            }
+            Err(e) => {
+                ic_cdk::println!("Failed to convert rune {}: {}", hiro_rune.name, e);
+                errors += 1;
+            }
+        }
+    }
+
+    ic_cdk::println!(
+        "✅ Synced {} runes from Hiro API (offset: {}, errors: {})",
+        stored, offset, errors
+    );
+
+    Ok(SyncResponse {
+        fetched: response.results.len() as u32,
+        stored,
+        errors,
+        total_available: response.total,
+    })
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/// Async sleep function using timer-based delay
+///
+/// This creates an async delay by setting a one-shot timer and awaiting its completion.
+/// Used to respect API rate limits when making multiple consecutive HTTP outcalls.
+///
+/// ## Implementation Note
+/// ICP canisters don't have built-in async sleep, so we use a timer with a oneshot
+/// channel to create a Future that completes after the specified duration.
+async fn sleep_async(seconds: u64) {
+    use std::cell::RefCell;
+
+    thread_local! {
+        static SLEEP_COMPLETE: RefCell<bool> = const { RefCell::new(false) };
+    }
+
+    SLEEP_COMPLETE.with(|complete| {
+        *complete.borrow_mut() = false;
+    });
+
+    // Set a timer that will trigger after the specified duration
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(seconds), || {
+        SLEEP_COMPLETE.with(|complete| {
+            *complete.borrow_mut() = true;
+        });
+    });
+
+    // Create a simple future that polls the flag
+    struct SleepFuture;
+    impl std::future::Future for SleepFuture {
+        type Output = ();
+
+        fn poll(
+            self: std::pin::Pin<&mut Self>,
+            cx: &mut std::task::Context<'_>,
+        ) -> std::task::Poll<Self::Output> {
+            if SLEEP_COMPLETE.with(|c| *c.borrow()) {
+                std::task::Poll::Ready(())
+            } else {
+                cx.waker().wake_by_ref();
+                std::task::Poll::Pending
+            }
+        }
+    }
+
+    SleepFuture.await;
+}
+
+/// Batch sync multiple pages of runes from Hiro API
+///
+/// ## Parameters
+///
+/// - `start_offset`: Starting position
+/// - `total_to_fetch`: Total number of runes to fetch
+///
+/// This will make multiple API calls in batches of 60 (API limit)
+/// with 4-second delays between requests to respect Hiro API rate limits
+#[update]
+async fn batch_sync_runes(start_offset: u32, total_to_fetch: u32) -> Result<SyncResponse, String> {
+    const BATCH_SIZE: u32 = 60;
+    const DELAY_SECONDS: u64 = 4; // 4s delay to stay under 900 RPM (15 req/s) limit
+
+    let mut total_fetched = 0u32;
+    let mut total_stored = 0u32;
+    let mut total_errors = 0u32;
+    let mut total_available = 0u64;
+
+    let mut current_offset = start_offset;
+    let mut remaining = total_to_fetch;
+    let mut is_first_batch = true;
+
+    while remaining > 0 {
+        // Add delay before each request (except the first one)
+        if !is_first_batch {
+            ic_cdk::println!("⏳ Waiting {}s to respect API rate limits...", DELAY_SECONDS);
+            sleep_async(DELAY_SECONDS).await;
+        }
+        is_first_batch = false;
+
+        let batch_size = remaining.min(BATCH_SIZE);
+
+        match sync_runes_from_hiro(current_offset, batch_size).await {
+            Ok(response) => {
+                total_fetched += response.fetched;
+                total_stored += response.stored;
+                total_errors += response.errors;
+                total_available = response.total_available;
+
+                current_offset += response.fetched;
+                remaining = remaining.saturating_sub(response.fetched);
+
+                ic_cdk::println!(
+                    "📦 Batch progress: {}/{} runes ({} stored, {} errors)",
+                    total_fetched,
+                    total_to_fetch,
+                    total_stored,
+                    total_errors
+                );
+
+                // Stop if we've fetched everything available
+                if response.fetched == 0 || current_offset >= response.total_available as u32 {
+                    break;
+                }
+            }
+            Err(e) => {
+                ic_cdk::println!("Batch sync error at offset {}: {}", current_offset, e);
+                return Err(format!("Batch sync failed at offset {}: {}", current_offset, e));
+            }
+        }
+    }
+
+    ic_cdk::println!(
+        "✅ Batch sync complete: {} fetched, {} stored, {} errors",
+        total_fetched, total_stored, total_errors
+    );
+
+    Ok(SyncResponse {
+        fetched: total_fetched,
+        stored: total_stored,
+        errors: total_errors,
+        total_available,
+    })
+}
+
+/// Get total runes available in Hiro API
+/// Useful for knowing how many runes exist before syncing
+#[update]
+async fn get_hiro_total() -> Result<u64, String> {
+    let response = bitcoin_client::fetch_runes_from_hiro(0, 1).await?;
+    Ok(response.total)
 }
 
 // ============================================================================

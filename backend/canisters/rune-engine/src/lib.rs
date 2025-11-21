@@ -10,6 +10,8 @@ mod block_tracker;
 mod config;
 mod confirmation_tracker;
 mod cycles_monitor;
+mod dead_man_switch;
+mod encrypted_metadata;
 mod errors;
 mod etching_flow;
 mod fee_manager;
@@ -18,6 +20,7 @@ mod logging;
 mod metrics;
 mod process_id;
 mod rbac;
+mod settlement;
 mod state;
 mod validators;
 
@@ -74,14 +77,34 @@ fn init() {
     let confirmation_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(9)));
     confirmation_tracker::init_confirmation_storage(confirmation_memory);
 
-    // Initialize Bitcoin confirmation tracker timer
-    confirmation_tracker::init_confirmation_tracker();
+    // Initialize virtual rune storage (MemoryId 10)
+    let virtual_rune_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(10)));
+    state::init_virtual_rune_storage(virtual_rune_memory);
 
-    // Initialize dynamic fee manager
-    fee_manager::init_fee_manager();
+    // Initialize settlement history (MemoryId 11)
+    let settlement_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(11)));
+    settlement::init_settlement_history(settlement_memory);
 
-    // Initialize cycles monitor
-    cycles_monitor::init_cycles_monitor();
+    // Schedule timer initialization after init completes
+    // Timers cannot be set during init/post_upgrade, so we use a one-shot timer
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(1), || {
+        confirmation_tracker::init_confirmation_tracker();
+        fee_manager::init_fee_manager();
+        cycles_monitor::init_cycles_monitor();
+
+        // Initialize Dead Man's Switch timer - check every hour
+        ic_cdk_timers::set_timer_interval(
+            std::time::Duration::from_secs(3600), // 1 hour
+            || {
+                ic_cdk::spawn(async {
+                    let triggered = dead_man_switch::process_expired_switches().await;
+                    if !triggered.is_empty() {
+                        ic_cdk::println!("Triggered {} Dead Man's Switches", triggered.len());
+                    }
+                });
+            }
+        );
+    });
 }
 
 #[pre_upgrade]
@@ -132,17 +155,27 @@ fn post_upgrade() {
     let confirmation_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(9)));
     confirmation_tracker::init_confirmation_storage(confirmation_memory);
 
-    // Restart timers
-    confirmation_tracker::init_confirmation_tracker();
-    fee_manager::init_fee_manager();
-    cycles_monitor::init_cycles_monitor();
+    // Reinitialize virtual rune storage (MemoryId 10)
+    let virtual_rune_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(10)));
+    state::init_virtual_rune_storage(virtual_rune_memory);
+
+    // Schedule timer initialization after post_upgrade completes
+    // Timers cannot be set during init/post_upgrade, so we use a one-shot timer
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(1), || {
+        confirmation_tracker::init_confirmation_tracker();
+        fee_manager::init_fee_manager();
+        cycles_monitor::init_cycles_monitor();
+    });
 }
 
 // ============================================================================
 // Etching APIs
 // ============================================================================
 
-/// Create a new Rune (main entry point)
+/// Create a new Virtual Rune (ICP-only, fast and cheap)
+///
+/// This creates a rune on ICP without touching Bitcoin.
+/// Call `etch_to_bitcoin` later to etch it on the Bitcoin network.
 ///
 /// This function is idempotent - calling it multiple times with the same parameters
 /// will return the same result without creating duplicate runes.
@@ -172,6 +205,86 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
         }
     }
 
+    // Validate etching parameters
+    validators::EtchingValidator::validate_etching(&etching)
+        .map_err(|e| e.user_message())?;
+
+    // Check if rune name already exists
+    if state::rune_name_exists(&etching.rune_name) {
+        return Err(format!("Rune name '{}' already exists", etching.rune_name));
+    }
+
+    // Generate unique ID for the virtual rune
+    let rune_id = crate::process_id::ProcessId::new()
+        .await
+        .map_err(|e| format!("Failed to generate rune ID: {}", e))?
+        .to_string();
+
+    // Create virtual rune
+    let virtual_rune = state::VirtualRune::new(
+        rune_id.clone(),
+        caller,
+        etching.clone(),
+    );
+
+    // Store virtual rune
+    state::store_virtual_rune(&virtual_rune)?;
+
+    // Record successful request
+    if let Err(e) = idempotency::record_request_success(request_id, caller, rune_id.clone()) {
+        ic_cdk::println!("⚠️  Failed to record idempotency: {}", e);
+    }
+
+    // Record metrics
+    metrics::record_rune_created();
+
+    ic_cdk::println!(
+        "✅ Virtual rune '{}' created with ID: {}",
+        etching.rune_name,
+        rune_id
+    );
+
+    Ok(rune_id)
+}
+
+/// Etch a virtual rune to the Bitcoin network
+///
+/// This initiates the Bitcoin etching process for an existing virtual rune.
+/// Requires ckBTC for transaction fees.
+#[update]
+async fn etch_to_bitcoin(rune_id: String) -> Result<String, String> {
+    let caller = ic_cdk::caller();
+
+    // Validate caller
+    if caller == Principal::anonymous() {
+        return Err("Anonymous principals cannot etch runes".to_string());
+    }
+
+    // Get the virtual rune
+    let mut virtual_rune = state::get_virtual_rune(&rune_id)
+        .ok_or_else(|| format!("Virtual rune not found: {}", rune_id))?;
+
+    // Verify ownership
+    if virtual_rune.caller != caller {
+        return Err("You don't own this rune".to_string());
+    }
+
+    // Check if already etched or in progress
+    match &virtual_rune.status {
+        state::VirtualRuneStatus::Virtual => {
+            // Good, can proceed
+        }
+        state::VirtualRuneStatus::Etching { process_id } => {
+            return Err(format!("Already etching with process ID: {}", process_id));
+        }
+        state::VirtualRuneStatus::Etched { txid, .. } => {
+            return Err(format!("Already etched with txid: {}", txid));
+        }
+        state::VirtualRuneStatus::EtchingFailed { reason } => {
+            ic_cdk::println!("Previous etching failed: {}. Retrying...", reason);
+        }
+    }
+
     // Get config from stable storage
     let etching_config = config::get_etching_config();
 
@@ -180,36 +293,48 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
 
     // Execute etching flow
     let orchestrator = EtchingOrchestrator::new(etching_config);
-    match orchestrator.execute_etching(caller, etching).await {
+    match orchestrator.execute_etching(caller, virtual_rune.etching.clone()).await {
         Ok(process) => {
-            let process_id = process.id.clone();
+            let process_id = process.id.to_string();
 
-            // Record successful request
-            if let Err(e) = idempotency::record_request_success(request_id, caller, process_id.to_string()) {
-                ic_cdk::println!("⚠️  Failed to record idempotency: {}", e);
-                // Don't fail the operation, just log it
+            // Update virtual rune status
+            if let Some(txid) = &process.txid {
+                virtual_rune.update_status(state::VirtualRuneStatus::Etched {
+                    txid: txid.clone(),
+                    block_height: 0, // TODO: Get actual block height
+                });
+            } else {
+                virtual_rune.update_status(state::VirtualRuneStatus::Etching {
+                    process_id: process_id.clone(),
+                });
             }
+            state::update_virtual_rune(&virtual_rune)?;
 
-            // Record metrics
-            metrics::record_rune_created();
             timer.stop(true);
 
-            Ok(process_id.to_string())
+            ic_cdk::println!(
+                "✅ Bitcoin etching started for '{}' with process ID: {}",
+                virtual_rune.etching.rune_name,
+                process_id
+            );
+
+            Ok(process_id)
         }
         Err(e) => {
             let error_msg = e.user_message();
 
-            // Record failed request
-            if let Err(record_err) = idempotency::record_request_failure(request_id, caller, error_msg.clone()) {
-                ic_cdk::println!("⚠️  Failed to record idempotency: {}", record_err);
-            }
+            // Update virtual rune status
+            virtual_rune.update_status(state::VirtualRuneStatus::EtchingFailed {
+                reason: error_msg.clone(),
+            });
+            state::update_virtual_rune(&virtual_rune)?;
 
             // Record metrics
             metrics::record_error(&error_msg);
             timer.stop(false);
 
             // Log error
-            logging::log_error("create_rune", format!("Etching failed: {}", error_msg), None);
+            logging::log_error("etch_to_bitcoin", format!("Etching failed: {}", error_msg), None);
 
             Err(error_msg)
         }
@@ -246,6 +371,46 @@ fn get_my_etchings() -> Vec<EtchingProcessView> {
             txid: p.txid,
         })
         .collect()
+}
+
+/// Get all virtual runes for caller
+#[query]
+fn get_my_virtual_runes() -> Vec<VirtualRuneView> {
+    let caller = ic_cdk::caller();
+    state::get_caller_virtual_runes(caller)
+        .into_iter()
+        .map(|r| VirtualRuneView {
+            id: r.id,
+            rune_name: r.etching.rune_name,
+            symbol: r.etching.symbol.clone(),
+            divisibility: r.etching.divisibility,
+            premine: r.etching.premine,
+            status: format!("{:?}", r.status),
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        })
+        .collect()
+}
+
+/// Get a specific virtual rune by ID
+#[query]
+fn get_virtual_rune(rune_id: String) -> Option<VirtualRuneView> {
+    state::get_virtual_rune(&rune_id).map(|r| VirtualRuneView {
+        id: r.id,
+        rune_name: r.etching.rune_name,
+        symbol: r.etching.symbol.clone(),
+        divisibility: r.etching.divisibility,
+        premine: r.etching.premine,
+        status: format!("{:?}", r.status),
+        created_at: r.created_at,
+        updated_at: r.updated_at,
+    })
+}
+
+/// Get total count of virtual runes created
+#[query]
+fn get_virtual_rune_count() -> u64 {
+    state::get_virtual_rune_count()
 }
 
 /// Update etching configuration (admin only)
@@ -608,6 +773,18 @@ pub struct EtchingProcessView {
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct VirtualRuneView {
+    pub id: String,
+    pub rune_name: String,
+    pub symbol: String,
+    pub divisibility: u8,
+    pub premine: u64,
+    pub status: String,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct EtchingConfigView {
     pub network: quri_types::BitcoinNetwork,
     pub fee_rate: u64,
@@ -652,6 +829,37 @@ fn cleanup_expired_idempotency() -> Result<u64, String> {
 }
 
 // ============================================================================
+// ADMIN: Storage Management
+// ============================================================================
+
+/// Reset the processes storage (Admin only)
+/// WARNING: This will delete ALL etching process data!
+/// Use this only to fix corrupted storage.
+#[update]
+fn admin_reset_processes_storage() -> Result<String, String> {
+    require_admin!()?;
+
+    // Get the memory for processes (MemoryId 1)
+    let state_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)));
+
+    // Reset the storage
+    state::reset_processes_storage(state_memory);
+
+    ic_cdk::println!(
+        "Processes storage reset by admin: {}",
+        ic_cdk::caller()
+    );
+
+    Ok("Processes storage has been reset. All etching process data was cleared.".to_string())
+}
+
+/// Get process count without iterating (safe for corrupted storage)
+#[query]
+fn get_process_count() -> Result<u64, String> {
+    state::get_process_count_safe()
+}
+
+// ============================================================================
 // HTTP Transform Function (for HTTPS Outcalls)
 // ============================================================================
 
@@ -666,6 +874,176 @@ fn transform_http_response(
         headers: vec![], // Strip all headers to reduce data size and cost
         body: args.response.body,
     }
+}
+
+// ============================================================================
+// Dead Man's Switch Endpoints
+// ============================================================================
+
+/// Create a new Dead Man's Switch
+#[update]
+fn create_dead_man_switch(
+    params: quri_types::CreateDeadManSwitchParams
+) -> Result<u64, String> {
+    dead_man_switch::create_switch(params)
+        .map_err(|e| e.to_string())
+}
+
+/// Check in to reset the Dead Man's Switch timer
+#[update]
+fn dms_checkin(switch_id: u64) -> Result<(), String> {
+    dead_man_switch::checkin(switch_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Cancel a Dead Man's Switch
+#[update]
+fn cancel_dead_man_switch(switch_id: u64) -> Result<(), String> {
+    dead_man_switch::cancel_switch(switch_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Get information about a specific switch
+#[query]
+fn get_dead_man_switch(switch_id: u64) -> Option<quri_types::DeadManSwitchInfo> {
+    dead_man_switch::get_switch_info(switch_id)
+}
+
+/// Get all switches for the caller
+#[query]
+fn get_my_dead_man_switches() -> Vec<quri_types::DeadManSwitchInfo> {
+    dead_man_switch::get_my_switches()
+}
+
+/// Get Dead Man's Switch statistics
+#[query]
+fn get_dead_man_switch_stats() -> quri_types::DeadManSwitchStats {
+    dead_man_switch::get_stats()
+}
+
+/// Manually trigger processing of expired switches (admin only)
+#[update]
+async fn process_dead_man_switches() -> Result<Vec<u64>, String> {
+    // Check admin permissions
+    let caller = ic_cdk::caller();
+    if !rbac::is_admin(caller) {
+        return Err("Unauthorized: admin permission required".to_string());
+    }
+
+    Ok(dead_man_switch::process_expired_switches().await)
+}
+
+/// Check if there are any expired switches
+#[query]
+fn has_expired_dead_man_switches() -> bool {
+    dead_man_switch::has_expired_switches()
+}
+
+// ============================================================================
+// Encrypted Metadata (vetKeys) Endpoints
+// ============================================================================
+
+/// Store encrypted metadata for a Rune
+#[update]
+fn store_encrypted_metadata(
+    params: quri_types::StoreEncryptedMetadataParams
+) -> Result<(), String> {
+    encrypted_metadata::store_metadata(params)
+        .map_err(|e| e.to_string())
+}
+
+/// Get encrypted metadata for a Rune
+#[query]
+fn get_encrypted_metadata(rune_id: String) -> Option<quri_types::EncryptedRuneMetadata> {
+    encrypted_metadata::get_metadata(&rune_id)
+}
+
+/// Check if caller can decrypt metadata
+#[query]
+fn can_decrypt_metadata(rune_id: String) -> Result<bool, String> {
+    encrypted_metadata::can_decrypt(&rune_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Get vetKD public key for encryption
+#[update]
+async fn get_vetkd_public_key() -> Result<Vec<u8>, String> {
+    encrypted_metadata::get_public_key().await
+        .map_err(|e| e.to_string())
+}
+
+/// Get encrypted decryption key (for authorized callers)
+#[update]
+async fn get_encrypted_decryption_key(
+    rune_id: String,
+    encryption_public_key: Vec<u8>
+) -> Result<Vec<u8>, String> {
+    encrypted_metadata::get_encrypted_decryption_key(rune_id, encryption_public_key).await
+        .map_err(|e| e.to_string())
+}
+
+/// Get all encrypted metadata owned by caller
+#[query]
+fn get_my_encrypted_metadata() -> Vec<quri_types::EncryptedRuneMetadata> {
+    encrypted_metadata::get_my_metadata()
+}
+
+/// Delete encrypted metadata (owner only)
+#[update]
+fn delete_encrypted_metadata(rune_id: String) -> Result<(), String> {
+    encrypted_metadata::delete_metadata(&rune_id)
+        .map_err(|e| e.to_string())
+}
+
+/// Check if encrypted metadata exists for a Rune
+#[query]
+fn has_encrypted_metadata(rune_id: String) -> bool {
+    encrypted_metadata::has_metadata(&rune_id)
+}
+
+/// Get metadata reveal status
+#[query]
+fn get_metadata_reveal_status(rune_id: String) -> Option<(bool, Option<u64>)> {
+    encrypted_metadata::get_reveal_status(&rune_id)
+}
+
+// ============================================================================
+// Settlement History Methods
+// ============================================================================
+
+/// Get settlement history for the caller
+#[query]
+fn get_settlement_history(
+    limit: Option<u64>,
+    offset: Option<u64>,
+) -> Vec<settlement::SettlementRecord> {
+    let caller = ic_cdk::caller();
+    settlement::get_user_settlement_history(caller, limit, offset)
+}
+
+/// Get settlement by ID
+#[query]
+fn get_settlement_status(id: String) -> Option<settlement::SettlementRecord> {
+    settlement::get_settlement_by_id(id)
+}
+
+/// Get pending settlement count for caller
+#[query]
+fn get_pending_settlement_count() -> u64 {
+    let caller = ic_cdk::caller();
+    let history = settlement::get_user_settlement_history(caller, None, None);
+
+    history
+        .iter()
+        .filter(|s| matches!(
+            s.status,
+            settlement::SettlementStatus::Queued
+                | settlement::SettlementStatus::Batching
+                | settlement::SettlementStatus::Signing
+                | settlement::SettlementStatus::Broadcasting
+                | settlement::SettlementStatus::Confirming
+        ))
+        .count() as u64
 }
 
 ic_cdk::export_candid!();

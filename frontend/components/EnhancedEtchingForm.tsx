@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/
 import { Input } from './ui/Input';
 import { Button } from './ui/Button';
 import { ImageUpload } from './ImageUpload';
-import { useICP } from '@/lib/icp/ICPProvider';
+import { useDualAuth } from '@/lib/auth';
 import { uploadRuneAssets, RuneMetadata } from '@/lib/storage/pinata-storage';
 import { logger } from '@/lib/logger';
 import { Plus, X, Info, Image as ImageIcon, FileText, Tag } from 'lucide-react';
@@ -121,7 +121,7 @@ interface EnhancedEtchingFormProps {
 }
 
 export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
-  const { isConnected, connect, isLoading } = useICP();
+  const { isConnected, connectICP, isLoading } = useDualAuth();
   const { toasts, showToast } = useToast();
 
   // State
@@ -416,8 +416,8 @@ export function EnhancedEtchingForm({ onSuccess }: EnhancedEtchingFormProps) {
             <p className="text-museum-dark-gray mb-6">
               You need to connect with Internet Identity to create Bitcoin Runes. Your wallet will be used to sign transactions and receive your premined tokens.
             </p>
-            <Button 
-              onClick={connect} 
+            <Button
+              onClick={connectICP}
               isLoading={isLoading}
               className="bg-museum-black hover:bg-museum-charcoal text-white px-8 py-3"
             >

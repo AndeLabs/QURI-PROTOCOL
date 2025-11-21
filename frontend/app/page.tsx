@@ -6,17 +6,9 @@
  */
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion } from 'framer-motion';
-import {
-  Sparkles,
-  ArrowRight,
-  Shield,
-  Zap,
-  Globe,
-  Coins,
-  Search,
-  ArrowLeftRight,
-} from 'lucide-react';
+import { Sparkles, ArrowRight, Search } from 'lucide-react';
 import { ButtonPremium } from '@/components/ui/ButtonPremium';
 import { fadeInUp, staggerContainer, staggerItem } from '@/design-system/motion/presets';
 
@@ -29,6 +21,23 @@ export default function HomePage() {
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className="absolute -top-40 -left-40 w-96 h-96 bg-gradient-to-br from-gold-200/30 to-gold-400/10 rounded-full blur-3xl" />
           <div className="absolute -bottom-40 -right-40 w-[32rem] h-[32rem] bg-gradient-to-br from-blue-200/20 to-purple-300/10 rounded-full blur-3xl" />
+
+          {/* Decorative brand images */}
+          <div className="absolute top-20 left-10 opacity-30">
+            <Image src="/images/brand/ave.png" alt="" width={140} height={140} className="w-32 h-32" />
+          </div>
+          <div className="absolute bottom-20 right-10 opacity-30">
+            <Image src="/images/brand/serpiente.png" alt="" width={180} height={180} className="w-40 h-40" />
+          </div>
+          <div className="absolute top-1/3 right-20 opacity-30">
+            <Image src="/images/brand/inti.png" alt="" width={120} height={120} className="w-28 h-28" />
+          </div>
+          <div className="absolute bottom-40 left-1/4 opacity-25">
+            <Image src="/images/brand/ojo.png" alt="" width={80} height={80} className="w-20 h-20" />
+          </div>
+          <div className="absolute top-40 right-1/3 opacity-25">
+            <Image src="/images/brand/perro.png" alt="" width={100} height={100} className="w-24 h-24" />
+          </div>
         </div>
 
         {/* Content */}
@@ -39,6 +48,20 @@ export default function HomePage() {
             animate="visible"
             variants={staggerContainer}
           >
+            {/* Logo */}
+            <motion.div variants={staggerItem} className="mb-8">
+              <div className="relative inline-block">
+                <div className="absolute inset-0 bg-gradient-to-br from-gold-400/30 to-gold-600/20 rounded-full blur-xl scale-150" />
+                <Image
+                  src="/images/brand/logo.png"
+                  alt="QURI Protocol"
+                  width={140}
+                  height={140}
+                  className="w-32 h-32 md:w-36 md:h-36 mx-auto relative drop-shadow-xl"
+                />
+              </div>
+            </motion.div>
+
             {/* Badge */}
             <motion.div variants={staggerItem} className="inline-block mb-6">
               <span className="inline-flex items-center gap-2 px-4 py-2 bg-gold-50 border border-gold-200 rounded-full text-sm font-medium text-gold-700">
@@ -97,8 +120,20 @@ export default function HomePage() {
       </section>
 
       {/* Features Section */}
-      <section className="py-20 bg-museum-white/50 backdrop-blur-sm">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-20 bg-museum-white/50 backdrop-blur-sm relative overflow-hidden">
+        {/* Decorative images */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-10 right-10 opacity-30">
+            <Image src="/images/brand/ojo.png" alt="" width={100} height={100} className="w-24 h-24" />
+          </div>
+          <div className="absolute bottom-10 left-10 opacity-30">
+            <Image src="/images/brand/perro.png" alt="" width={120} height={120} className="w-28 h-28" />
+          </div>
+          <div className="absolute top-1/2 left-1/3 -translate-y-1/2 opacity-20">
+            <Image src="/images/brand/serpiente.png" alt="" width={80} height={80} className="w-20 h-20" />
+          </div>
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -119,28 +154,28 @@ export default function HomePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-8">
               {[
                 {
-                  icon: Shield,
+                  image: '/images/brand/ojo.png',
                   title: 'Secure by Design',
                   description: 'Built on Internet Computer with Chain Key cryptography',
-                  color: 'blue',
+                  bgColor: 'bg-blue-50',
                 },
                 {
-                  icon: Zap,
+                  image: '/images/brand/ave.png',
                   title: 'Fast & Efficient',
                   description: 'Lightning-fast transactions with minimal fees',
-                  color: 'purple',
+                  bgColor: 'bg-purple-50',
                 },
                 {
-                  icon: Globe,
+                  image: '/images/brand/inti.png',
                   title: 'Fully On-Chain',
                   description: 'Everything runs on-chain, no centralized servers',
-                  color: 'green',
+                  bgColor: 'bg-green-50',
                 },
                 {
-                  icon: Coins,
+                  image: '/images/brand/serpiente.png',
                   title: 'Native Bitcoin',
                   description: 'Real Bitcoin Runes, not synthetic tokens',
-                  color: 'gold',
+                  bgColor: 'bg-gold-50',
                 },
               ].map((feature) => (
                 <motion.div
@@ -149,8 +184,14 @@ export default function HomePage() {
                   className="group p-6 bg-museum-white border border-museum-light-gray rounded-xl hover:shadow-xl transition-all cursor-default"
                   whileHover={{ y: -4 }}
                 >
-                  <div className={`inline-flex p-3 bg-${feature.color}-50 rounded-lg mb-4`}>
-                    <feature.icon className={`h-6 w-6 text-${feature.color}-600`} />
+                  <div className={`inline-flex p-3 ${feature.bgColor} rounded-lg mb-4`}>
+                    <Image
+                      src={feature.image}
+                      alt=""
+                      width={32}
+                      height={32}
+                      className="w-8 h-8"
+                    />
                   </div>
                   <h3 className="font-semibold text-xl text-museum-black mb-2">
                     {feature.title}
@@ -166,8 +207,20 @@ export default function HomePage() {
       </section>
 
       {/* Quick Actions Section */}
-      <section className="py-20">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <section className="py-20 relative overflow-hidden">
+        {/* Decorative images */}
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute top-1/2 left-5 -translate-y-1/2 opacity-30">
+            <Image src="/images/brand/inti.png" alt="" width={80} height={80} className="w-20 h-20" />
+          </div>
+          <div className="absolute bottom-20 right-5 opacity-30">
+            <Image src="/images/brand/ave.png" alt="" width={110} height={110} className="w-24 h-24" />
+          </div>
+          <div className="absolute top-10 right-1/4 opacity-20">
+            <Image src="/images/brand/ojo.png" alt="" width={60} height={60} className="w-14 h-14" />
+          </div>
+        </div>
+        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <motion.div
             initial="hidden"
             whileInView="visible"
@@ -185,27 +238,24 @@ export default function HomePage() {
               {[
                 {
                   href: '/create',
-                  icon: Sparkles,
+                  image: '/images/brand/inti.png',
                   title: 'Create a Rune',
                   description: 'Etch your own Bitcoin Rune in just a few clicks',
                   gradient: 'from-gold-50 to-gold-100',
-                  iconColor: 'text-gold-600',
                 },
                 {
                   href: '/bridge',
-                  icon: ArrowLeftRight,
+                  image: '/images/brand/serpiente.png',
                   title: 'Bridge Assets',
                   description: 'Move Bitcoin and Runes between chains securely',
                   gradient: 'from-blue-50 to-blue-100',
-                  iconColor: 'text-blue-600',
                 },
                 {
                   href: '/explorer',
-                  icon: Search,
+                  image: '/images/brand/ojo.png',
                   title: 'Explore Runes',
                   description: 'Browse and discover Bitcoin Runes on-chain',
                   gradient: 'from-purple-50 to-purple-100',
-                  iconColor: 'text-purple-600',
                 },
               ].map((action) => (
                 <motion.div key={action.href} variants={staggerItem}>
@@ -214,7 +264,13 @@ export default function HomePage() {
                       className={`group p-8 bg-gradient-to-br ${action.gradient} border border-museum-light-gray rounded-xl hover:shadow-xl transition-all h-full`}
                       whileHover={{ y: -6, scale: 1.02 }}
                     >
-                      <action.icon className={`h-10 w-10 ${action.iconColor} mb-4`} />
+                      <Image
+                        src={action.image}
+                        alt=""
+                        width={48}
+                        height={48}
+                        className="w-12 h-12 mb-4"
+                      />
                       <h3 className="font-serif text-2xl font-bold text-museum-black mb-3">
                         {action.title}
                       </h3>

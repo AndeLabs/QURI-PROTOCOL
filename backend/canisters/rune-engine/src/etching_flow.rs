@@ -1,19 +1,11 @@
-use candid::{CandidType, Deserialize, Principal};
-use quri_types::RuneEtching;
+use candid::Principal;
+use quri_types::{RuneEtching, UtxoSelection};
 
 use crate::config::EtchingConfig;
 use crate::errors::{EtchingError, EtchingResult};
 use crate::process_id::ProcessId;
 use crate::state::{EtchingProcess, EtchingState};
 use crate::validators::EtchingValidator;
-
-/// UTXO selection result from bitcoin-integration canister
-#[derive(CandidType, Deserialize, Clone, Debug)]
-struct UtxoSelectionResult {
-    pub total_value: u64,
-    pub estimated_fee: u64,
-    pub change: u64,
-}
 
 /// Maximum retry attempts for transient failures
 const MAX_RETRIES: u32 = 3;
@@ -91,7 +83,7 @@ impl EtchingOrchestrator {
 
         // Step 4: Build and sign transaction (combined)
         let signed_tx = self
-            .step_build_and_sign_transaction(process, &etching, &utxo_selection)
+            .step_build_and_sign_transaction(process, &etching, utxo_selection)
             .await?;
 
         // Step 5: Broadcast
@@ -176,7 +168,7 @@ impl EtchingOrchestrator {
     async fn step_select_utxos(
         &self,
         process: &mut EtchingProcess,
-    ) -> EtchingResult<UtxoSelectionResult> {
+    ) -> EtchingResult<UtxoSelection> {
         process.update_state(EtchingState::SelectingUtxos);
         self.save_process(process)?;
 
@@ -188,7 +180,7 @@ impl EtchingOrchestrator {
 
         // Call bitcoin-integration to select UTXOs
         let amount_needed = 10_000u64; // 10k sats for etching
-        let (selection_result,): (Result<UtxoSelectionResult, String>,) = ic_cdk::call(
+        let (selection_result,): (Result<UtxoSelection, String>,) = ic_cdk::call(
             btc_canister_id,
             "select_utxos",
             (amount_needed, self.config.fee_rate),
@@ -216,7 +208,7 @@ impl EtchingOrchestrator {
         &self,
         process: &mut EtchingProcess,
         etching: &RuneEtching,
-        utxo_selection: &UtxoSelectionResult,
+        utxo_selection: UtxoSelection,
     ) -> EtchingResult<Vec<u8>> {
         process.update_state(EtchingState::BuildingTransaction);
         self.save_process(process)?;
@@ -231,7 +223,7 @@ impl EtchingOrchestrator {
         let (tx_result,): (Result<Vec<u8>, String>,) = ic_cdk::call(
             btc_canister_id,
             "build_and_sign_etching_tx",
-            (etching.clone(), utxo_selection.clone()),
+            (etching.clone(), utxo_selection),
         )
         .await
         .map_err(|(code, msg)| {

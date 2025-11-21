@@ -1,272 +1,295 @@
-// ============================================================================
-// QURI Protocol - Registry Canister Interface
-// ============================================================================
-// 
-// ✅ MIGRADO A RuneKey bounded (fixes StableBTreeMap bug)
-// ✅ Índices secundarios para O(log n) lookups
-// ✅ Paginación robusta
-// ✅ Validación completa
-//
-// ============================================================================
-
-// ============================================================================
-// CORE TYPES
-// ============================================================================
-
-/// RuneKey bounded - 12 bytes fijos (8 block + 4 tx)
-/// 
-/// Reemplaza RuneId unbounded para compatibility con StableBTreeMap
-type RuneKey = record {
-    block : nat64;
-    tx : nat32;
-};
-
-/// Metadata completa de un Rune
-type RuneMetadata = record {
-    key : RuneKey;
-    name : text;
-    symbol : text;
-    divisibility : nat8;
-    creator : principal;
-    created_at : nat64;
-    total_supply : nat;          // Changed to nat (u128)
-    premine : nat;               // Changed to nat (u128)
-    terms : opt MintTerms;
-};
-
-/// Términos de minteo (para runes minteables)
-type MintTerms = record {
-    amount : nat;                // Amount per mint
-    cap : nat;                   // Total cap
-    height_start : opt nat64;    // Start block
-    height_end : opt nat64;      // End block
-    offset_start : opt nat64;    // Offset from etching
-    offset_end : opt nat64;      // Offset end
-};
-
-/// Bonding curve state
+type BitcoinNetwork = variant { Mainnet; Regtest; Testnet };
 type BondingCurve = record {
-    initial_price : nat64;
-    target_market_cap : nat64;
-    current_supply : nat64;
-    graduated_to_amm : bool;
+  graduated_to_amm : bool;
+  current_supply : nat64;
+  initial_price : nat64;
+  target_market_cap : nat64;
 };
-
-/// Entry completa en el registry
-type RegistryEntry = record {
-    metadata : RuneMetadata;
-    bonding_curve : opt BondingCurve;
-    trading_volume_24h : nat64;
-    holder_count : nat64;
-    indexed_at : nat64;
+type HttpHeader = record { value : text; name : text };
+type HttpResponse = record {
+  status : nat;
+  body : blob;
+  headers : vec HttpHeader;
 };
-
-// ============================================================================
-// PAGINATION TYPES
-// ============================================================================
-
-/// Sort order for paginated results
-type SortOrder = variant {
-    Asc;   // Ascending (oldest first, A-Z)
-    Desc;  // Descending (newest first, Z-A)
-};
-
-/// Sort criteria for Rune listings
-type RuneSortBy = variant {
-    Block;      // Sort by block height (etching time)
-    Name;       // Sort by name (alphabetically)
-    Volume;     // Sort by trading volume (24h)
-    Holders;    // Sort by holder count (popularity)
-    IndexedAt;  // Sort by indexed timestamp
-};
-
-/// Generic page request with sorting
-type Page = record {
-    offset : nat64;           // Number of items to skip
-    limit : nat64;            // Maximum items to return
-    sort_by : opt RuneSortBy; // Sort field (optional)
-    sort_order : opt SortOrder; // Sort direction (optional)
-};
-
-/// Generic paged response
-type PagedResponse = record {
-    items : vec RegistryEntry; // Items in this page
-    total : nat64;             // Total items across all pages
-    offset : nat64;            // Offset used for this page
-    limit : nat64;             // Limit used for this page
-    has_more : bool;           // Whether there are more items
-};
-
-// ============================================================================
-// RESPONSE TYPES (Legacy - Deprecated)
-// ============================================================================
-
-/// Estadísticas del registry
-type RegistryStats = record {
-    total_runes : nat64;
-    total_volume_24h : nat64;
-    status : text;
-};
-
-/// Resultado paginado genérico (DEPRECATED: Use PagedResponse)
-type PaginatedResult = record {
-    results : vec RegistryEntry;
-    total_count : nat64;
-    offset : nat64;
-    limit : nat64;
-};
-
-/// Resultado de búsqueda con match count
-type SearchResult = record {
-    results : vec RegistryEntry;
-    total_matches : nat64;
-    offset : nat64;
-    limit : nat64;
-};
-
-// ============================================================================
-// SECURITY & METRICS TYPES
-// ============================================================================
-
-/// Comprehensive canister metrics
-type RegistryMetrics = record {
-    // Query metrics
-    total_queries : nat64;
-    list_runes_calls : nat64;
-    search_calls : nat64;
-    get_rune_calls : nat64;
-
-    // Performance metrics
-    avg_query_time_ns : nat64;
-    slowest_query_time_ns : nat64;
-    fastest_query_time_ns : nat64;
-
-    // Error metrics
-    total_errors : nat64;
-    rate_limit_hits : nat64;
-    validation_errors : nat64;
-
-    // Resource metrics
-    cycles_balance : nat64;
-    memory_used_bytes : nat64;
-
-    // Data metrics
-    total_runes : nat64;
-    total_volume_24h : nat64;
-
-    // Timestamp
-    last_updated : nat64;
-};
-
-// ============================================================================
-// INDEXER TYPES (legacy compatibility)
-// ============================================================================
-
-type RuneIdentifier = variant {
-    ByRuneId : RuneKey;
-    ByName : text;
-    BySymbol : text;
-};
-
 type IndexedRune = record {
-    rune_id : RuneKey;
-    name : text;
-    symbol : text;
-    divisibility : nat8;
-    total_supply : nat;
-    etching_height : nat64;
-    etching_tx : nat64;
-    indexed_at : nat64;
+  id : RuneIdentifier;
+  terms : opt MintTerms;
+  decimals : nat8;
+  premine : nat;
+  name : text;
+  txid : text;
+  etcher : text;
+  timestamp : nat64;
+  block_height : nat64;
+  total_supply : nat;
+  symbol : text;
 };
-
 type IndexerConfig = record {
-    start_height : nat64;
-    confirmations_required : nat32;
-    enable_mempool : bool;
+  batch_size : nat64;
+  network : BitcoinNetwork;
+  start_block : nat64;
 };
-
 type IndexerStats = record {
-    total_runes_indexed : nat64;
-    last_indexed_height : nat64;
-    indexing_active : bool;
+  last_indexed_block : nat64;
+  total_runes : nat64;
+  indexing_errors : nat64;
+  total_etchings : nat64;
 };
-
-// ============================================================================
-// SERVICE INTERFACE
-// ============================================================================
-
-service : {
-    // ========================================================================
-    // WRITE OPERATIONS
-    // ========================================================================
-    
-    /// Register a new Rune (validates name uniqueness, caller auth, etc.)
-    "register_rune" : (RuneMetadata) -> (variant { Ok : RuneKey; Err : text });
-    
-    /// Update 24h trading volume
-    "update_volume" : (RuneKey, nat64) -> (variant { Ok : null; Err : text });
-    
-    /// Update holder count
-    "update_holder_count" : (RuneKey, nat64) -> (variant { Ok : null; Err : text });
-    
-    // ========================================================================
-    // READ OPERATIONS - OPTIMIZED
-    // ========================================================================
-    
-    /// Get Rune by key - O(log n)
-    "get_rune" : (RuneKey) -> (opt RegistryEntry) query;
-    
-    /// Get Rune by name - O(log n) via name index
-    "get_rune_by_name" : (text) -> (opt RegistryEntry) query;
-    
-    /// Get all runes created by caller - O(1) lookup + O(m) retrieval
-    "get_my_runes" : () -> (vec RegistryEntry) query;
-
-    /// List runes with advanced pagination and sorting
-    /// Supports sorting by: block, name, volume, holders, indexed_at
-    /// Default: sort by block descending (newest first)
-    /// Returns error if invalid parameters (limit > 1000, offset > 1M)
-    "list_runes" : (opt Page) -> (variant { Ok : PagedResponse; Err : text }) query;
-
-    /// Search runes by name/symbol - O(log n) exact, O(n) partial
-    "search_runes" : (text, nat64, nat64) -> (SearchResult) query;
-    
-    /// Get trending runes by 24h volume
-    "get_trending" : (nat64, nat64) -> (PaginatedResult) query;
-    
-    /// Get total registered runes count
-    "total_runes" : () -> (nat64) query;
-    
-    /// Get registry statistics
-    "get_stats" : () -> (RegistryStats) query;
-    
-    // ========================================================================
-    // INDEXER APIs (legacy compatibility)
-    // ========================================================================
-
-    "init_indexer" : (IndexerConfig) -> ();
-    "get_indexed_rune" : (RuneIdentifier) -> (opt IndexedRune) query;
-    "list_indexed_runes" : (nat64, nat64) -> (vec IndexedRune) query;
-    "search_indexed_runes" : (text, nat64, nat64) -> (SearchResult) query;
-    "get_indexer_stats" : () -> (IndexerStats) query;
-    "index_block_range" : (nat64, nat64) -> (variant { Ok : nat64; Err : text });
-
-    // ========================================================================
-    // SECURITY & MONITORING
-    // ========================================================================
-
-    /// Get comprehensive canister metrics (queries, performance, errors, resources)
-    "get_canister_metrics" : () -> (RegistryMetrics) query;
-
-    /// Add principal to rate limit whitelist (admin only)
-    "add_to_whitelist" : (principal) -> (variant { Ok : null; Err : text });
-
-    /// Remove principal from rate limit whitelist (admin only)
-    "remove_from_whitelist" : (principal) -> (variant { Ok : null; Err : text });
-
-    /// Check if principal is whitelisted
-    "is_whitelisted" : (principal) -> (bool) query;
-
-    /// Reset rate limit for a specific principal (admin only)
-    "reset_rate_limit" : (principal) -> (variant { Ok : null; Err : text });
+type MintTerms = record {
+  cap : nat;
+  height_end : opt nat64;
+  amount : nat;
+  height_start : opt nat64;
+};
+type MintTerms_1 = record {
+  cap : nat64;
+  offset_start : opt nat64;
+  height_end : opt nat64;
+  offset_end : opt nat64;
+  amount : nat64;
+  height_start : opt nat64;
+};
+type Page = record {
+  sort_by : opt RuneSortBy;
+  sort_order : opt SortOrder;
+  offset : nat64;
+  limit : nat64;
+};
+type PagedResponse = record {
+  total : nat64;
+  offset : nat64;
+  limit : nat64;
+  items : vec RegistryEntry;
+  has_more : bool;
+};
+type PaginatedResult = record {
+  offset : nat64;
+  results : vec RegistryEntry;
+  limit : nat64;
+  total_count : nat64;
+};
+type RegistryEntry = record {
+  metadata : RuneMetadata;
+  holder_count : nat64;
+  trading_volume_24h : nat64;
+  indexed_at : nat64;
+  bonding_curve : opt BondingCurve;
+};
+type RegistryMetrics = record {
+  cycles_balance : nat64;
+  total_queries : nat64;
+  fastest_query_time_ns : nat64;
+  slowest_query_time_ns : nat64;
+  total_volume_24h : nat64;
+  memory_used_bytes : nat64;
+  last_updated : nat64;
+  search_calls : nat64;
+  total_runes : nat64;
+  total_errors : nat64;
+  avg_query_time_ns : nat64;
+  get_rune_calls : nat64;
+  validation_errors : nat64;
+  rate_limit_hits : nat64;
+  list_runes_calls : nat64;
+};
+type RegistryStats = record {
+  status : text;
+  total_volume_24h : nat64;
+  total_runes : nat64;
+};
+type Result = variant { Ok; Err : text };
+type Result_1 = variant { Ok : SyncResponse; Err : text };
+type Result_2 = variant { Ok : nat64; Err : text };
+type Result_3 = variant { Ok : PagedResponse; Err : text };
+type Result_4 = variant { Ok : RuneKey; Err : text };
+type RuneIdentifier = record { tx_index : nat32; block : nat64 };
+type RuneKey = record { tx : nat32; block : nat64 };
+type RuneMetadata = record {
+  key : RuneKey;
+  terms : opt MintTerms_1;
+  creator : principal;
+  premine : nat;
+  name : text;
+  divisibility : nat8;
+  created_at : nat64;
+  total_supply : nat;
+  symbol : text;
+};
+type RuneSortBy = variant { Name; Block; Holders; Volume; IndexedAt };
+type SearchResult = record {
+  total_matches : nat64;
+  offset : nat64;
+  results : vec IndexedRune;
+  limit : nat64;
+};
+type SearchResult_1 = record {
+  total_matches : nat64;
+  offset : nat64;
+  results : vec RegistryEntry;
+  limit : nat64;
+};
+type SortOrder = variant { Asc; Desc };
+type SyncResponse = record {
+  stored : nat32;
+  errors : nat32;
+  total_available : nat64;
+  fetched : nat32;
+};
+type TransformArgs = record { context : blob; response : HttpResponse };
+service : () -> {
+  // Add principal to rate limit whitelist (admin only)
+  add_to_whitelist : (principal) -> (Result);
+  // Batch sync multiple pages of runes from Hiro API
+  // 
+  // ## Parameters
+  // 
+  // - `start_offset`: Starting position
+  // - `total_to_fetch`: Total number of runes to fetch
+  // 
+  // This will make multiple API calls in batches of 60 (API limit)
+  batch_sync_runes : (nat32, nat32) -> (Result_1);
+  // Get canister metrics (performance, errors, resources)
+  get_canister_metrics : () -> (RegistryMetrics) query;
+  // Get total runes available in Hiro API
+  // Useful for knowing how many runes exist before syncing
+  get_hiro_total : () -> (Result_2);
+  get_indexed_rune : (RuneIdentifier) -> (opt IndexedRune) query;
+  get_indexer_stats : () -> (IndexerStats) query;
+  // Get todas las runes de un creator usando composite key scan
+  // 
+  // ## Performance
+  // 
+  // CON composite key index: O(m log n) donde m = runes del creator
+  // 
+  // Para un creator con 10 runes en registry de 1M:
+  // - Scan con prefijo: ~5-10 ms
+  // 
+  // ✅ Mucho mejor que O(n) full scan
+  get_my_runes : () -> (vec RegistryEntry) query;
+  // Get Rune por key (O(log n))
+  get_rune : (RuneKey) -> (opt RegistryEntry) query;
+  // Get Rune por nombre (O(log n) gracias al índice)
+  // 
+  // ## Performance
+  // 
+  // SIN índice: O(n) - scan de todos los runes
+  // CON índice: O(log n) - lookup en BTreeMap
+  // 
+  // Para 1M runes:
+  // - Sin índice: ~5,000 ms
+  // - Con índice: ~15 ms
+  // 
+  // ✅ **333x más rápido**
+  get_rune_by_name : (text) -> (opt RegistryEntry) query;
+  // Get estadísticas del registry
+  get_stats : () -> (RegistryStats) query;
+  // Get trending runes (por volumen 24h)
+  get_trending : (nat64, nat64) -> (PaginatedResult) query;
+  index_block_range : (nat64, nat64) -> (Result_2);
+  init_indexer : (IndexerConfig) -> ();
+  // Check if principal is whitelisted
+  is_whitelisted : (principal) -> (bool) query;
+  list_indexed_runes : (nat64, nat64) -> (vec IndexedRune) query;
+  // Lista runes con paginación avanzada y ordenamiento
+  // 
+  // ## Features
+  // 
+  // - ✅ Paginación offset-based
+  // - ✅ Ordenamiento configurable (block, name, volume, holders)
+  // - ✅ Sort order (asc/desc)
+  // - ✅ Metadatos completos en la respuesta
+  // - ✅ Input validation (limit, offset)
+  // 
+  // ## Performance
+  // 
+  // - O(n) para ordenamiento (necesita cargar todos los runes)
+  // - O(n log n) para sorting
+  // - Para datasets muy grandes, considerar cachear resultados ordenados
+  // 
+  // ## Example
+  // 
+  // ```rust
+  // // Get first 100 runes, newest first
+  // let page = Page::default();
+  // let results = list_runes(Some(page));
+  // 
+  // // Get by volume, descending
+  // let page_volume = Page {
+  // offset: 0,
+  // limit: 50,
+  // sort_by: Some(RuneSortBy::Volume),
+  // sort_order: Some(SortOrder::Desc),
+  // };
+  // let trending = list_runes(Some(page_volume));
+  // ```
+  list_runes : (opt Page) -> (Result_3) query;
+  // Registra un nuevo Rune con validación completa
+  // 
+  // ## Validaciones
+  // 
+  // 1. ✅ RuneKey no existe (no duplicados)
+  // 2. ✅ Nombre único (no colisiones)
+  // 3. ✅ Metadata válida (via builder pattern)
+  // 4. ✅ Caller autenticado
+  // 
+  // ## Índices Actualizados
+  // 
+  // - Registry storage principal
+  // - Name index
+  // - Creator index
+  // - Global index
+  // 
+  // ## Ejemplo
+  // 
+  // ```rust
+  // let key = RuneKey::new(840000, 1);
+  // let metadata = RuneMetadata::builder(key, "BITCOIN")
+  // .symbol("BTC")
+  // .divisibility(8)?
+  // .total_supply(21_000_000)?
+  // .build(caller)?;
+  // 
+  // register_rune(metadata)?;
+  // ```
+  register_rune : (RuneMetadata) -> (Result_4);
+  // Remove principal from rate limit whitelist (admin only)
+  remove_from_whitelist : (principal) -> (Result);
+  // Reset rate limit for a principal (admin only)
+  reset_rate_limit : (principal) -> (Result);
+  search_indexed_runes : (text, nat64, nat64) -> (SearchResult) query;
+  // Búsqueda full-text con paginación
+  // 
+  // ## Strategy
+  // 
+  // 1. Si búsqueda exacta → usar name index (O(log n))
+  // 2. Si búsqueda parcial → scan con filter (O(n))
+  // 
+  // TODO: Implementar índice invertido para búsqueda parcial eficiente
+  search_runes : (text, nat64, nat64) -> (SearchResult_1) query;
+  // Fetch and store runes from Hiro API
+  // 
+  // ## Parameters
+  // 
+  // - `offset`: Starting position in the API results
+  // - `limit`: Number of runes to fetch (max 60 per call due to API limits)
+  // 
+  // ## Example
+  // 
+  // ```rust
+  // // Fetch first 60 runes
+  // let result = sync_runes_from_hiro(0, 60).await?;
+  // 
+  // // Fetch next batch
+  // let result = sync_runes_from_hiro(60, 60).await?;
+  // ```
+  sync_runes_from_hiro : (nat32, nat32) -> (Result_1);
+  // Get total de runes registrados
+  total_runes : () -> (nat64) query;
+  // Transform function to strip non-deterministic headers from HTTP response
+  // This is required for consensus among replicas
+  transform_hiro_response : (TransformArgs) -> (HttpResponse) query;
+  // Actualiza contador de holders
+  update_holder_count : (RuneKey, nat64) -> (Result);
+  // Actualiza volumen de trading de un Rune
+  update_volume : (RuneKey, nat64) -> (Result);
 }

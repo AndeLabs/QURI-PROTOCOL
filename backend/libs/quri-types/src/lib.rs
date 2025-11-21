@@ -107,6 +107,23 @@ pub struct OutPoint {
     pub vout: u32,
 }
 
+/// Result of UTXO selection for transaction building
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct UtxoSelection {
+    pub selected: Vec<Utxo>,
+    pub total_value: u64,
+    pub estimated_fee: u64,
+    pub change: u64,
+}
+
+/// Fee estimates from Bitcoin network
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct FeeEstimates {
+    pub slow: u64,   // sat/vbyte
+    pub medium: u64, // sat/vbyte
+    pub fast: u64,   // sat/vbyte
+}
+
 /// User session for session keys feature (inspired by Odin.fun)
 #[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
 pub struct UserSession {
@@ -181,3 +198,111 @@ impl std::fmt::Display for QuriError {
 }
 
 impl std::error::Error for QuriError {}
+
+// ============================================
+// Dead Man's Switch Types
+// ============================================
+
+/// Dead Man's Switch configuration
+/// Automatically transfers Runes to beneficiary if owner doesn't check in
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct DeadManSwitch {
+    /// Unique identifier
+    pub id: u64,
+    /// Owner's principal
+    pub owner: Principal,
+    /// Beneficiary Bitcoin address (receives Runes on trigger)
+    pub beneficiary: String,
+    /// Rune identifier to transfer
+    pub rune_id: String,
+    /// Amount of Runes to transfer
+    pub amount: u128,
+    /// Last check-in timestamp (nanoseconds since epoch)
+    pub last_checkin: u64,
+    /// Timeout period in nanoseconds
+    pub timeout_ns: u64,
+    /// Whether the switch has been triggered
+    pub triggered: bool,
+    /// Creation timestamp
+    pub created_at: u64,
+    /// Optional message for beneficiary
+    pub message: Option<String>,
+}
+
+/// Parameters for creating a Dead Man's Switch
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct CreateDeadManSwitchParams {
+    /// Beneficiary Bitcoin address
+    pub beneficiary: String,
+    /// Rune to transfer
+    pub rune_id: String,
+    /// Amount to transfer
+    pub amount: u128,
+    /// Timeout in days (1-365)
+    pub timeout_days: u64,
+    /// Optional message for beneficiary
+    pub message: Option<String>,
+}
+
+/// Status of a Dead Man's Switch
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug, PartialEq, Eq)]
+pub enum SwitchStatus {
+    /// Switch is active and owner has checked in recently
+    Active,
+    /// Switch timeout has expired (owner hasn't checked in)
+    Expired,
+    /// Switch has been triggered and transfer executed
+    Triggered,
+    /// Switch was cancelled by owner
+    Cancelled,
+}
+
+/// Response for Dead Man's Switch queries
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct DeadManSwitchInfo {
+    pub switch: DeadManSwitch,
+    pub status: SwitchStatus,
+    /// Time remaining until expiration (nanoseconds)
+    pub time_remaining_ns: u64,
+    /// Percentage of time elapsed
+    pub elapsed_percentage: u8,
+}
+
+/// Summary statistics for Dead Man's Switches
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct DeadManSwitchStats {
+    pub total_switches: u64,
+    pub active_switches: u64,
+    pub triggered_switches: u64,
+    pub total_value_protected: u128,
+}
+
+// ============================================
+// vetKeys Encrypted Metadata Types
+// ============================================
+
+/// Encrypted metadata for a Rune (using vetKeys)
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct EncryptedRuneMetadata {
+    /// Rune identifier
+    pub rune_id: String,
+    /// Encrypted data blob
+    pub encrypted_data: Vec<u8>,
+    /// Nonce used for encryption
+    pub nonce: Vec<u8>,
+    /// Optional time-based reveal (nanoseconds since epoch)
+    pub reveal_time: Option<u64>,
+    /// Owner who can decrypt before reveal time
+    pub owner: Principal,
+    /// Creation timestamp
+    pub created_at: u64,
+}
+
+/// Parameters for storing encrypted metadata
+#[derive(CandidType, Deserialize, Serialize, Clone, Debug)]
+pub struct StoreEncryptedMetadataParams {
+    pub rune_id: String,
+    pub encrypted_data: Vec<u8>,
+    pub nonce: Vec<u8>,
+    pub reveal_time: Option<u64>,
+}

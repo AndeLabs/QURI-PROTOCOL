@@ -16,7 +16,7 @@ export const etchingKeys = {
   list: (offset: bigint, limit: bigint) => [...etchingKeys.lists(), { offset, limit }] as const,
   details: () => [...etchingKeys.all, 'detail'] as const,
   detail: (id: string) => [...etchingKeys.details(), id] as const,
-  config: () => [...etchingKeys.all, 'config'] as const,
+  myEtchings: () => [...etchingKeys.all, 'my'] as const,
   metrics: () => [...etchingKeys.all, 'metrics'] as const,
   health: () => [...etchingKeys.all, 'health'] as const,
 };
@@ -35,12 +35,11 @@ export function useEtchingStatusQuery(processId: string | null) {
 
       const status = await getEtchingStatus(processId);
       if (status) {
-        updateProcess(processId, status); // Update Zustand cache
+        updateProcess(processId, status);
       }
       return status;
     },
     enabled: !!processId,
-    // Auto-poll every 5 seconds if process is active
     refetchInterval: (query) => {
       if (!processId || !query.state.data) return false;
       return shouldPoll(processId) ? 5000 : false;
@@ -50,41 +49,27 @@ export function useEtchingStatusQuery(processId: string | null) {
 }
 
 /**
- * Query: List all etching processes
+ * Query: Get my etchings
  */
-export function useEtchingProcessesQuery(offset: bigint = 0n, limit: bigint = 20n) {
-  const { listProcesses } = useRuneEngine();
+export function useMyEtchingsQuery() {
+  const { getMyEtchings } = useRuneEngine();
   const { addProcesses } = useEtchingStore();
 
   return useQuery({
-    queryKey: etchingKeys.list(offset, limit),
+    queryKey: etchingKeys.myEtchings(),
     queryFn: async () => {
-      const processes = await listProcesses(offset, limit);
-      if (processes.length > 0) {
+      const processes = await getMyEtchings();
+      if (processes && processes.length > 0) {
         addProcesses(processes);
       }
-      return processes;
+      return processes || [];
     },
-    staleTime: 30 * 1000, // 30 seconds
-  });
-}
-
-/**
- * Query: Get etching configuration
- */
-export function useEtchingConfigQuery() {
-  const { getEtchingConfig } = useRuneEngine();
-
-  return useQuery({
-    queryKey: etchingKeys.config(),
-    queryFn: getEtchingConfig,
-    staleTime: 5 * 60 * 1000, // 5 minutes
+    staleTime: 30 * 1000,
   });
 }
 
 /**
  * Query: Get health status
- * Only polls when component is visible (refetchIntervalInBackground: false)
  */
 export function useHealthQuery() {
   const { healthCheck } = useRuneEngine();
@@ -92,15 +77,14 @@ export function useHealthQuery() {
   return useQuery({
     queryKey: etchingKeys.health(),
     queryFn: healthCheck,
-    staleTime: 2 * 60 * 1000, // 2 minutes
-    refetchInterval: 60 * 1000, // Refetch every minute
-    refetchIntervalInBackground: false, // Stop polling when tab is not visible
+    staleTime: 2 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
   });
 }
 
 /**
  * Query: Get metrics summary
- * Only polls when component is visible to save resources
  */
 export function useMetricsSummaryQuery() {
   const { getMetricsSummary } = useRuneEngine();
@@ -108,15 +92,14 @@ export function useMetricsSummaryQuery() {
   return useQuery({
     queryKey: etchingKeys.metrics(),
     queryFn: getMetricsSummary,
-    staleTime: 1 * 60 * 1000, // 1 minute
-    refetchInterval: 60 * 1000, // Refetch every 60 seconds (reduced from 30)
-    refetchIntervalInBackground: false, // Stop polling when tab is not visible
+    staleTime: 1 * 60 * 1000,
+    refetchInterval: 60 * 1000,
+    refetchIntervalInBackground: false,
   });
 }
 
 /**
  * Mutation: Etch a new Rune
- * With Optimistic Updates for instant UX feedback
  */
 export function useEtchRuneMutation() {
   const { etchRune } = useRuneEngine();
@@ -135,13 +118,9 @@ export function useEtchRuneMutation() {
       const toastId = `etch-${Date.now()}`;
       toast.loading(`Creating Rune: ${etching.rune_name}...`, { id: toastId });
 
-      // Cancel outgoing refetches to prevent race conditions
-      await queryClient.cancelQueries({ queryKey: etchingKeys.lists() });
+      await queryClient.cancelQueries({ queryKey: etchingKeys.myEtchings() });
+      const previousProcesses = queryClient.getQueryData(etchingKeys.myEtchings());
 
-      // Snapshot previous data for rollback
-      const previousProcesses = queryClient.getQueryData(etchingKeys.lists());
-
-      // Optimistically add a pending process to the list
       const tempId = `temp-${Date.now()}`;
       const optimisticProcess: EtchingProcessView = {
         id: tempId,
@@ -151,39 +130,33 @@ export function useEtchRuneMutation() {
         updated_at: BigInt(Date.now() * 1_000_000),
         retry_count: 0,
         txid: [],
-        error_message: [],
       };
 
-      // Update the cache optimistically
       queryClient.setQueryData(
-        etchingKeys.list(0n, 20n),
+        etchingKeys.myEtchings(),
         (old: EtchingProcessView[] | undefined) => {
           if (!old) return [optimisticProcess];
           return [optimisticProcess, ...old];
         }
       );
 
-      // Add to Zustand store immediately
       addProcess(optimisticProcess);
 
       return { toastId, previousProcesses, tempId };
     },
-    onSuccess: ({ processId, runeName }, etching, context) => {
-      // Replace temp process with real one
+    onSuccess: ({ processId, runeName }, _etching, context) => {
       queryClient.setQueryData(
-        etchingKeys.list(0n, 20n),
+        etchingKeys.myEtchings(),
         (old: EtchingProcessView[] | undefined) => {
           if (!old) return [];
           return old.map((p) =>
-            p.id === context.tempId ? { ...p, id: processId } : p
+            p.id === context?.tempId ? { ...p, id: processId } : p
           );
         }
       );
 
-      // Set as active process for monitoring
       setActiveProcessId(processId);
 
-      // Start polling this process
       queryClient.invalidateQueries({ queryKey: etchingKeys.detail(processId) });
       queryClient.invalidateQueries({ queryKey: etchingKeys.metrics() });
 
@@ -194,9 +167,8 @@ export function useEtchRuneMutation() {
       });
     },
     onError: (error: Error, etching, context) => {
-      // Rollback optimistic update
       if (context?.previousProcesses) {
-        queryClient.setQueryData(etchingKeys.list(0n, 20n), context.previousProcesses);
+        queryClient.setQueryData(etchingKeys.myEtchings(), context.previousProcesses);
       }
 
       toast.error(`Failed to etch ${etching.rune_name}`, {
@@ -208,86 +180,13 @@ export function useEtchRuneMutation() {
 }
 
 /**
- * Mutation: Retry failed etching
- */
-export function useRetryEtchingMutation() {
-  const { retryFailedEtching } = useRuneEngine();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (processId: string) => {
-      const success = await retryFailedEtching(processId);
-      if (!success) {
-        throw new Error('Failed to retry etching');
-      }
-      return processId;
-    },
-    onMutate: (processId) => {
-      toast.loading('Retrying etching process...', { id: `retry-${processId}` });
-    },
-    onSuccess: (processId) => {
-      queryClient.invalidateQueries({ queryKey: etchingKeys.detail(processId) });
-      queryClient.invalidateQueries({ queryKey: etchingKeys.lists() });
-
-      toast.success('Etching retry started!', {
-        id: `retry-${processId}`,
-        description: 'The process will attempt to complete again.',
-      });
-    },
-    onError: (error: Error, processId) => {
-      toast.error('Retry failed', {
-        id: `retry-${processId}`,
-        description: error.message,
-      });
-    },
-  });
-}
-
-/**
- * Mutation: Update fee rate
- */
-export function useUpdateFeeRateMutation() {
-  const { updateFeeRate } = useRuneEngine();
-  const queryClient = useQueryClient();
-
-  return useMutation({
-    mutationFn: async (feeRate: bigint) => {
-      const success = await updateFeeRate(feeRate);
-      if (!success) {
-        throw new Error('Failed to update fee rate');
-      }
-      return feeRate;
-    },
-    onMutate: () => {
-      toast.loading('Updating fee rate...', { id: 'update-fee' });
-    },
-    onSuccess: (feeRate) => {
-      queryClient.invalidateQueries({ queryKey: etchingKeys.config() });
-
-      toast.success('Fee rate updated!', {
-        id: 'update-fee',
-        description: `New rate: ${feeRate} sat/vB`,
-      });
-    },
-    onError: (error: Error) => {
-      toast.error('Failed to update fee rate', {
-        id: 'update-fee',
-        description: error.message,
-      });
-    },
-  });
-}
-
-/**
- * Hook: Monitor active processes with real-time updates
- * FIXED: No longer violates Rules of Hooks - uses QueryClient instead
+ * Hook: Monitor active processes
  */
 export function useActiveProcessesMonitor() {
   const queryClient = useQueryClient();
   const { getActiveProcesses } = useEtchingStore();
   const activeProcesses = getActiveProcesses();
 
-  // Get query states from QueryClient instead of calling hooks in a loop
   const getProcessQueryState = (processId: string) => {
     return queryClient.getQueryState(etchingKeys.detail(processId));
   };
@@ -296,7 +195,6 @@ export function useActiveProcessesMonitor() {
     return queryClient.getQueryData<EtchingProcessView | null>(etchingKeys.detail(processId));
   };
 
-  // Compute loading and error states from query cache
   const queryStates = activeProcesses.map((process) => ({
     processId: process.id,
     state: getProcessQueryState(process.id),
@@ -309,7 +207,6 @@ export function useActiveProcessesMonitor() {
     totalActive: activeProcesses.length,
     isAnyLoading: queryStates.some((qs) => qs.state?.status === 'pending'),
     hasErrors: queryStates.some((qs) => qs.state?.status === 'error'),
-    // Utility functions
     getProcessStatus: getProcessData,
     refetchProcess: (processId: string) =>
       queryClient.refetchQueries({ queryKey: etchingKeys.detail(processId) }),

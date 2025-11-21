@@ -9,6 +9,34 @@
 
 🚀 **Now Live on Mainnet** | 📊 **$92M Annual Revenue Potential** | 🔒 **Production-Ready Security**
 
+---
+
+## 🏆 ICP Bitcoin DeFi Hackathon Features
+
+> **New features implemented for the hackathon showcasing ICP's unique capabilities**
+
+### 1. Sign In With Bitcoin (SIWB)
+Dual-chain authentication using Bitcoin wallets (UniSat, Xverse) alongside Internet Identity.
+- Verify Bitcoin ownership for Rune operations
+- Schnorr signature verification on ICP
+- Unified wallet management
+
+### 2. Dead Man's Switch (DMS)
+Crypto-native inheritance solution with automatic Rune transfers.
+- Create switches with timeout periods (7-365 days)
+- Automatic beneficiary transfer on expiry
+- Timer-based canister execution
+
+### 3. vetKeys Encrypted Metadata
+Threshold encryption for Rune metadata with time-locked reveals.
+- Identity-Based Encryption (IBE)
+- Optional time-locked decryption
+- Secure key derivation via ICP
+
+📖 **[Full Hackathon Documentation](./docs/HACKATHON_FEATURES.md)**
+
+---
+
 ## 🎯 Overview
 
 QURI is the **first production-ready, complete ecosystem for Bitcoin Runes** built on the Internet Computer Protocol (ICP). We provide a full DeFi suite with professional-grade DEX, cross-chain bridge, liquidity mining, and Runes creation capabilities.
@@ -110,6 +138,10 @@ cargo build --target wasm32-unknown-unknown --release
 # Start local ICP replica
 dfx start --background --clean
 
+# Build backend canisters
+cd backend
+./scripts/build-wasm.sh
+
 # Deploy canisters (automated script)
 ./scripts/deploy-local.sh
 
@@ -122,7 +154,10 @@ cargo test --workspace
 # Start frontend development server
 cd frontend
 npm install
+cp .env.example .env.local
+# Update .env.local with canister IDs
 npm run dev
+# Visit: http://localhost:3002
 
 # Stop local replica
 dfx stop
@@ -309,9 +344,9 @@ For detailed deployment instructions, see:
 
 ## 📊 Project Status
 
-### Phase 1: Runes Platform (✅ ~90% Complete)
+### Phase 1: Runes Platform (✅ Live on Mainnet)
 
-**Backend:**
+**Backend (All Deployed ✅):**
 - [x] Production-grade etching orchestration
 - [x] Threshold Schnorr signatures
 - [x] UTXO selection & management
@@ -319,20 +354,28 @@ For detailed deployment instructions, see:
 - [x] State machine with error recovery
 - [x] Comprehensive unit tests (62 tests passing)
 - [x] CI/CD pipeline (Rustfmt, Clippy, Tests)
+- [x] HTTP outcalls for Hiro API integration
+- [x] Rune indexing and search (670+ runes synced)
 
 **Frontend:**
 - [x] Next.js 14 with TypeScript
 - [x] ICP agent integration
 - [x] Internet Identity authentication
 - [x] Professional UI components
+- [x] Rune explorer with search and filters
+- [x] Infinite scroll pagination
 - [x] Form validation with Zod
 - [x] Production logging & monitoring
-- [x] Vercel deployment ready
+- [x] Development server ready (http://localhost:3002)
 
-**Remaining:**
-- [ ] Bitcoin mainnet testing
-- [ ] Security audit
-- [ ] Public mainnet launch
+**Current Progress:**
+- ✅ Mainnet deployment complete
+- ✅ 670 runes synced from Hiro API
+- ✅ Search and explorer functional
+- 🔄 Gradual sync to 232K runes (ongoing)
+- ⏳ Bitcoin mainnet testing
+- ⏳ Security audit
+- ⏳ Production frontend deployment
 
 ### Phase 2: Comprehensive Bitcoin Platform (🚧 Planned)
 
@@ -584,23 +627,24 @@ Revenue: 5% = $60,000/year
 
 **Registry Canister** (`pnqje-qiaaa-aaaah-arodq-cai`)
 - Status: 🟢 Running
-- Cycles: 493.8B (~73 years)
-- Memory: 1.8MB
+- Cycles: 362B
+- Runes Synced: 670 / 232,352 (0.29%)
+- Search: O(log n) binary search
 - Queries: <200ms avg
 
 **Bitcoin Integration** (`yz6hf-qqaaa-aaaah-arn5a-cai`)
 - Status: 🟢 Running
-- Cycles: 2.99T
-- Memory: 1.9MB
+- Cycles: 2.9 TC
+- HTTP Outcalls: Working (25B cycles per request)
 
 **Rune Engine** (`pkrpq-5qaaa-aaaah-aroda-cai`)
 - Status: 🟢 Running
-- Cycles: 492B
+- Cycles: 442B
 - Memory: 69.4MB
-- Total Queries: 78
 
 **Identity Manager** (`y67br-5iaaa-aaaah-arn5q-cai`)
 - Status: 🟢 Running
+- Cycles: 2.9 TC
 
 ### Test Live Endpoints
 
@@ -608,8 +652,14 @@ Revenue: 5% = $60,000/year
 # Set environment variable
 export DFX_WARNING=-mainnet_plaintext_identity
 
-# List runes
-dfx canister --network ic call registry list_runes '(null)'
+# List indexed runes (670+ runes)
+dfx canister --network ic call registry list_indexed_runes '(0 : nat64, 24 : nat64)'
+
+# Search runes
+dfx canister --network ic call registry search_indexed_runes '("DOG", 0 : nat64, 30 : nat64)'
+
+# Get indexer stats
+dfx canister --network ic call registry get_indexer_stats '()'
 
 # Get metrics
 dfx canister --network ic call registry get_canister_metrics '()'
@@ -618,9 +668,30 @@ dfx canister --network ic call registry get_canister_metrics '()'
 https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=pnqje-qiaaa-aaaah-arodq-cai
 ```
 
+### Sync More Runes
+
+```bash
+# Interactive sync script (recommended)
+cd /Users/munay/dev/QURI-PROTOCOL
+./scripts/sync-all-runes.sh
+# Choose option 2 for +1,000 runes
+
+# Gradual background sync with automatic retries
+./scripts/sync-gradual.sh
+
+# Manual sync
+export DFX_WARNING=-mainnet_plaintext_identity
+dfx canister call registry --network ic sync_runes_from_hiro '(670 : nat32, 60 : nat32)'
+```
+
 ---
 
 ## 📚 Documentation
+
+### Essential Guides
+- 📊 **[Current Status](./CURRENT_STATUS.md)** - What's working NOW, how to use it
+- 🏗️ **[Architecture Guide](./ARCHITECTURE.md)** - System design and technical details
+- 🏆 **[Hackathon Features](./docs/HACKATHON_FEATURES.md)** - SIWB, DMS, vetKeys
 
 ### For Users
 - 🌐 [Ecosystem Overview](./ECOSYSTEM_POTENTIAL.md) - Complete use cases and potential
@@ -629,7 +700,6 @@ https://a4gq6-oaaaa-aaaab-qaa4q-cai.raw.icp0.io/?id=pnqje-qiaaa-aaaah-arodq-cai
 
 ### For Developers
 - 🔧 [API Documentation](./docs/REGISTRY_API.md) - Complete API reference
-- 🏗️ [Architecture Guide](./docs/ARCHITECTURE.md) - System design
 - 🔐 [Security Guide](./docs/SECURITY_AND_SCALABILITY_RECOMMENDATIONS.md) - Best practices
 - 📦 [Integration Examples](./examples/) - Code samples
 

@@ -39,7 +39,7 @@ export const toast = {
   },
 
   custom: (component: React.ReactNode, opts?: ExternalToast) => {
-    return sonnerToast.custom(component, opts);
+    return sonnerToast(component as string, opts);
   },
 
   dismiss: (id?: string | number) => {
@@ -335,3 +335,77 @@ export function successWithAction(
     },
   });
 }
+
+// ============================================================================
+// WALLET-SPECIFIC TOASTS
+// ============================================================================
+
+export const walletToast = {
+  /**
+   * Cycles sent
+   */
+  cyclesSent: (amount: bigint, recipient: string, opts?: ExternalToast) => {
+    const tc = Number(amount) / 1_000_000_000_000;
+    return toast.success('Cycles sent successfully!', {
+      ...opts,
+      description: `${tc.toFixed(3)} TC sent to ${recipient.slice(0, 8)}...`,
+      duration: 5000,
+    });
+  },
+
+  /**
+   * ICP sent
+   */
+  icpSent: (amount: bigint, recipient: string, opts?: ExternalToast) => {
+    const icp = Number(amount) / 100_000_000;
+    return toast.success('ICP sent successfully!', {
+      ...opts,
+      description: `${icp.toFixed(4)} ICP sent to ${recipient.slice(0, 8)}...`,
+      duration: 5000,
+    });
+  },
+
+  /**
+   * Principal copied
+   */
+  principalCopied: (opts?: ExternalToast) => {
+    return toast.success('Principal ID copied!', {
+      ...opts,
+      description: 'Share this to receive ICP or Cycles',
+      duration: 2500,
+    });
+  },
+
+  /**
+   * Bitcoin address copied
+   */
+  btcAddressCopied: (opts?: ExternalToast) => {
+    return toast.success('Bitcoin address copied!', {
+      ...opts,
+      description: 'Share this to receive Bitcoin',
+      duration: 2500,
+    });
+  },
+
+  /**
+   * Insufficient balance
+   */
+  insufficientBalance: (token: string, opts?: ExternalToast) => {
+    return toast.error('Insufficient balance', {
+      ...opts,
+      description: `You don't have enough ${token}`,
+      duration: 4000,
+    });
+  },
+
+  /**
+   * Send failed
+   */
+  sendFailed: (error: string, opts?: ExternalToast) => {
+    return toast.error('Transaction failed', {
+      ...opts,
+      description: error,
+      duration: 6000,
+    });
+  },
+};

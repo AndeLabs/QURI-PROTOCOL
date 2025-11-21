@@ -39,6 +39,11 @@
       "candid": "canisters/identity-manager/identity_manager.did",
       "build": ["cargo build --target wasm32-unknown-unknown --release --package identity-manager"],
       "wasm": "target/wasm32-unknown-unknown/release/identity_manager.wasm"
+    },
+    "ic_siwb_provider": {
+      "type": "custom",
+      "candid": "canisters/ic_siwb_provider/ic_siwb_provider.did",
+      "wasm": "canisters/ic_siwb_provider/ic_siwb_provider.wasm"
     }
   },
   "defaults": {
