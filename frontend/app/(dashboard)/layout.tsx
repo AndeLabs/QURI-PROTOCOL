@@ -75,6 +75,12 @@ const navigationSections: NavSection[] = [
         description: 'Etch new Rune',
       },
       {
+        name: 'My Runes',
+        href: '/my-runes',
+        icon: Coins,
+        description: 'Your Virtual Runes',
+      },
+      {
         name: 'Explorer',
         href: '/explorer',
         icon: Search,
