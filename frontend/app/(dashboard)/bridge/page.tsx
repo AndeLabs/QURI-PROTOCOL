@@ -464,6 +464,17 @@ export default function BridgePage() {
                       </p>
                     </div>
 
+                    {/* Warning if no XTC balance */}
+                    {cyclesDirection === 'xtc-to-cycles' && xtcBalance === 0n && (
+                      <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                        <p className="text-sm text-yellow-900">
+                          <span className="font-semibold">No XTC balance.</span>{' '}
+                          You need to first convert Cycles → XTC before you can unwrap them back.
+                          Select "Cycles → XTC" above to wrap your cycles.
+                        </p>
+                      </div>
+                    )}
+
                     {/* Amount Input */}
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-museum-black">
