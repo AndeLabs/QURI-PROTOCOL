@@ -126,13 +126,20 @@ export default function ExplorerPagePremium() {
   }, [getMyVirtualRunes]);
 
   // Load ALL public virtual runes (visible to everyone)
+  // Sorted by creation date (newest first) for better UX
   const loadAllPublicVirtualRunes = useCallback(async () => {
     try {
       const [runes, count] = await Promise.all([
         getAllVirtualRunes(0n, 100n),
         getAllVirtualRunesCount(),
       ]);
-      setAllPublicVirtualRunes(runes);
+      // Sort by created_at descending (newest first)
+      const sortedRunes = [...runes].sort((a, b) => {
+        const dateA = Number(a.created_at);
+        const dateB = Number(b.created_at);
+        return dateB - dateA; // Newest first
+      });
+      setAllPublicVirtualRunes(sortedRunes);
       setVirtualRunesCount(count);
     } catch (err) {
       console.error('Failed to load public virtual runes:', err);
@@ -445,11 +452,26 @@ export default function ExplorerPagePremium() {
 
                 {/* Grid of Virtual Runes */}
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {allPublicVirtualRunes.map((rune) => (
+                  {allPublicVirtualRunes.map((rune) => {
+                    // Check if rune was created in the last 24 hours
+                    const createdAt = Number(rune.created_at) / 1_000_000; // Convert nanoseconds to milliseconds
+                    const isNew = Date.now() - createdAt < 24 * 60 * 60 * 1000;
+
+                    return (
                     <div
                       key={rune.id}
-                      className="bg-museum-white border-2 border-purple-200 rounded-2xl p-6 hover:shadow-lg hover:border-purple-400 transition-all"
+                      className={`bg-museum-white border-2 rounded-2xl p-6 hover:shadow-lg transition-all relative ${
+                        isNew
+                          ? 'border-gold-400 hover:border-gold-500 ring-2 ring-gold-200'
+                          : 'border-purple-200 hover:border-purple-400'
+                      }`}
                     >
+                      {/* NEW Badge for recently created runes */}
+                      {isNew && (
+                        <div className="absolute -top-2 -right-2 bg-gradient-to-r from-gold-500 to-amber-500 text-white text-xs font-bold px-2 py-1 rounded-full shadow-md animate-pulse">
+                          NEW
+                        </div>
+                      )}
                       <div className="flex items-center gap-4 mb-4">
                         <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
                           <span className="text-2xl font-bold text-white">
@@ -508,7 +530,8 @@ export default function ExplorerPagePremium() {
                         </Link>
                       </div>
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             )}
