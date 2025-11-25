@@ -26,6 +26,7 @@ mod rbac;
 mod settlement;
 mod state;
 mod trading;
+mod trading_v2;
 mod validators;
 
 #[cfg(test)]
@@ -95,6 +96,22 @@ fn init() {
     // Initialize escrow storage (MemoryId 12)
     let escrow_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(12)));
     escrow::init_escrow_storage(escrow_memory);
+
+    // Initialize trading V2 storage (MemoryId 13-18)
+    let trading_pools_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(13)));
+    let trading_lp_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(14)));
+    let trading_events_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(15)));
+    let trading_user_balances_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(16)));
+    let trading_icp_balances_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(17)));
+    let trading_rune_to_pool_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(18)));
+    trading_v2::init_trading_storage(
+        trading_pools_memory,
+        trading_lp_memory,
+        trading_events_memory,
+        trading_user_balances_memory,
+        trading_icp_balances_memory,
+        trading_rune_to_pool_memory,
+    );
 
     // Schedule timer initialization after init completes
     // Timers cannot be set during init/post_upgrade, so we use a one-shot timer
@@ -177,6 +194,22 @@ fn post_upgrade() {
     // Reinitialize escrow storage (MemoryId 12)
     let escrow_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(12)));
     escrow::reinit_escrow_storage(escrow_memory);
+
+    // Reinitialize trading V2 storage (MemoryId 13-18)
+    let trading_pools_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(13)));
+    let trading_lp_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(14)));
+    let trading_events_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(15)));
+    let trading_user_balances_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(16)));
+    let trading_icp_balances_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(17)));
+    let trading_rune_to_pool_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(18)));
+    trading_v2::reinit_trading_storage(
+        trading_pools_memory,
+        trading_lp_memory,
+        trading_events_memory,
+        trading_user_balances_memory,
+        trading_icp_balances_memory,
+        trading_rune_to_pool_memory,
+    );
 
     // Schedule timer initialization after post_upgrade completes
     // Timers cannot be set during init/post_upgrade, so we use a one-shot timer
@@ -1695,6 +1728,514 @@ async fn admin_manual_refund(process_id: String) -> Result<u64, String> {
             Err(format!("Manual refund failed: {}", e))
         }
     }
+}
+
+// ============================================================================
+// Trading V2 APIs - Persistent Storage with Bonding Curve & Graduation
+// ============================================================================
+
+/// Create a trading pool V2 with bonding curve
+///
+/// Creates a pool that starts with bonding curve pricing and graduates to AMM
+/// after reaching the market cap threshold (~$69k equivalent in ICP).
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param initial_icp - Initial ICP liquidity (in e8s)
+/// @param initial_runes - Initial rune liquidity
+#[update]
+fn create_trading_pool_v2(
+    rune_id: String,
+    initial_icp: u64,
+    initial_runes: u64,
+) -> Result<TradingPoolV2View, String> {
+    let caller = ic_cdk::caller();
+
+    // Get the virtual rune
+    let rune = state::get_virtual_rune(&rune_id)
+        .ok_or("Virtual Rune not found")?;
+
+    // Verify caller is the creator
+    if rune.caller != caller {
+        return Err("Only the rune creator can create a trading pool".to_string());
+    }
+
+    // Credit the premine to the creator first
+    let premine = rune.etching.premine;
+    trading_v2::credit_user_runes(caller, &rune_id, premine)?;
+
+    // Debit the runes going into the pool
+    trading_v2::debit_user_runes(caller, &rune_id, initial_runes)?;
+
+    // Create the pool
+    let pool = trading_v2::create_pool(
+        &rune_id,
+        &rune.etching.rune_name,
+        &rune.etching.symbol,
+        rune.etching.divisibility,
+        premine,
+        initial_icp,
+        initial_runes,
+        caller,
+    )?;
+
+    Ok(TradingPoolV2View::from(pool))
+}
+
+/// Get buy quote V2 with price impact and fees breakdown
+#[query]
+fn get_buy_quote_v2(
+    rune_id: String,
+    icp_amount: u64,
+    slippage_bps: u64,
+) -> Result<TradeQuoteV2View, String> {
+    let quote = trading_v2::calculate_buy_quote(&rune_id, icp_amount, slippage_bps)?;
+    Ok(TradeQuoteV2View::from(quote))
+}
+
+/// Get sell quote V2 with price impact and fees breakdown
+#[query]
+fn get_sell_quote_v2(
+    rune_id: String,
+    rune_amount: u64,
+    slippage_bps: u64,
+) -> Result<TradeQuoteV2View, String> {
+    let quote = trading_v2::calculate_sell_quote(&rune_id, rune_amount, slippage_bps)?;
+    Ok(TradeQuoteV2View::from(quote))
+}
+
+/// Execute buy trade V2
+///
+/// Buys virtual runes with ICP from the pool.
+/// Supports bonding curve pricing until graduation.
+#[update]
+fn buy_virtual_rune_v2(
+    rune_id: String,
+    icp_amount: u64,
+    min_runes_out: u64,
+) -> Result<TradeEventView, String> {
+    let caller = ic_cdk::caller();
+    let event = trading_v2::execute_buy(&rune_id, icp_amount, min_runes_out, caller)?;
+    Ok(TradeEventView::from(event))
+}
+
+/// Execute sell trade V2
+///
+/// Sells virtual runes for ICP from the pool.
+#[update]
+fn sell_virtual_rune_v2(
+    rune_id: String,
+    rune_amount: u64,
+    min_icp_out: u64,
+) -> Result<TradeEventView, String> {
+    let caller = ic_cdk::caller();
+    let event = trading_v2::execute_sell(&rune_id, rune_amount, min_icp_out, caller)?;
+    Ok(TradeEventView::from(event))
+}
+
+/// Get trading pool V2 by rune ID
+#[query]
+fn get_trading_pool_v2(rune_id: String) -> Option<TradingPoolV2View> {
+    trading_v2::get_pool_by_rune_id(&rune_id).map(TradingPoolV2View::from)
+}
+
+/// List all trading pools V2
+#[query]
+fn list_trading_pools_v2(offset: u64, limit: u64) -> Vec<TradingPoolV2View> {
+    let capped_limit = limit.min(50);
+    trading_v2::list_pools(offset, capped_limit)
+        .into_iter()
+        .map(TradingPoolV2View::from)
+        .collect()
+}
+
+/// Get total pool count V2
+#[query]
+fn get_trading_pool_count_v2() -> u64 {
+    trading_v2::get_pool_count()
+}
+
+/// Get current rune price V2
+#[query]
+fn get_rune_price_v2(rune_id: String) -> Result<u64, String> {
+    let pool = trading_v2::get_pool_by_rune_id(&rune_id)
+        .ok_or("Pool not found")?;
+    Ok(trading_v2::get_pool_price(&pool))
+}
+
+/// Get rune market cap V2
+#[query]
+fn get_rune_market_cap_v2(rune_id: String) -> Result<u128, String> {
+    let pool = trading_v2::get_pool_by_rune_id(&rune_id)
+        .ok_or("Pool not found")?;
+    Ok(trading_v2::get_pool_market_cap(&pool))
+}
+
+/// Get trade history for a rune V2
+#[query]
+fn get_rune_trade_history_v2(rune_id: String, limit: u64) -> Vec<TradeEventView> {
+    trading_v2::get_trade_events(&rune_id, limit)
+        .into_iter()
+        .map(TradeEventView::from)
+        .collect()
+}
+
+/// Get caller's trade history V2
+#[query]
+fn get_my_trade_history_v2(limit: u64) -> Vec<TradeEventView> {
+    let caller = ic_cdk::caller();
+    trading_v2::get_user_trade_events(caller, limit)
+        .into_iter()
+        .map(TradeEventView::from)
+        .collect()
+}
+
+/// Get total trade event count
+#[query]
+fn get_trade_event_count() -> u64 {
+    trading_v2::get_event_count()
+}
+
+// ============================================================================
+// V2 Balance APIs
+// ============================================================================
+
+/// Get caller's ICP balance V2
+#[query]
+fn get_my_icp_balance_v2() -> ICPBalanceView {
+    let caller = ic_cdk::caller();
+    ICPBalanceView::from(trading_v2::get_user_icp_balance(caller))
+}
+
+/// Get caller's rune balance V2
+#[query]
+fn get_my_rune_balance_v2(rune_id: String) -> UserBalanceView {
+    let caller = ic_cdk::caller();
+    UserBalanceView::from(trading_v2::get_user_rune_balance(caller, &rune_id))
+}
+
+/// Credit ICP to caller's trading balance (for testing/admin)
+/// In production, this should be called after verifying ICP deposit
+#[update]
+fn credit_icp_balance(amount: u64) -> Result<u64, String> {
+    let caller = ic_cdk::caller();
+    trading_v2::credit_user_icp(caller, amount)
+}
+
+// ============================================================================
+// V2 Liquidity APIs
+// ============================================================================
+
+/// Add liquidity to a graduated AMM pool
+///
+/// Can only add liquidity to pools that have graduated from bonding curve.
+#[update]
+fn add_liquidity_v2(
+    rune_id: String,
+    icp_amount: u64,
+    max_runes: u64,
+) -> Result<AddLiquidityResultView, String> {
+    let caller = ic_cdk::caller();
+    let (icp_used, runes_used, lp_tokens) = trading_v2::add_liquidity(
+        &rune_id,
+        icp_amount,
+        max_runes,
+        caller,
+    )?;
+    Ok(AddLiquidityResultView {
+        icp_deposited: icp_used,
+        runes_deposited: runes_used,
+        lp_tokens_minted: lp_tokens,
+    })
+}
+
+/// Remove liquidity from a pool
+#[update]
+fn remove_liquidity_v2(
+    rune_id: String,
+    lp_amount: u64,
+    min_icp: u64,
+    min_runes: u64,
+) -> Result<RemoveLiquidityResultView, String> {
+    let caller = ic_cdk::caller();
+    let (icp_out, runes_out) = trading_v2::remove_liquidity(
+        &rune_id,
+        lp_amount,
+        min_icp,
+        min_runes,
+        caller,
+    )?;
+    Ok(RemoveLiquidityResultView {
+        icp_withdrawn: icp_out,
+        runes_withdrawn: runes_out,
+        lp_tokens_burned: lp_amount,
+    })
+}
+
+/// Get caller's LP position for a pool
+#[query]
+fn get_my_lp_position(rune_id: String) -> Option<LPPositionView> {
+    let caller = ic_cdk::caller();
+    let pool_id = trading_v2::PoolId::from_rune_id(&rune_id);
+    trading_v2::get_lp_position(&pool_id, caller).map(LPPositionView::from)
+}
+
+/// Get all LP positions for caller
+#[query]
+fn get_my_lp_positions() -> Vec<(String, LPPositionView)> {
+    let caller = ic_cdk::caller();
+    trading_v2::get_user_lp_positions(caller)
+        .into_iter()
+        .map(|(pool_id, pos)| (pool_id.to_hex(), LPPositionView::from(pos)))
+        .collect()
+}
+
+// ============================================================================
+// Trading V2 View Types
+// ============================================================================
+
+/// View of a trading pool V2 for Candid interface
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct TradingPoolV2View {
+    pub pool_id: String,
+    pub rune_id: String,
+    pub rune_name: String,
+    pub symbol: String,
+    pub divisibility: u8,
+    pub icp_reserve: u64,
+    pub rune_reserve: u64,
+    pub virtual_icp_reserve: u64,
+    pub virtual_rune_reserve: u64,
+    pub pool_type: String,
+    pub graduation_status: String,
+    pub total_supply: u64,
+    pub k_constant: u128,
+    pub total_lp_supply: u64,
+    pub fees_collected_icp: u64,
+    pub protocol_fees_pending: u64,
+    pub total_volume_icp: u128,
+    pub total_trades: u64,
+    pub unique_traders: u64,
+    pub price_per_rune: u64,
+    pub market_cap: u128,
+    pub creator: Principal,
+    pub created_at: u64,
+    pub last_trade_at: u64,
+    pub is_active: bool,
+}
+
+impl From<trading_v2::TradingPool> for TradingPoolV2View {
+    fn from(pool: trading_v2::TradingPool) -> Self {
+        let price_per_rune = trading_v2::get_pool_price(&pool);
+        let market_cap = trading_v2::get_pool_market_cap(&pool);
+
+        let pool_type = match pool.pool_type {
+            trading_v2::PoolType::Bonding => "Bonding".to_string(),
+            trading_v2::PoolType::AMM => "AMM".to_string(),
+        };
+
+        let graduation_status = match &pool.graduation_status {
+            trading_v2::GraduationStatus::Bonding => "Bonding".to_string(),
+            trading_v2::GraduationStatus::Graduated { graduated_at, final_market_cap, .. } => {
+                format!("Graduated at {} with market cap {}", graduated_at, final_market_cap)
+            }
+        };
+
+        TradingPoolV2View {
+            pool_id: pool.id.to_hex(),
+            rune_id: pool.rune_id,
+            rune_name: pool.rune_name,
+            symbol: pool.symbol,
+            divisibility: pool.divisibility,
+            icp_reserve: pool.icp_reserve,
+            rune_reserve: pool.rune_reserve,
+            virtual_icp_reserve: pool.virtual_icp_reserve,
+            virtual_rune_reserve: pool.virtual_rune_reserve,
+            pool_type,
+            graduation_status,
+            total_supply: pool.total_supply,
+            k_constant: pool.k_constant,
+            total_lp_supply: pool.total_lp_supply,
+            fees_collected_icp: pool.fees_collected_icp,
+            protocol_fees_pending: pool.protocol_fees_pending,
+            total_volume_icp: pool.total_volume_icp,
+            total_trades: pool.total_trades,
+            unique_traders: pool.unique_traders,
+            price_per_rune,
+            market_cap,
+            creator: pool.creator,
+            created_at: pool.created_at,
+            last_trade_at: pool.last_trade_at,
+            is_active: pool.is_active,
+        }
+    }
+}
+
+/// View of a trade quote V2
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct TradeQuoteV2View {
+    pub rune_id: String,
+    pub trade_type: String,
+    pub input_amount: u64,
+    pub output_amount: u64,
+    pub price_per_rune: u64,
+    pub fee: u64,
+    pub protocol_fee: u64,
+    pub lp_fee: u64,
+    pub price_impact_bps: u16,
+    pub minimum_output: u64,
+    pub pool_icp_reserve: u64,
+    pub pool_rune_reserve: u64,
+    pub effective_price: f64,
+}
+
+impl From<trading_v2::TradeQuote> for TradeQuoteV2View {
+    fn from(quote: trading_v2::TradeQuote) -> Self {
+        TradeQuoteV2View {
+            rune_id: quote.rune_id,
+            trade_type: match quote.trade_type {
+                trading_v2::TradeType::Buy => "Buy".to_string(),
+                trading_v2::TradeType::Sell => "Sell".to_string(),
+            },
+            input_amount: quote.input_amount,
+            output_amount: quote.output_amount,
+            price_per_rune: quote.price_per_rune,
+            fee: quote.fee,
+            protocol_fee: quote.protocol_fee,
+            lp_fee: quote.lp_fee,
+            price_impact_bps: quote.price_impact_bps,
+            minimum_output: quote.minimum_output,
+            pool_icp_reserve: quote.pool_icp_reserve,
+            pool_rune_reserve: quote.pool_rune_reserve,
+            effective_price: quote.effective_price,
+        }
+    }
+}
+
+/// View of a trade event
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct TradeEventView {
+    pub id: u64,
+    pub pool_id: String,
+    pub rune_id: String,
+    pub trader: Principal,
+    pub trade_type: String,
+    pub icp_amount: u64,
+    pub rune_amount: u64,
+    pub price_per_rune: u64,
+    pub fee: u64,
+    pub price_impact_bps: u16,
+    pub pool_icp_reserve_after: u64,
+    pub pool_rune_reserve_after: u64,
+    pub timestamp: u64,
+}
+
+impl From<trading_v2::TradeEvent> for TradeEventView {
+    fn from(event: trading_v2::TradeEvent) -> Self {
+        TradeEventView {
+            id: event.id,
+            pool_id: event.pool_id.to_hex(),
+            rune_id: event.rune_id,
+            trader: event.trader,
+            trade_type: match event.trade_type {
+                trading_v2::TradeType::Buy => "Buy".to_string(),
+                trading_v2::TradeType::Sell => "Sell".to_string(),
+            },
+            icp_amount: event.icp_amount,
+            rune_amount: event.rune_amount,
+            price_per_rune: event.price_per_rune,
+            fee: event.fee,
+            price_impact_bps: event.price_impact_bps,
+            pool_icp_reserve_after: event.pool_icp_reserve_after,
+            pool_rune_reserve_after: event.pool_rune_reserve_after,
+            timestamp: event.timestamp,
+        }
+    }
+}
+
+/// View of user's ICP balance
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct ICPBalanceView {
+    pub available: u64,
+    pub locked: u64,
+    pub total: u64,
+    pub total_deposited: u64,
+    pub total_withdrawn: u64,
+}
+
+impl From<trading_v2::ICPBalance> for ICPBalanceView {
+    fn from(balance: trading_v2::ICPBalance) -> Self {
+        ICPBalanceView {
+            available: balance.available,
+            locked: balance.locked,
+            total: balance.total(),
+            total_deposited: balance.total_deposited,
+            total_withdrawn: balance.total_withdrawn,
+        }
+    }
+}
+
+/// View of user's rune balance
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct UserBalanceView {
+    pub available: u64,
+    pub locked: u64,
+    pub total: u64,
+    pub total_bought: u64,
+    pub total_sold: u64,
+}
+
+impl From<trading_v2::UserBalance> for UserBalanceView {
+    fn from(balance: trading_v2::UserBalance) -> Self {
+        UserBalanceView {
+            available: balance.available,
+            locked: balance.locked,
+            total: balance.total(),
+            total_bought: balance.total_bought,
+            total_sold: balance.total_sold,
+        }
+    }
+}
+
+/// View of LP position
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct LPPositionView {
+    pub lp_balance: u64,
+    pub icp_deposited: u64,
+    pub runes_deposited: u64,
+    pub rewards_earned: u64,
+    pub last_reward_claim: u64,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+impl From<trading_v2::LPPosition> for LPPositionView {
+    fn from(position: trading_v2::LPPosition) -> Self {
+        LPPositionView {
+            lp_balance: position.lp_balance,
+            icp_deposited: position.icp_deposited,
+            runes_deposited: position.runes_deposited,
+            rewards_earned: position.rewards_earned,
+            last_reward_claim: position.last_reward_claim,
+            created_at: position.created_at,
+            updated_at: position.updated_at,
+        }
+    }
+}
+
+/// Result of adding liquidity
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct AddLiquidityResultView {
+    pub icp_deposited: u64,
+    pub runes_deposited: u64,
+    pub lp_tokens_minted: u64,
+}
+
+/// Result of removing liquidity
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct RemoveLiquidityResultView {
+    pub icp_withdrawn: u64,
+    pub runes_withdrawn: u64,
+    pub lp_tokens_burned: u64,
 }
 
 ic_cdk::export_candid!();
