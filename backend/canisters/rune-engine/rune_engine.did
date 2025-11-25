@@ -237,6 +237,83 @@ type VirtualRuneView = record {
   created_at : nat64;
   symbol : text;
 };
+type PublicVirtualRuneView = record {
+  id : text;
+  rune_name : text;
+  symbol : text;
+  divisibility : nat8;
+  premine : nat64;
+  terms : opt MintTerms;
+  status : text;
+  creator : principal;
+  created_at : nat64;
+  updated_at : nat64;
+};
+// Trading types
+type TradingPoolView = record {
+  rune_id : text;
+  rune_name : text;
+  symbol : text;
+  icp_reserve : nat64;
+  rune_reserve : nat64;
+  total_supply : nat64;
+  price_per_rune : nat64;
+  market_cap : nat;
+  creator : principal;
+  created_at : nat64;
+  last_trade_at : nat64;
+  total_volume_icp : nat;
+  total_trades : nat64;
+  fees_collected : nat64;
+  is_active : bool;
+};
+type TradeQuoteView = record {
+  rune_id : text;
+  trade_type : text;
+  input_amount : nat64;
+  output_amount : nat64;
+  price_per_rune : nat64;
+  fee : nat64;
+  price_impact_percent : float64;
+  minimum_output : nat64;
+  pool_icp_reserve : nat64;
+  pool_rune_reserve : nat64;
+};
+type TradeRecordView = record {
+  id : nat64;
+  rune_id : text;
+  trader : principal;
+  trade_type : text;
+  icp_amount : nat64;
+  rune_amount : nat64;
+  price_per_rune : nat64;
+  fee : nat64;
+  timestamp : nat64;
+};
+type Result_TradingPool = variant { Ok : TradingPoolView; Err : text };
+type Result_TradeQuote = variant { Ok : TradeQuoteView; Err : text };
+type Result_TradeRecord = variant { Ok : TradeRecordView; Err : text };
+type Result_Price = variant { Ok : nat64; Err : text };
+type Result_MarketCap = variant { Ok : nat; Err : text };
+
+// Balance types
+type RuneBalanceView = record {
+  available : nat64;
+  locked : nat64;
+  total : nat64;
+};
+type BalanceChangeView = record {
+  id : nat64;
+  rune_id : text;
+  change_type : text;
+  amount : nat64;
+  balance_before : nat64;
+  balance_after : nat64;
+  timestamp : nat64;
+  reference : opt text;
+};
+type Result_Balance = variant { Ok : nat64; Err : text };
+
 service : () -> {
   // Reset the processes storage (Admin only)
   // WARNING: This will delete ALL etching process data!
@@ -359,6 +436,11 @@ service : () -> {
   get_virtual_rune : (text) -> (opt VirtualRuneView) query;
   // Get total count of virtual runes created
   get_virtual_rune_count : () -> (nat64) query;
+  // List ALL virtual runes (PUBLIC - anyone can see)
+  // This enables discovery of Virtual Runes before they're settled to Bitcoin
+  list_all_virtual_runes : (nat64, nat64) -> (vec PublicVirtualRuneView) query;
+  // Get total count of ALL virtual runes (for pagination)
+  get_all_virtual_runes_count : () -> (nat64) query;
   // Grant a role to a principal (Owner/Admin only)
   grant_role : (principal, Role) -> (Result_1);
   // Check if encrypted metadata exists for a Rune
@@ -384,4 +466,67 @@ service : () -> {
   transform_http_response : (TransformArgs) -> (HttpResponse) query;
   // Update etching configuration (admin only)
   update_etching_config : (EtchingConfigView) -> (Result_1);
+
+  // ============================================================================
+  // Virtual Rune Trading APIs
+  // ============================================================================
+
+  // Create a trading pool for a Virtual Rune
+  // The creator must provide initial ICP liquidity (in e8s) and rune amount
+  create_trading_pool : (text, nat64, nat64) -> (Result_TradingPool);
+  // Get a quote for buying Virtual Runes with ICP
+  get_buy_quote : (text, nat64, nat64) -> (Result_TradeQuote) query;
+  // Get a quote for selling Virtual Runes for ICP
+  get_sell_quote : (text, nat64, nat64) -> (Result_TradeQuote) query;
+  // Execute a buy trade - buy Virtual Runes with ICP
+  buy_virtual_rune : (text, nat64, nat64) -> (Result_TradeRecord);
+  // Execute a sell trade - sell Virtual Runes for ICP
+  sell_virtual_rune : (text, nat64, nat64) -> (Result_TradeRecord);
+  // Get the current price of a Virtual Rune in ICP (e8s per rune)
+  get_rune_price : (text) -> (Result_Price) query;
+  // Get the market cap of a Virtual Rune in ICP (e8s)
+  get_rune_market_cap : (text) -> (Result_MarketCap) query;
+  // Get a trading pool by rune ID
+  get_trading_pool : (text) -> (opt TradingPoolView) query;
+  // List all trading pools (offset, limit)
+  list_trading_pools : (nat64, nat64) -> (vec TradingPoolView) query;
+  // Get total number of trading pools
+  get_trading_pool_count : () -> (nat64) query;
+  // Get trade history for a specific rune
+  get_rune_trade_history : (text, nat64) -> (vec TradeRecordView) query;
+  // Get the caller's trade history
+  get_my_trade_history : (nat64) -> (vec TradeRecordView) query;
+
+  // ============================================================================
+  // ICP Balance & Deposit APIs
+  // ============================================================================
+
+  // Get caller's ICP trading balance (in e8s)
+  get_my_icp_balance : () -> (nat64) query;
+  // Get caller's rune balance for a specific rune
+  get_my_rune_balance : (text) -> (RuneBalanceView) query;
+  // Get all rune balances for caller
+  get_my_all_rune_balances : () -> (vec record { text; RuneBalanceView }) query;
+  // Get the deposit address for the caller
+  // Users should send ICP to this address, then call verify_deposit
+  get_deposit_address : () -> (text) query;
+  // Verify and credit an ICP deposit
+  // Returns the amount credited (in e8s)
+  verify_deposit : () -> (Result_Balance);
+  // Withdraw ICP from trading balance to caller's wallet
+  // Returns the block index of the transfer
+  withdraw_icp : (nat64) -> (Result_Balance);
+  // Get balance change history for caller
+  get_my_balance_history : (nat64) -> (vec BalanceChangeView) query;
+
+  // ============================================================================
+  // Admin Balance Query APIs (for debugging)
+  // ============================================================================
+
+  // Get ICP balance for any user
+  get_user_icp_balance_admin : (principal) -> (nat64) query;
+  // Get rune balance for any user
+  get_user_rune_balance_admin : (principal, text) -> (RuneBalanceView) query;
+  // Get all rune balances for any user
+  get_user_all_rune_balances_admin : (principal) -> (vec record { text; RuneBalanceView }) query;
 }

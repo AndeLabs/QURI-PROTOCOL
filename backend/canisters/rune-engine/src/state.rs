@@ -460,6 +460,49 @@ pub fn rune_name_exists(name: &str) -> bool {
     })
 }
 
+/// Get ALL virtual runes (public endpoint)
+/// Returns all virtual runes regardless of owner
+pub fn get_all_virtual_runes(offset: u64, limit: u64) -> Vec<VirtualRune> {
+    let mut results = Vec::new();
+    let mut count = 0u64;
+    let mut skipped = 0u64;
+
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref map) = *v.borrow() {
+            for (_key, value) in map.iter() {
+                if let Ok(rune) = candid::decode_one::<VirtualRune>(&value) {
+                    // Skip until we reach offset
+                    if skipped < offset {
+                        skipped += 1;
+                        continue;
+                    }
+
+                    // Stop if we've reached limit
+                    if count >= limit {
+                        break;
+                    }
+
+                    results.push(rune);
+                    count += 1;
+                }
+            }
+        }
+    });
+
+    results
+}
+
+/// Get total count of all virtual runes
+pub fn get_all_virtual_runes_count() -> u64 {
+    VIRTUAL_RUNES.with(|v| {
+        if let Some(ref map) = *v.borrow() {
+            map.len()
+        } else {
+            0
+        }
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

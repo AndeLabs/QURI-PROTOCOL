@@ -17,6 +17,7 @@ import type {
   RoleAssignment,
   FeeEstimates,
   VirtualRuneView,
+  PublicVirtualRuneView,
 } from '@/types/canisters';
 
 // Estimated transaction sizes for fee calculation (in vbytes)
@@ -232,6 +233,49 @@ export function useRuneEngine() {
       return null;
     } finally {
       setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get ALL virtual runes (PUBLIC - anyone can see)
+   * This enables discovery of Virtual Runes before they're settled to Bitcoin
+   *
+   * @param offset - Starting position for pagination
+   * @param limit - Maximum number of runes to return (max 100)
+   * @returns List of virtual runes with creator info
+   */
+  const getAllVirtualRunes = useCallback(async (
+    offset: bigint = 0n,
+    limit: bigint = 50n
+  ): Promise<PublicVirtualRuneView[]> => {
+    try {
+      setLoading(true);
+      setError(null);
+      const actor = await getRuneEngineActor();
+      const runes = await actor.list_all_virtual_runes(offset, limit);
+      return runes;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get all virtual runes';
+      setError(errorMsg);
+      return [];
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  /**
+   * Get total count of ALL virtual runes (for pagination)
+   */
+  const getAllVirtualRunesCount = useCallback(async (): Promise<bigint> => {
+    try {
+      setError(null);
+      const actor = await getRuneEngineActor();
+      const count = await actor.get_all_virtual_runes_count();
+      return count;
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to get virtual runes count';
+      setError(errorMsg);
+      return 0n;
     }
   }, []);
 
@@ -804,6 +848,8 @@ export function useRuneEngine() {
     getMyEtchings,
     getMyVirtualRunes,
     getVirtualRune,
+    getAllVirtualRunes,
+    getAllVirtualRunesCount,
     etchToBitcoin,
     getPendingConfirmationCount,
     getConfirmationStatus,

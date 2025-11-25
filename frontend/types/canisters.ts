@@ -55,6 +55,86 @@ export interface VirtualRuneView {
   updated_at: bigint;
 }
 
+/** Public view of a virtual rune (includes creator info for public listing) */
+export interface PublicVirtualRuneView {
+  id: string;
+  rune_name: string;
+  symbol: string;
+  divisibility: number;
+  premine: bigint;
+  terms: [] | [MintTerms];
+  status: string;
+  creator: string;
+  created_at: bigint;
+  updated_at: bigint;
+}
+
+// ============================================================================
+// TRADING TYPES
+// ============================================================================
+
+export interface TradingPoolView {
+  rune_id: string;
+  rune_name: string;
+  symbol: string;
+  icp_reserve: bigint;
+  rune_reserve: bigint;
+  total_supply: bigint;
+  price_per_rune: bigint;
+  market_cap: bigint;
+  creator: string;
+  created_at: bigint;
+  last_trade_at: bigint;
+  total_volume_icp: bigint;
+  total_trades: bigint;
+  fees_collected: bigint;
+  is_active: boolean;
+}
+
+export interface TradeQuoteView {
+  rune_id: string;
+  trade_type: string;
+  input_amount: bigint;
+  output_amount: bigint;
+  price_per_rune: bigint;
+  fee: bigint;
+  price_impact_percent: number;
+  minimum_output: bigint;
+  pool_icp_reserve: bigint;
+  pool_rune_reserve: bigint;
+}
+
+export interface TradeRecordView {
+  id: bigint;
+  rune_id: string;
+  trader: string;
+  trade_type: string;
+  icp_amount: bigint;
+  rune_amount: bigint;
+  price_per_rune: bigint;
+  fee: bigint;
+  timestamp: bigint;
+}
+
+/** User's rune balance */
+export interface RuneBalanceView {
+  available: bigint;
+  locked: bigint;
+  total: bigint;
+}
+
+/** Balance change record for audit trail */
+export interface BalanceChangeView {
+  id: bigint;
+  rune_id: string;
+  change_type: string;
+  amount: bigint;
+  balance_before: bigint;
+  balance_after: bigint;
+  timestamp: bigint;
+  reference: [] | [string];
+}
+
 export interface EtchingConfigView {
   network: BitcoinNetwork;
   fee_rate: bigint;
@@ -323,6 +403,33 @@ export interface RuneEngineService {
   get_my_virtual_runes: () => Promise<VirtualRuneView[]>;
   get_virtual_rune: (rune_id: string) => Promise<[] | [VirtualRuneView]>;
   get_virtual_rune_count: () => Promise<bigint>;
+
+  // Public virtual rune listing (anyone can see)
+  list_all_virtual_runes: (offset: bigint, limit: bigint) => Promise<PublicVirtualRuneView[]>;
+  get_all_virtual_runes_count: () => Promise<bigint>;
+
+  // Trading operations
+  create_trading_pool: (rune_id: string, initial_icp: bigint, initial_runes: bigint) => Promise<Result<TradingPoolView>>;
+  get_buy_quote: (rune_id: string, icp_amount: bigint, slippage_bps: bigint) => Promise<Result<TradeQuoteView>>;
+  get_sell_quote: (rune_id: string, rune_amount: bigint, slippage_bps: bigint) => Promise<Result<TradeQuoteView>>;
+  buy_virtual_rune: (rune_id: string, icp_amount: bigint, min_runes_out: bigint) => Promise<Result<TradeRecordView>>;
+  sell_virtual_rune: (rune_id: string, rune_amount: bigint, min_icp_out: bigint) => Promise<Result<TradeRecordView>>;
+  get_rune_price: (rune_id: string) => Promise<Result<bigint>>;
+  get_rune_market_cap: (rune_id: string) => Promise<Result<bigint>>;
+  get_trading_pool: (rune_id: string) => Promise<[] | [TradingPoolView]>;
+  list_trading_pools: (offset: bigint, limit: bigint) => Promise<TradingPoolView[]>;
+  get_trading_pool_count: () => Promise<bigint>;
+  get_rune_trade_history: (rune_id: string, limit: bigint) => Promise<TradeRecordView[]>;
+  get_my_trade_history: (limit: bigint) => Promise<TradeRecordView[]>;
+
+  // ICP Balance & Deposits
+  get_my_icp_balance: () => Promise<bigint>;
+  get_my_rune_balance: (rune_id: string) => Promise<RuneBalanceView>;
+  get_my_all_rune_balances: () => Promise<Array<[string, RuneBalanceView]>>;
+  get_deposit_address: () => Promise<string>;
+  verify_deposit: () => Promise<Result<bigint>>;
+  withdraw_icp: (amount: bigint) => Promise<Result<bigint>>;
+  get_my_balance_history: (limit: bigint) => Promise<BalanceChangeView[]>;
 
   // Configuration
   update_etching_config: (config: EtchingConfigView) => Promise<Result<null>>;

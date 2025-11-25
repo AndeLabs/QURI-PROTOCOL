@@ -88,12 +88,30 @@ cd frontend && npm install && npm run dev
 
 ## Canister IDs (Mainnet)
 
-| Canister | ID |
-|----------|-----|
-| Rune Engine | `pkrpq-5qaaa-aaaah-aroda-cai` |
-| Bitcoin Integration | `ghsi2-tqaaa-aaaan-aaaca-cai` |
-| Registry | `pnqje-qiaaa-aaaah-arodq-cai` |
-| Identity Manager | `y67br-5iaaa-aaaah-arn5q-cai` |
+| Canister | ID | Description |
+|----------|-----|-------------|
+| Rune Engine | `pkrpq-5qaaa-aaaah-aroda-cai` | Core Runes creation, trading & DMS |
+| Registry | `pnqje-qiaaa-aaaah-arodq-cai` | Runes indexing & metadata |
+| Identity Manager | `y67br-5iaaa-aaaah-arn5q-cai` | Authentication & access control |
+| Bitcoin Integration | `ghsi2-tqaaa-aaaan-aaaca-cai` | Public ICP Bitcoin service |
+| Internet Identity | `rdmx6-jaaaa-aaaaa-aaadq-cai` | Public ICP auth service |
+
+> **Note:** Last updated: November 25, 2024
+
+## Virtual Rune Trading
+
+QURI Protocol includes a bonding curve AMM for trading Virtual Runes before they settle to Bitcoin:
+
+```bash
+# Get trading pool count
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai get_trading_pool_count '()'
+
+# List all virtual runes
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai list_all_virtual_runes '(0, 10)'
+
+# Get buy quote (rune_id, amount, slippage_bps)
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai get_buy_quote '("rune-id", 1000, 100)'
+```
 
 ## API Examples
 

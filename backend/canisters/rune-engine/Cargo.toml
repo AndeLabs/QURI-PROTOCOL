@@ -16,6 +16,7 @@ ic-cdk.workspace = true
 ic-cdk-macros.workspace = true
 ic-cdk-timers.workspace = true
 ic-stable-structures.workspace = true
+ic-ledger-types.workspace = true
 
 # Internal
 quri-types = { path = "../../libs/quri-types" }

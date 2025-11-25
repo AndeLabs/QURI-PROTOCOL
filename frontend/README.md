@@ -15,8 +15,8 @@ Professional Bitcoin Runes Launchpad on Internet Computer Protocol.
 ## 📋 Prerequisites
 
 - Node.js 18+ and npm
-- Local ICP replica running (for development)
-- Deployed canisters with their IDs
+
+> **Note:** ICP has no public testnet. The playground expires in 20 minutes. Best practice is to develop directly against mainnet.
 
 ## 🛠️ Setup
 
@@ -28,20 +28,19 @@ npm install
 
 ### 2. Configure Environment
 
-Copy the example environment file and update with your canister IDs:
-
-```bash
-cp .env.local.example .env.local
-```
-
-Update `.env.local` with your deployed canister IDs:
+The environment is pre-configured to use mainnet canisters for both development and production:
 
 ```env
-NEXT_PUBLIC_IC_HOST=http://localhost:4943
-NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID=your-canister-id
-NEXT_PUBLIC_BITCOIN_INTEGRATION_CANISTER_ID=your-canister-id
-NEXT_PUBLIC_REGISTRY_CANISTER_ID=your-canister-id
-NEXT_PUBLIC_IDENTITY_MANAGER_CANISTER_ID=your-canister-id
+# .env.development / .env.production (both use mainnet)
+NEXT_PUBLIC_IC_HOST=https://ic0.app
+NEXT_PUBLIC_IC_NETWORK=ic
+
+# Canister IDs (Mainnet) - Updated: November 25, 2024
+NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID=pkrpq-5qaaa-aaaah-aroda-cai
+NEXT_PUBLIC_REGISTRY_CANISTER_ID=pnqje-qiaaa-aaaah-arodq-cai
+NEXT_PUBLIC_IDENTITY_MANAGER_CANISTER_ID=y67br-5iaaa-aaaah-arn5q-cai
+NEXT_PUBLIC_BITCOIN_INTEGRATION_CANISTER_ID=ghsi2-tqaaa-aaaan-aaaca-cai
+NEXT_PUBLIC_INTERNET_IDENTITY_CANISTER_ID=rdmx6-jaaaa-aaaaa-aaadq-cai
 ```
 
 ### 3. Run Development Server
@@ -143,10 +142,14 @@ Set these in your Vercel project settings:
 
 ```
 NEXT_PUBLIC_IC_HOST=https://ic0.app
-NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID=<mainnet-canister-id>
-NEXT_PUBLIC_BITCOIN_INTEGRATION_CANISTER_ID=<mainnet-canister-id>
-NEXT_PUBLIC_REGISTRY_CANISTER_ID=<mainnet-canister-id>
-NEXT_PUBLIC_IDENTITY_MANAGER_CANISTER_ID=<mainnet-canister-id>
+NEXT_PUBLIC_IC_NETWORK=ic
+NEXT_PUBLIC_RUNE_ENGINE_CANISTER_ID=pkrpq-5qaaa-aaaah-aroda-cai
+NEXT_PUBLIC_REGISTRY_CANISTER_ID=pnqje-qiaaa-aaaah-arodq-cai
+NEXT_PUBLIC_IDENTITY_MANAGER_CANISTER_ID=y67br-5iaaa-aaaah-arn5q-cai
+NEXT_PUBLIC_BITCOIN_INTEGRATION_CANISTER_ID=ghsi2-tqaaa-aaaan-aaaca-cai
+NEXT_PUBLIC_INTERNET_IDENTITY_CANISTER_ID=rdmx6-jaaaa-aaaaa-aaadq-cai
+NEXT_PUBLIC_BITCOIN_NETWORK=mainnet
+NEXT_PUBLIC_APP_URL=https://your-domain.com
 ```
 
 ## 🧪 Development

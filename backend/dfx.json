@@ -12,11 +12,15 @@
       }
     },
     "rune-engine": {
-      "type": "rust",
-      "package": "rune-engine",
+      "type": "custom",
       "candid": "canisters/rune-engine/rune_engine.did",
-      "build": ["cargo build --target wasm32-unknown-unknown --release --package rune-engine"],
-      "wasm": "target/wasm32-unknown-unknown/release/rune_engine.wasm"
+      "wasm": "target/wasm32-unknown-unknown/release/rune_engine.wasm",
+      "build": [],
+      "metadata": [
+        {
+          "name": "candid:service"
+        }
+      ]
     },
     "bitcoin-integration": {
       "type": "rust",
@@ -56,7 +60,7 @@
   },
   "networks": {
     "local": {
-      "bind": "127.0.0.1:8000",
+      "bind": "127.0.0.1:4943",
       "type": "ephemeral"
     },
     "testnet": {

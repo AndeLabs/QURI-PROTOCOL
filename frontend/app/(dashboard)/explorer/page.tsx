@@ -31,7 +31,7 @@ import { ActivityFeed } from '@/components/explorer/ActivityFeed';
 import { NetworkStats } from '@/components/explorer/NetworkStats';
 import { SearchBar } from '@/components/explorer/SearchBar';
 import { TrendingRunes } from '@/components/explorer/TrendingRunes';
-import type { RegistryEntry, VirtualRuneView } from '@/types/canisters';
+import type { RegistryEntry, VirtualRuneView, PublicVirtualRuneView } from '@/types/canisters';
 
 export default function ExplorerPagePremium() {
   // Hooks
@@ -45,14 +45,18 @@ export default function ExplorerPagePremium() {
   const {
     getMyEtchings,
     getMyVirtualRunes,
+    getAllVirtualRunes,
+    getAllVirtualRunesCount,
     loading: engineLoading,
     error: engineError,
   } = useRuneEngine();
 
   // State
-  const [activeTab, setActiveTab] = useState<'all' | 'mine' | 'virtual' | 'etchings'>('all');
+  const [activeTab, setActiveTab] = useState<'all' | 'virtual-public' | 'mine' | 'virtual' | 'etchings'>('all');
   const [myRunes, setMyRunes] = useState<RegistryEntry[]>([]);
   const [myVirtualRunes, setMyVirtualRunes] = useState<VirtualRuneView[]>([]);
+  const [allPublicVirtualRunes, setAllPublicVirtualRunes] = useState<PublicVirtualRuneView[]>([]);
+  const [virtualRunesCount, setVirtualRunesCount] = useState<bigint>(0n);
   const [myEtchings, setMyEtchings] = useState<any[]>([]);
 
   // Stats
@@ -121,6 +125,20 @@ export default function ExplorerPagePremium() {
     }
   }, [getMyVirtualRunes]);
 
+  // Load ALL public virtual runes (visible to everyone)
+  const loadAllPublicVirtualRunes = useCallback(async () => {
+    try {
+      const [runes, count] = await Promise.all([
+        getAllVirtualRunes(0n, 100n),
+        getAllVirtualRunesCount(),
+      ]);
+      setAllPublicVirtualRunes(runes);
+      setVirtualRunesCount(count);
+    } catch (err) {
+      console.error('Failed to load public virtual runes:', err);
+    }
+  }, [getAllVirtualRunes, getAllVirtualRunesCount]);
+
   // Load user's etchings
   const loadMyEtchings = useCallback(async () => {
     try {
@@ -145,6 +163,7 @@ export default function ExplorerPagePremium() {
   useEffect(() => {
     loadMyRunes();
     loadMyVirtualRunes();
+    loadAllPublicVirtualRunes();
     loadMyEtchings();
     loadStats();
 
@@ -152,17 +171,19 @@ export default function ExplorerPagePremium() {
     const interval = setInterval(() => {
       loadMyRunes();
       loadMyVirtualRunes();
+      loadAllPublicVirtualRunes();
       loadMyEtchings();
       loadStats();
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [loadMyRunes, loadMyVirtualRunes, loadMyEtchings, loadStats]);
+  }, [loadMyRunes, loadMyVirtualRunes, loadAllPublicVirtualRunes, loadMyEtchings, loadStats]);
 
   const handleRefresh = () => {
     refetchRunes();
     loadMyRunes();
     loadMyVirtualRunes();
+    loadAllPublicVirtualRunes();
     loadMyEtchings();
     loadStats();
   };
@@ -174,10 +195,17 @@ export default function ExplorerPagePremium() {
   const statsData = [
     {
       icon: Coins,
-      label: 'Total Runes',
+      label: 'Bitcoin Runes',
       value: totalRunesCount.toString(),
       color: 'text-gold-600',
       bgColor: 'bg-gold-50',
+    },
+    {
+      icon: Database,
+      label: 'Virtual Runes',
+      value: virtualRunesCount.toString(),
+      color: 'text-purple-600',
+      bgColor: 'bg-purple-50',
     },
     {
       icon: Users,
@@ -187,16 +215,9 @@ export default function ExplorerPagePremium() {
       bgColor: 'bg-blue-50',
     },
     {
-      icon: Database,
-      label: 'Virtual',
-      value: myVirtualRunes.length.toString(),
-      color: 'text-purple-600',
-      bgColor: 'bg-purple-50',
-    },
-    {
       icon: TrendingUp,
-      label: 'Showing',
-      value: allRunes.length.toString(),
+      label: 'Total',
+      value: (Number(totalRunesCount) + Number(virtualRunesCount)).toString(),
       color: 'text-green-600',
       bgColor: 'bg-green-50',
     },
@@ -261,9 +282,10 @@ export default function ExplorerPagePremium() {
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div className="flex flex-wrap gap-3">
           {[
-            { id: 'all', icon: Coins, label: 'All Runes', count: allRunes.length },
+            { id: 'all', icon: Coins, label: 'Bitcoin Runes', count: allRunes.length },
+            { id: 'virtual-public', icon: Database, label: 'Virtual Runes', count: allPublicVirtualRunes.length },
             { id: 'mine', icon: Users, label: 'My Runes', count: myRunes.length },
-            { id: 'virtual', icon: Database, label: 'Virtual Runes', count: myVirtualRunes.length },
+            { id: 'virtual', icon: Sparkles, label: 'My Virtual', count: myVirtualRunes.length },
             { id: 'etchings', icon: Activity, label: 'Etchings', count: myEtchings.length },
           ].map((tab) => (
             <ButtonPremium
@@ -379,6 +401,117 @@ export default function ExplorerPagePremium() {
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* Public Virtual Runes Tab */}
+        {activeTab === 'virtual-public' && (
+          <div>
+            {allPublicVirtualRunes.length === 0 ? (
+              <div className="bg-white border-2 border-dashed border-gray-300 rounded-2xl p-12 text-center shadow-sm">
+                <div className="bg-purple-50 rounded-full p-6 w-24 h-24 mx-auto mb-6 flex items-center justify-center">
+                  <Database className="h-12 w-12 text-purple-600" />
+                </div>
+                <h3 className="font-serif text-2xl font-bold text-gray-900 mb-3">
+                  No Virtual Runes Yet
+                </h3>
+                <p className="text-gray-600 text-lg mb-8 max-w-md mx-auto">
+                  Be the first to create a Virtual Rune! They&apos;re free to create and can be traded instantly.
+                </p>
+                <Link href="/create">
+                  <ButtonPremium
+                    size="lg"
+                    variant="gold"
+                    icon={<Sparkles className="h-5 w-5" />}
+                  >
+                    Create First Virtual Rune
+                  </ButtonPremium>
+                </Link>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {/* Info Banner */}
+                <div className="bg-purple-50 border border-purple-200 rounded-xl p-4">
+                  <div className="flex items-start gap-3">
+                    <Database className="h-5 w-5 text-purple-600 mt-0.5 flex-shrink-0" />
+                    <div>
+                      <p className="text-sm text-purple-800">
+                        <strong>Virtual Runes</strong> are created on ICP (Internet Computer) and can be traded instantly with zero gas fees.
+                        When ready, creators can settle them to Bitcoin to become real Bitcoin Runes.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Grid of Virtual Runes */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {allPublicVirtualRunes.map((rune) => (
+                    <div
+                      key={rune.id}
+                      className="bg-museum-white border-2 border-purple-200 rounded-2xl p-6 hover:shadow-lg hover:border-purple-400 transition-all"
+                    >
+                      <div className="flex items-center gap-4 mb-4">
+                        <div className="w-12 h-12 bg-gradient-to-br from-purple-400 to-purple-600 rounded-xl flex items-center justify-center shadow-md">
+                          <span className="text-2xl font-bold text-white">
+                            {rune.symbol || rune.rune_name.charAt(0)}
+                          </span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-bold text-museum-black truncate">{rune.rune_name}</p>
+                          <p className="text-xs text-museum-dark-gray truncate">
+                            by {rune.creator.slice(0, 8)}...{rune.creator.slice(-4)}
+                          </p>
+                        </div>
+                        <span className={`px-2 py-1 text-xs font-medium rounded-full ${
+                          rune.status === 'Virtual'
+                            ? 'bg-purple-100 text-purple-700'
+                            : rune.status.includes('Etching')
+                            ? 'bg-yellow-100 text-yellow-700'
+                            : rune.status.includes('Etched')
+                            ? 'bg-green-100 text-green-700'
+                            : 'bg-gray-100 text-gray-700'
+                        }`}>
+                          {rune.status}
+                        </span>
+                      </div>
+                      <div className="space-y-2 text-sm">
+                        <div className="flex justify-between">
+                          <span className="text-museum-dark-gray">Symbol</span>
+                          <span className="font-mono text-museum-black">{rune.symbol || '-'}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-museum-dark-gray">Premine</span>
+                          <span className="font-mono text-museum-black">
+                            {Number(rune.premine).toLocaleString()}
+                          </span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-museum-dark-gray">Divisibility</span>
+                          <span className="font-mono text-museum-black">{rune.divisibility}</span>
+                        </div>
+                        <div className="flex justify-between">
+                          <span className="text-museum-dark-gray">Created</span>
+                          <span className="text-museum-black">
+                            {new Date(Number(rune.created_at) / 1_000_000).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-4 pt-4 border-t border-museum-light-gray">
+                        <Link href={`/swap?rune=${rune.id}`}>
+                          <ButtonPremium
+                            variant="gold"
+                            size="sm"
+                            className="w-full"
+                          >
+                            Trade
+                          </ButtonPremium>
+                        </Link>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
 

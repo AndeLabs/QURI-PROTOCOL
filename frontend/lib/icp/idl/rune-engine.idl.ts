@@ -49,6 +49,87 @@ export const idlFactory = ({ IDL }: any) => {
     updated_at: IDL.Nat64,
   });
 
+  const PublicVirtualRuneView = IDL.Record({
+    id: IDL.Text,
+    rune_name: IDL.Text,
+    symbol: IDL.Text,
+    divisibility: IDL.Nat8,
+    premine: IDL.Nat64,
+    terms: IDL.Opt(MintTerms),
+    status: IDL.Text,
+    creator: IDL.Principal,
+    created_at: IDL.Nat64,
+    updated_at: IDL.Nat64,
+  });
+
+  // Trading types
+  const TradingPoolView = IDL.Record({
+    rune_id: IDL.Text,
+    rune_name: IDL.Text,
+    symbol: IDL.Text,
+    icp_reserve: IDL.Nat64,
+    rune_reserve: IDL.Nat64,
+    total_supply: IDL.Nat64,
+    price_per_rune: IDL.Nat64,
+    market_cap: IDL.Nat,
+    creator: IDL.Principal,
+    created_at: IDL.Nat64,
+    last_trade_at: IDL.Nat64,
+    total_volume_icp: IDL.Nat,
+    total_trades: IDL.Nat64,
+    fees_collected: IDL.Nat64,
+    is_active: IDL.Bool,
+  });
+
+  const TradeQuoteView = IDL.Record({
+    rune_id: IDL.Text,
+    trade_type: IDL.Text,
+    input_amount: IDL.Nat64,
+    output_amount: IDL.Nat64,
+    price_per_rune: IDL.Nat64,
+    fee: IDL.Nat64,
+    price_impact_percent: IDL.Float64,
+    minimum_output: IDL.Nat64,
+    pool_icp_reserve: IDL.Nat64,
+    pool_rune_reserve: IDL.Nat64,
+  });
+
+  const TradeRecordView = IDL.Record({
+    id: IDL.Nat64,
+    rune_id: IDL.Text,
+    trader: IDL.Principal,
+    trade_type: IDL.Text,
+    icp_amount: IDL.Nat64,
+    rune_amount: IDL.Nat64,
+    price_per_rune: IDL.Nat64,
+    fee: IDL.Nat64,
+    timestamp: IDL.Nat64,
+  });
+
+  const RuneBalanceView = IDL.Record({
+    available: IDL.Nat64,
+    locked: IDL.Nat64,
+    total: IDL.Nat64,
+  });
+
+  const BalanceChangeView = IDL.Record({
+    id: IDL.Nat64,
+    rune_id: IDL.Text,
+    change_type: IDL.Text,
+    amount: IDL.Nat64,
+    balance_before: IDL.Nat64,
+    balance_after: IDL.Nat64,
+    timestamp: IDL.Nat64,
+    reference: IDL.Opt(IDL.Text),
+  });
+
+  const Result_TradingPool = IDL.Variant({ Ok: TradingPoolView, Err: IDL.Text });
+  const Result_TradeQuote = IDL.Variant({ Ok: TradeQuoteView, Err: IDL.Text });
+  const Result_TradeRecord = IDL.Variant({ Ok: TradeRecordView, Err: IDL.Text });
+  const Result_Price = IDL.Variant({ Ok: IDL.Nat64, Err: IDL.Text });
+  const Result_MarketCap = IDL.Variant({ Ok: IDL.Nat, Err: IDL.Text });
+  const Result_Balance = IDL.Variant({ Ok: IDL.Nat64, Err: IDL.Text });
+
   const EtchingConfigView = IDL.Record({
     network: BitcoinNetwork,
     fee_rate: IDL.Nat64,
@@ -289,7 +370,32 @@ export const idlFactory = ({ IDL }: any) => {
     get_my_virtual_runes: IDL.Func([], [IDL.Vec(VirtualRuneView)], ['query']),
     get_virtual_rune: IDL.Func([IDL.Text], [IDL.Opt(VirtualRuneView)], ['query']),
     get_virtual_rune_count: IDL.Func([], [IDL.Nat64], ['query']),
+    list_all_virtual_runes: IDL.Func([IDL.Nat64, IDL.Nat64], [IDL.Vec(PublicVirtualRuneView)], ['query']),
+    get_all_virtual_runes_count: IDL.Func([], [IDL.Nat64], ['query']),
     etch_to_bitcoin: IDL.Func([IDL.Text], [Result], []),
+
+    // Trading APIs
+    create_trading_pool: IDL.Func([IDL.Text, IDL.Nat64, IDL.Nat64], [Result_TradingPool], []),
+    get_buy_quote: IDL.Func([IDL.Text, IDL.Nat64, IDL.Nat64], [Result_TradeQuote], ['query']),
+    get_sell_quote: IDL.Func([IDL.Text, IDL.Nat64, IDL.Nat64], [Result_TradeQuote], ['query']),
+    buy_virtual_rune: IDL.Func([IDL.Text, IDL.Nat64, IDL.Nat64], [Result_TradeRecord], []),
+    sell_virtual_rune: IDL.Func([IDL.Text, IDL.Nat64, IDL.Nat64], [Result_TradeRecord], []),
+    get_rune_price: IDL.Func([IDL.Text], [Result_Price], ['query']),
+    get_rune_market_cap: IDL.Func([IDL.Text], [Result_MarketCap], ['query']),
+    get_trading_pool: IDL.Func([IDL.Text], [IDL.Opt(TradingPoolView)], ['query']),
+    list_trading_pools: IDL.Func([IDL.Nat64, IDL.Nat64], [IDL.Vec(TradingPoolView)], ['query']),
+    get_trading_pool_count: IDL.Func([], [IDL.Nat64], ['query']),
+    get_rune_trade_history: IDL.Func([IDL.Text, IDL.Nat64], [IDL.Vec(TradeRecordView)], ['query']),
+    get_my_trade_history: IDL.Func([IDL.Nat64], [IDL.Vec(TradeRecordView)], ['query']),
+
+    // ICP Balance & Deposit APIs
+    get_my_icp_balance: IDL.Func([], [IDL.Nat64], ['query']),
+    get_my_rune_balance: IDL.Func([IDL.Text], [RuneBalanceView], ['query']),
+    get_my_all_rune_balances: IDL.Func([], [IDL.Vec(IDL.Tuple(IDL.Text, RuneBalanceView))], ['query']),
+    get_deposit_address: IDL.Func([], [IDL.Text], ['query']),
+    verify_deposit: IDL.Func([], [Result_Balance], []),
+    withdraw_icp: IDL.Func([IDL.Nat64], [Result_Balance], []),
+    get_my_balance_history: IDL.Func([IDL.Nat64], [IDL.Vec(BalanceChangeView)], ['query']),
 
     // Bitcoin block height tracking
     get_bitcoin_block_height: IDL.Func([], [IDL.Opt(IDL.Nat64)], ['query']),

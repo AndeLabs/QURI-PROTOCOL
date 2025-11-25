@@ -16,9 +16,12 @@ import {
   AlertCircle,
   CheckCircle,
   Loader,
+  Zap,
+  BarChart3,
 } from 'lucide-react';
 import { useRegistry } from '@/hooks/useRegistry';
 import { useRuneEngine } from '@/hooks/useRuneEngine';
+import { useTrading } from '@/hooks/useTrading';
 
 interface StatCard {
   title: string;
@@ -46,18 +49,18 @@ const quickActions: QuickAction[] = [
     color: 'from-gold-400 to-gold-600',
   },
   {
+    title: 'Trade',
+    description: 'Buy & Sell Virtual Runes',
+    icon: Zap,
+    href: '/trade',
+    color: 'from-orange-400 to-red-500',
+  },
+  {
     title: 'Explorer',
     description: 'Browse all Runes',
     icon: Repeat,
     href: '/explorer',
     color: 'from-blue-400 to-blue-600',
-  },
-  {
-    title: 'Bridge',
-    description: 'Transfer BTC ↔ ICP',
-    icon: ArrowLeftRight,
-    href: '/bridge',
-    color: 'from-purple-400 to-purple-600',
   },
   {
     title: 'My Wallet',
@@ -84,9 +87,20 @@ export default function DashboardPage() {
     error: engineError,
   } = useRuneEngine();
 
+  const {
+    listPools,
+    getPoolCount,
+    getMyIcpBalance,
+    getMyAllRuneBalances,
+    formatIcp,
+  } = useTrading();
+
   const [stats, setStats] = useState<StatCard[]>([]);
   const [myRunes, setMyRunes] = useState<any[]>([]);
   const [myEtchings, setMyEtchings] = useState<any[]>([]);
+  const [tradingPools, setTradingPools] = useState<any[]>([]);
+  const [myIcpBalance, setMyIcpBalance] = useState<bigint>(0n);
+  const [myRuneBalances, setMyRuneBalances] = useState<any[]>([]);
   const [systemHealthy, setSystemHealthy] = useState(true);
   const [isLoading, setIsLoading] = useState(true);
 
@@ -97,11 +111,15 @@ export default function DashboardPage() {
         setIsLoading(true);
 
         // Load data in parallel - health check separate to not block
-        const [totalRunes, registryStats, userRunes, userEtchings] = await Promise.all([
+        const [totalRunes, registryStats, userRunes, userEtchings, pools, icpBalance, runeBalances, poolCount] = await Promise.all([
           getTotalRunes(),
           getStats(),
           getMyRunes(),
           getMyEtchings(),
+          listPools(0n, 50n),
+          getMyIcpBalance(),
+          getMyAllRuneBalances(),
+          getPoolCount(),
         ]);
 
         // Check health separately (non-blocking)
@@ -116,6 +134,9 @@ export default function DashboardPage() {
         // Set my runes and etchings
         setMyRunes(userRunes);
         setMyEtchings(userEtchings);
+        setTradingPools(pools);
+        setMyIcpBalance(icpBalance);
+        setMyRuneBalances(runeBalances);
 
         // Build stats cards
         const statsCards: StatCard[] = [
@@ -126,9 +147,9 @@ export default function DashboardPage() {
             trend: 'up',
           },
           {
-            title: 'My Runes',
-            value: userRunes.length.toString(),
-            icon: Users,
+            title: 'Trading Pools',
+            value: poolCount.toString(),
+            icon: BarChart3,
             trend: 'up',
           },
           {
@@ -137,12 +158,9 @@ export default function DashboardPage() {
             icon: Activity,
           },
           {
-            title: '24h Volume',
-            value: registryStats?.total_volume_24h
-              ? `${Number(registryStats.total_volume_24h).toLocaleString()}`
-              : '0',
+            title: 'My ICP Balance',
+            value: formatIcp(icpBalance),
             icon: TrendingUp,
-            trend: 'up',
           },
         ];
 
@@ -269,6 +287,101 @@ export default function DashboardPage() {
           })}
         </div>
       </div>
+
+      {/* Trading Pools */}
+      {tradingPools.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-serif text-2xl font-bold text-museum-black">
+              Active Trading Pools
+            </h2>
+            <Link href="/trade">
+              <Button variant="outline" size="sm">
+                View All Pools
+                <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4">
+            {tradingPools.slice(0, 5).map((pool) => (
+              <Link key={pool.rune_id} href={`/trade?rune=${pool.rune_id}`}>
+                <div className="border border-museum-light-gray rounded-lg p-4 bg-museum-white hover:border-gold-300 transition-colors cursor-pointer">
+                  <div className="flex items-center justify-between">
+                    <div className="flex-1">
+                      <h3 className="font-semibold text-museum-black">{pool.rune_id}</h3>
+                      <div className="flex items-center gap-4 mt-2 text-sm text-museum-dark-gray">
+                        <span>
+                          <span className="text-museum-charcoal font-medium">Liquidity:</span>{' '}
+                          {formatIcp(pool.icp_balance)} + {Number(pool.rune_balance).toLocaleString()} runes
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-4">
+                      <div className="text-right">
+                        <p className="text-sm text-museum-dark-gray">Total Trades</p>
+                        <p className="text-lg font-bold text-museum-black">{Number(pool.total_trades).toLocaleString()}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-sm text-museum-dark-gray">Volume</p>
+                        <p className="text-lg font-bold text-museum-black">{formatIcp(pool.total_volume_icp)}</p>
+                      </div>
+                      <Zap className="h-5 w-5 text-gold-500" />
+                    </div>
+                  </div>
+                </div>
+              </Link>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* My Rune Balances */}
+      {myRuneBalances.length > 0 && (
+        <div>
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="font-serif text-2xl font-bold text-museum-black">
+              My Rune Balances
+            </h2>
+            <Link href="/wallet">
+              <Button variant="outline" size="sm">
+                View Wallet
+                <ArrowUpRight className="ml-2 h-4 w-4" />
+              </Button>
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {myRuneBalances.slice(0, 6).map(([runeId, balance]) => (
+              <div
+                key={runeId}
+                className="border border-museum-light-gray rounded-lg p-4 bg-museum-white hover:border-gold-300 transition-colors"
+              >
+                <div className="flex items-center justify-between mb-2">
+                  <h3 className="font-semibold text-museum-black truncate">{runeId}</h3>
+                  <Coins className="h-4 w-4 text-gold-500" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex justify-between text-sm">
+                    <span className="text-museum-dark-gray">Available</span>
+                    <span className="font-medium text-museum-black">
+                      {Number(balance.available).toLocaleString()}
+                    </span>
+                  </div>
+                  {Number(balance.locked) > 0 && (
+                    <div className="flex justify-between text-sm">
+                      <span className="text-museum-dark-gray">Locked</span>
+                      <span className="font-medium text-orange-600">
+                        {Number(balance.locked).toLocaleString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* My Recent Etchings */}
       {myEtchings.length > 0 && (

@@ -21,7 +21,8 @@ import {
   PenTool,
   Layers,
   CircleDollarSign,
-  Shield, // <--- ADDED THIS LINE
+  Shield,
+  Zap,
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -70,22 +71,28 @@ const navigationSections: NavSection[] = [
     title: 'Runes',
     items: [
       {
+        name: 'Explorer',
+        href: '/explorer',
+        icon: Search,
+        description: 'Discover Runes',
+      },
+      {
         name: 'Create Rune',
         href: '/create',
         icon: Sparkles,
-        description: 'Etch new Rune',
+        description: 'Etch your own',
+      },
+      {
+        name: 'Trade',
+        href: '/trade',
+        icon: Zap,
+        description: 'Buy & Sell',
       },
       {
         name: 'My Runes',
         href: '/my-runes',
         icon: Coins,
-        description: 'Your Virtual Runes',
-      },
-      {
-        name: 'Explorer',
-        href: '/explorer',
-        icon: Search,
-        description: 'Browse all Runes',
+        description: 'Your portfolio',
       },
     ],
   },

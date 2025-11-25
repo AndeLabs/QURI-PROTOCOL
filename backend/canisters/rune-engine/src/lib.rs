@@ -6,6 +6,7 @@ use std::cell::RefCell;
 
 use quri_types::RuneEtching;
 
+mod balances;
 mod block_tracker;
 mod config;
 mod confirmation_tracker;
@@ -17,12 +18,14 @@ mod escrow;
 mod etching_flow;
 mod fee_manager;
 mod idempotency;
+mod ledger;
 mod logging;
 mod metrics;
 mod process_id;
 mod rbac;
 mod settlement;
 mod state;
+mod trading;
 mod validators;
 
 #[cfg(test)]
@@ -429,6 +432,40 @@ fn get_virtual_rune_count() -> u64 {
     state::get_virtual_rune_count()
 }
 
+/// List ALL virtual runes (PUBLIC - anyone can see)
+/// This enables discovery of Virtual Runes before they're settled to Bitcoin
+///
+/// @param offset - Starting position for pagination
+/// @param limit - Maximum number of runes to return (max 100)
+/// @returns List of virtual runes with creator info
+#[query]
+fn list_all_virtual_runes(offset: u64, limit: u64) -> Vec<PublicVirtualRuneView> {
+    // Cap limit to prevent abuse
+    let capped_limit = limit.min(100);
+
+    state::get_all_virtual_runes(offset, capped_limit)
+        .into_iter()
+        .map(|r| PublicVirtualRuneView {
+            id: r.id,
+            rune_name: r.etching.rune_name,
+            symbol: r.etching.symbol.clone(),
+            divisibility: r.etching.divisibility,
+            premine: r.etching.premine,
+            terms: r.etching.terms.clone(),
+            status: format!("{:?}", r.status),
+            creator: r.caller,
+            created_at: r.created_at,
+            updated_at: r.updated_at,
+        })
+        .collect()
+}
+
+/// Get total count of ALL virtual runes (for pagination)
+#[query]
+fn get_all_virtual_runes_count() -> u64 {
+    state::get_all_virtual_runes_count()
+}
+
 /// Update etching configuration (admin only)
 #[update]
 fn update_etching_config(cfg: EtchingConfigView) -> Result<(), String> {
@@ -763,14 +800,331 @@ fn cleanup_old_processes(age_days: u64) -> Result<u64, String> {
 
     let age_nanos = age_days * 24 * 60 * 60 * 1_000_000_000;
     let count = state::cleanup_old_processes(age_nanos);
-    
+
     ic_cdk::println!(
         "Cleaned up {} old processes by {}",
         count,
         ic_cdk::caller()
     );
-    
+
     Ok(count)
+}
+
+// ============================================================================
+// Virtual Rune Trading APIs
+// ============================================================================
+
+/// Create a trading pool for a Virtual Rune
+///
+/// The creator must provide initial ICP liquidity and specify how many runes to add.
+/// This sets the initial price: price = icp_amount / rune_amount
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param initial_icp - Initial ICP liquidity (in e8s, 1 ICP = 100_000_000 e8s)
+/// @param initial_runes - Initial rune liquidity
+#[update]
+fn create_trading_pool(rune_id: String, initial_icp: u64, initial_runes: u64) -> Result<TradingPoolView, String> {
+    let caller = ic_cdk::caller();
+
+    // Get the virtual rune
+    let rune = state::get_virtual_rune(&rune_id)
+        .ok_or("Virtual Rune not found")?;
+
+    // Verify caller is the creator
+    if rune.caller != caller {
+        return Err("Only the rune creator can create a trading pool".to_string());
+    }
+
+    // First, credit the premine to the creator (mint the runes)
+    let premine = rune.etching.premine;
+    balances::credit_balance(
+        caller,
+        &rune_id,
+        premine,
+        balances::BalanceChangeType::Mint,
+        Some("Premine allocation".to_string()),
+    )?;
+
+    // Debit the runes that will go into the pool
+    balances::debit_balance(
+        caller,
+        &rune_id,
+        initial_runes,
+        balances::BalanceChangeType::PoolDeposit,
+        Some("Initial pool liquidity".to_string()),
+    )?;
+
+    // Create the pool
+    let pool = trading::create_pool(&rune, initial_icp, initial_runes, caller)?;
+
+    Ok(TradingPoolView::from(pool))
+}
+
+/// Get a quote for buying Virtual Runes with ICP
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param icp_amount - Amount of ICP to spend (in e8s)
+/// @param slippage_bps - Slippage tolerance in basis points (100 = 1%)
+#[query]
+fn get_buy_quote(rune_id: String, icp_amount: u64, slippage_bps: u64) -> Result<TradeQuoteView, String> {
+    let quote = trading::get_buy_quote(&rune_id, icp_amount, slippage_bps)?;
+    Ok(TradeQuoteView::from(quote))
+}
+
+/// Get a quote for selling Virtual Runes for ICP
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param rune_amount - Amount of runes to sell
+/// @param slippage_bps - Slippage tolerance in basis points (100 = 1%)
+#[query]
+fn get_sell_quote(rune_id: String, rune_amount: u64, slippage_bps: u64) -> Result<TradeQuoteView, String> {
+    let quote = trading::get_sell_quote(&rune_id, rune_amount, slippage_bps)?;
+    Ok(TradeQuoteView::from(quote))
+}
+
+/// Execute a buy trade - buy Virtual Runes with ICP
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param icp_amount - Amount of ICP to spend (in e8s)
+/// @param min_runes_out - Minimum runes expected (slippage protection)
+#[update]
+fn buy_virtual_rune(rune_id: String, icp_amount: u64, min_runes_out: u64) -> Result<TradeRecordView, String> {
+    let caller = ic_cdk::caller();
+
+    // TODO: In production, integrate with ICP ledger to transfer tokens
+    // For now, we just update the pool state
+
+    let trade = trading::execute_buy(&rune_id, icp_amount, min_runes_out, caller)?;
+    Ok(TradeRecordView::from(trade))
+}
+
+/// Execute a sell trade - sell Virtual Runes for ICP
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param rune_amount - Amount of runes to sell
+/// @param min_icp_out - Minimum ICP expected (slippage protection)
+#[update]
+fn sell_virtual_rune(rune_id: String, rune_amount: u64, min_icp_out: u64) -> Result<TradeRecordView, String> {
+    let caller = ic_cdk::caller();
+
+    // TODO: In production, integrate with ICP ledger to transfer tokens
+    // For now, we just update the pool state
+
+    let trade = trading::execute_sell(&rune_id, rune_amount, min_icp_out, caller)?;
+    Ok(TradeRecordView::from(trade))
+}
+
+/// Get the current price of a Virtual Rune in ICP
+///
+/// @param rune_id - The Virtual Rune ID
+/// @returns Price in ICP e8s per rune
+#[query]
+fn get_rune_price(rune_id: String) -> Result<u64, String> {
+    trading::get_price(&rune_id)
+}
+
+/// Get the market cap of a Virtual Rune
+///
+/// @param rune_id - The Virtual Rune ID
+/// @returns Market cap in ICP e8s
+#[query]
+fn get_rune_market_cap(rune_id: String) -> Result<u128, String> {
+    trading::get_market_cap(&rune_id)
+}
+
+/// Get a trading pool by rune ID
+#[query]
+fn get_trading_pool(rune_id: String) -> Option<TradingPoolView> {
+    trading::get_pool(&rune_id).map(TradingPoolView::from)
+}
+
+/// List all trading pools
+///
+/// @param offset - Pagination offset
+/// @param limit - Maximum results (max 50)
+#[query]
+fn list_trading_pools(offset: u64, limit: u64) -> Vec<TradingPoolView> {
+    let capped_limit = limit.min(50);
+    trading::list_pools(offset, capped_limit)
+        .into_iter()
+        .map(TradingPoolView::from)
+        .collect()
+}
+
+/// Get total number of trading pools
+#[query]
+fn get_trading_pool_count() -> u64 {
+    trading::get_pool_count()
+}
+
+/// Get trade history for a specific rune
+///
+/// @param rune_id - The Virtual Rune ID
+/// @param limit - Maximum trades to return
+#[query]
+fn get_rune_trade_history(rune_id: String, limit: u64) -> Vec<TradeRecordView> {
+    trading::get_trade_history(&rune_id, limit as usize)
+        .into_iter()
+        .map(TradeRecordView::from)
+        .collect()
+}
+
+/// Get the caller's trade history
+///
+/// @param limit - Maximum trades to return
+#[query]
+fn get_my_trade_history(limit: u64) -> Vec<TradeRecordView> {
+    let caller = ic_cdk::caller();
+    trading::get_user_trades(caller, limit as usize)
+        .into_iter()
+        .map(TradeRecordView::from)
+        .collect()
+}
+
+// ============================================================================
+// ICP Balance & Deposit APIs
+// ============================================================================
+
+/// Get the caller's ICP trading balance (available for trading)
+///
+/// This is the ICP balance credited to the user for trading.
+/// Users must deposit ICP before they can buy runes.
+#[query]
+fn get_my_icp_balance() -> u64 {
+    let caller = ic_cdk::caller();
+    trading::get_user_icp_balance(caller)
+}
+
+/// Get the caller's rune balance for a specific rune
+///
+/// @param rune_id - The Virtual Rune ID
+#[query]
+fn get_my_rune_balance(rune_id: String) -> RuneBalanceView {
+    let caller = ic_cdk::caller();
+    let balance = trading::get_user_rune_balance(caller, &rune_id);
+    RuneBalanceView {
+        available: balance.available,
+        locked: balance.locked,
+        total: balance.total(),
+    }
+}
+
+/// Get all rune balances for the caller
+#[query]
+fn get_my_all_rune_balances() -> Vec<(String, RuneBalanceView)> {
+    let caller = ic_cdk::caller();
+    trading::get_user_all_rune_balances(caller)
+        .into_iter()
+        .map(|(rune_id, balance)| {
+            (rune_id, RuneBalanceView {
+                available: balance.available,
+                locked: balance.locked,
+                total: balance.total(),
+            })
+        })
+        .collect()
+}
+
+// ============================================================================
+// Admin Balance Query Functions (for debugging)
+// ============================================================================
+
+/// Get ICP balance for any user (admin query for debugging)
+#[query]
+fn get_user_icp_balance_admin(user: Principal) -> u64 {
+    trading::get_user_icp_balance(user)
+}
+
+/// Get rune balance for any user (admin query for debugging)
+#[query]
+fn get_user_rune_balance_admin(user: Principal, rune_id: String) -> RuneBalanceView {
+    let balance = trading::get_user_rune_balance(user, &rune_id);
+    RuneBalanceView {
+        available: balance.available,
+        locked: balance.locked,
+        total: balance.total(),
+    }
+}
+
+/// Get all rune balances for any user (admin query for debugging)
+#[query]
+fn get_user_all_rune_balances_admin(user: Principal) -> Vec<(String, RuneBalanceView)> {
+    trading::get_user_all_rune_balances(user)
+        .into_iter()
+        .map(|(rune_id, balance)| {
+            (rune_id, RuneBalanceView {
+                available: balance.available,
+                locked: balance.locked,
+                total: balance.total(),
+            })
+        })
+        .collect()
+}
+
+/// Get the deposit address for ICP
+///
+/// Returns the account identifier where users should send ICP to deposit.
+/// After sending ICP to this address, call `verify_deposit` to credit the balance.
+#[query]
+fn get_deposit_address() -> String {
+    let caller = ic_cdk::caller();
+    let account = ledger::get_user_deposit_account(caller);
+    account.to_string()
+}
+
+/// Verify and credit a deposit
+///
+/// After sending ICP to the deposit address, call this function to:
+/// 1. Verify the deposit in the user's subaccount
+/// 2. Transfer it to the canister's main account
+/// 3. Credit the trading balance
+///
+/// @returns The amount credited (after transfer fee)
+#[update]
+async fn verify_deposit() -> Result<u64, String> {
+    let caller = ic_cdk::caller();
+
+    if caller == Principal::anonymous() {
+        return Err("Anonymous principals cannot deposit".to_string());
+    }
+
+    ledger::verify_and_credit_deposit(caller).await
+}
+
+/// Withdraw ICP from trading balance to user's wallet
+///
+/// @param amount - Amount to withdraw (in e8s)
+/// @returns Block index of the transfer
+#[update]
+async fn withdraw_icp(amount: u64) -> Result<u64, String> {
+    let caller = ic_cdk::caller();
+
+    if caller == Principal::anonymous() {
+        return Err("Anonymous principals cannot withdraw".to_string());
+    }
+
+    ledger::withdraw_icp(caller, amount).await
+}
+
+/// Get the canister's ICP balance
+///
+/// Admin-only endpoint to check total ICP held by the canister.
+#[query]
+async fn get_canister_icp_balance() -> Result<u64, String> {
+    require_admin!()?;
+    ledger::get_canister_balance().await
+}
+
+/// Get balance history for the caller
+///
+/// @param limit - Maximum records to return
+#[query]
+fn get_my_balance_history(limit: u64) -> Vec<BalanceChangeView> {
+    let caller = ic_cdk::caller();
+    balances::get_user_balance_history(caller, limit as usize)
+        .into_iter()
+        .map(BalanceChangeView::from)
+        .collect()
 }
 
 // ============================================================================
@@ -798,6 +1152,188 @@ pub struct VirtualRuneView {
     pub status: String,
     pub created_at: u64,
     pub updated_at: u64,
+}
+
+/// Public view of a virtual rune (includes creator info for public listing)
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct PublicVirtualRuneView {
+    pub id: String,
+    pub rune_name: String,
+    pub symbol: String,
+    pub divisibility: u8,
+    pub premine: u64,
+    pub terms: Option<quri_types::MintTerms>,
+    pub status: String,
+    pub creator: Principal,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+// ============================================================================
+// Trading View Types
+// ============================================================================
+
+/// View of a trading pool for Candid interface
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct TradingPoolView {
+    pub rune_id: String,
+    pub rune_name: String,
+    pub symbol: String,
+    pub icp_reserve: u64,
+    pub rune_reserve: u64,
+    pub total_supply: u64,
+    pub price_per_rune: u64,
+    pub market_cap: u128,
+    pub creator: Principal,
+    pub created_at: u64,
+    pub last_trade_at: u64,
+    pub total_volume_icp: u128,
+    pub total_trades: u64,
+    pub fees_collected: u64,
+    pub is_active: bool,
+}
+
+impl From<trading::TradingPool> for TradingPoolView {
+    fn from(pool: trading::TradingPool) -> Self {
+        let price_per_rune = if pool.rune_reserve > 0 {
+            pool.icp_reserve / pool.rune_reserve
+        } else {
+            0
+        };
+        let market_cap = (price_per_rune as u128) * (pool.total_supply as u128);
+
+        TradingPoolView {
+            rune_id: pool.rune_id,
+            rune_name: pool.rune_name,
+            symbol: pool.symbol,
+            icp_reserve: pool.icp_reserve,
+            rune_reserve: pool.rune_reserve,
+            total_supply: pool.total_supply,
+            price_per_rune,
+            market_cap,
+            creator: pool.creator,
+            created_at: pool.created_at,
+            last_trade_at: pool.last_trade_at,
+            total_volume_icp: pool.total_volume_icp,
+            total_trades: pool.total_trades,
+            fees_collected: pool.fees_collected,
+            is_active: pool.is_active,
+        }
+    }
+}
+
+/// View of a trade quote for Candid interface
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct TradeQuoteView {
+    pub rune_id: String,
+    pub trade_type: String,
+    pub input_amount: u64,
+    pub output_amount: u64,
+    pub price_per_rune: u64,
+    pub fee: u64,
+    pub price_impact_percent: f64,
+    pub minimum_output: u64,
+    pub pool_icp_reserve: u64,
+    pub pool_rune_reserve: u64,
+}
+
+impl From<trading::TradeQuote> for TradeQuoteView {
+    fn from(quote: trading::TradeQuote) -> Self {
+        TradeQuoteView {
+            rune_id: quote.rune_id,
+            trade_type: match quote.trade_type {
+                trading::TradeType::Buy => "Buy".to_string(),
+                trading::TradeType::Sell => "Sell".to_string(),
+            },
+            input_amount: quote.input_amount,
+            output_amount: quote.output_amount,
+            price_per_rune: quote.price_per_rune,
+            fee: quote.fee,
+            price_impact_percent: quote.price_impact_percent,
+            minimum_output: quote.minimum_output,
+            pool_icp_reserve: quote.pool_icp_reserve,
+            pool_rune_reserve: quote.pool_rune_reserve,
+        }
+    }
+}
+
+/// View of a trade record for Candid interface
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct TradeRecordView {
+    pub id: u64,
+    pub rune_id: String,
+    pub trader: Principal,
+    pub trade_type: String,
+    pub icp_amount: u64,
+    pub rune_amount: u64,
+    pub price_per_rune: u64,
+    pub fee: u64,
+    pub timestamp: u64,
+}
+
+impl From<trading::TradeRecord> for TradeRecordView {
+    fn from(trade: trading::TradeRecord) -> Self {
+        TradeRecordView {
+            id: trade.id,
+            rune_id: trade.rune_id,
+            trader: trade.trader,
+            trade_type: match trade.trade_type {
+                trading::TradeType::Buy => "Buy".to_string(),
+                trading::TradeType::Sell => "Sell".to_string(),
+            },
+            icp_amount: trade.icp_amount,
+            rune_amount: trade.rune_amount,
+            price_per_rune: trade.price_per_rune,
+            fee: trade.fee,
+            timestamp: trade.timestamp,
+        }
+    }
+}
+
+/// View of user's rune balance
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct RuneBalanceView {
+    pub available: u64,
+    pub locked: u64,
+    pub total: u64,
+}
+
+/// View of a balance change record
+#[derive(CandidType, Deserialize, Clone, Debug)]
+pub struct BalanceChangeView {
+    pub id: u64,
+    pub rune_id: String,
+    pub change_type: String,
+    pub amount: u64,
+    pub balance_before: u64,
+    pub balance_after: u64,
+    pub timestamp: u64,
+    pub reference: Option<String>,
+}
+
+impl From<balances::BalanceChange> for BalanceChangeView {
+    fn from(change: balances::BalanceChange) -> Self {
+        BalanceChangeView {
+            id: change.id,
+            rune_id: change.rune_id,
+            change_type: match change.change_type {
+                balances::BalanceChangeType::Mint => "Mint".to_string(),
+                balances::BalanceChangeType::Buy => "Buy".to_string(),
+                balances::BalanceChangeType::Sell => "Sell".to_string(),
+                balances::BalanceChangeType::TransferIn => "TransferIn".to_string(),
+                balances::BalanceChangeType::TransferOut => "TransferOut".to_string(),
+                balances::BalanceChangeType::Lock => "Lock".to_string(),
+                balances::BalanceChangeType::Unlock => "Unlock".to_string(),
+                balances::BalanceChangeType::PoolDeposit => "PoolDeposit".to_string(),
+                balances::BalanceChangeType::PoolWithdraw => "PoolWithdraw".to_string(),
+            },
+            amount: change.amount,
+            balance_before: change.balance_before,
+            balance_after: change.balance_after,
+            timestamp: change.timestamp,
+            reference: change.reference,
+        }
+    }
 }
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
