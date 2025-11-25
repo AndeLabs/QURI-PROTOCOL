@@ -33,6 +33,7 @@ export default function BridgePage() {
     getXtcBalance,
     convertIcpToCycles,
     wrapCyclesToXtc,
+    unwrapXtcToCycles,
     estimateCyclesFromIcp,
     formatCycles,
     formatIcp,
@@ -46,7 +47,7 @@ export default function BridgePage() {
   const [currentStep, setCurrentStep] = useState(0);
 
   // Cycles conversion state
-  const [cyclesDirection, setCyclesDirection] = useState<'icp-to-cycles' | 'cycles-to-xtc'>('icp-to-cycles');
+  const [cyclesDirection, setCyclesDirection] = useState<'icp-to-cycles' | 'cycles-to-xtc' | 'xtc-to-cycles'>('icp-to-cycles');
   const [cyclesAmount, setCyclesAmount] = useState('');
   const [icpBalance, setIcpBalance] = useState<bigint>(0n);
   const [cyclesBalance, setCyclesBalance] = useState<bigint>(0n);
@@ -87,10 +88,14 @@ export default function BridgePage() {
         const icpE8s = BigInt(Math.floor(parseFloat(cyclesAmount) * 100_000_000));
         const cycles = await estimateCyclesFromIcp(icpE8s);
         setEstimatedOutput(cycles);
-      } else {
+      } else if (cyclesDirection === 'cycles-to-xtc') {
         // Cycles to XTC is 1:1 (1 TC = 1 XTC)
         const cyclesInput = BigInt(Math.floor(parseFloat(cyclesAmount) * 1_000_000_000_000));
         setEstimatedOutput(cyclesInput);
+      } else {
+        // XTC to Cycles is 1:1 (1 XTC = 1 TC)
+        const xtcInput = BigInt(Math.floor(parseFloat(cyclesAmount) * 1_000_000_000_000));
+        setEstimatedOutput(xtcInput);
       }
     };
 
@@ -106,10 +111,14 @@ export default function BridgePage() {
     if (cyclesDirection === 'icp-to-cycles') {
       const icpE8s = BigInt(Math.floor(parseFloat(cyclesAmount) * 100_000_000));
       result = await convertIcpToCycles(icpE8s);
-    } else {
+    } else if (cyclesDirection === 'cycles-to-xtc') {
       // Cycles to XTC - convert TC to cycles (multiply by 1e12)
       const cyclesInput = BigInt(Math.floor(parseFloat(cyclesAmount) * 1_000_000_000_000));
       result = await wrapCyclesToXtc(cyclesInput);
+    } else {
+      // XTC to Cycles - convert XTC to cycles (multiply by 1e12)
+      const xtcInput = BigInt(Math.floor(parseFloat(cyclesAmount) * 1_000_000_000_000));
+      result = await unwrapXtcToCycles(xtcInput);
     }
 
     if (result?.success) {
@@ -263,7 +272,9 @@ export default function BridgePage() {
                     <p className="text-museum-dark-gray">
                       {cyclesDirection === 'icp-to-cycles'
                         ? 'Your cycles have been minted successfully'
-                        : 'Your cycles have been wrapped to XTC tokens'}
+                        : cyclesDirection === 'cycles-to-xtc'
+                        ? 'Your cycles have been wrapped to XTC tokens'
+                        : 'Your XTC has been unwrapped to Cycles'}
                     </p>
                   </div>
                 ) : (
@@ -323,7 +334,7 @@ export default function BridgePage() {
                           setCyclesDirection('icp-to-cycles');
                           setCyclesAmount('');
                         }}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-lg font-medium text-sm transition-all ${
                           cyclesDirection === 'icp-to-cycles'
                             ? 'bg-museum-white text-museum-black shadow-sm'
                             : 'text-museum-dark-gray hover:text-museum-black'
@@ -336,13 +347,26 @@ export default function BridgePage() {
                           setCyclesDirection('cycles-to-xtc');
                           setCyclesAmount('');
                         }}
-                        className={`flex-1 flex items-center justify-center gap-2 px-4 py-3 rounded-lg font-medium transition-all ${
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-lg font-medium text-sm transition-all ${
                           cyclesDirection === 'cycles-to-xtc'
                             ? 'bg-museum-white text-museum-black shadow-sm'
                             : 'text-museum-dark-gray hover:text-museum-black'
                         }`}
                       >
                         Cycles → XTC
+                      </button>
+                      <button
+                        onClick={() => {
+                          setCyclesDirection('xtc-to-cycles');
+                          setCyclesAmount('');
+                        }}
+                        className={`flex-1 flex items-center justify-center gap-2 px-3 py-3 rounded-lg font-medium text-sm transition-all ${
+                          cyclesDirection === 'xtc-to-cycles'
+                            ? 'bg-museum-white text-museum-black shadow-sm'
+                            : 'text-museum-dark-gray hover:text-museum-black'
+                        }`}
+                      >
+                        XTC → Cycles
                       </button>
                     </div>
 
@@ -356,11 +380,11 @@ export default function BridgePage() {
                       </div>
                     )}
 
-                    {cyclesDirection === 'cycles-to-xtc' && (
+                    {(cyclesDirection === 'cycles-to-xtc' || cyclesDirection === 'xtc-to-cycles') && (
                       <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
                         <p className="text-sm text-amber-900">
                           <span className="font-semibold">Rate:</span>{' '}
-                          1 TC (Trillion Cycles) = 1 XTC
+                          1 TC (Trillion Cycles) = 1 XTC (1:1 conversion)
                         </p>
                       </div>
                     )}
@@ -383,7 +407,7 @@ export default function BridgePage() {
                             <p className="text-sm font-medium">Cycles</p>
                           </div>
                         </>
-                      ) : (
+                      ) : cyclesDirection === 'cycles-to-xtc' ? (
                         <>
                           <div className="text-center">
                             <div className="w-12 h-12 bg-cyan-600 rounded-full flex items-center justify-center mx-auto mb-2">
@@ -399,6 +423,22 @@ export default function BridgePage() {
                             <p className="text-sm font-medium">XTC</p>
                           </div>
                         </>
+                      ) : (
+                        <>
+                          <div className="text-center">
+                            <div className="w-12 h-12 bg-amber-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <span className="text-white font-bold">X</span>
+                            </div>
+                            <p className="text-sm font-medium">XTC</p>
+                          </div>
+                          <ArrowRight className="h-6 w-6 text-gold-600" />
+                          <div className="text-center">
+                            <div className="w-12 h-12 bg-cyan-600 rounded-full flex items-center justify-center mx-auto mb-2">
+                              <span className="text-white font-bold">⚡</span>
+                            </div>
+                            <p className="text-sm font-medium">Cycles</p>
+                          </div>
+                        </>
                       )}
                     </div>
 
@@ -410,10 +450,15 @@ export default function BridgePage() {
                             <span className="font-semibold">ICP → Cycles:</span>{' '}
                             Convert ICP to cycles for canister operations. Cycles are used to pay for computation on ICP.
                           </>
-                        ) : (
+                        ) : cyclesDirection === 'cycles-to-xtc' ? (
                           <>
                             <span className="font-semibold">Cycles → XTC:</span>{' '}
                             Wrap your cycles into XTC tokens. XTC is a tradeable token that can be exchanged on DEXs like ICPSwap or Sonic.
+                          </>
+                        ) : (
+                          <>
+                            <span className="font-semibold">XTC → Cycles:</span>{' '}
+                            Unwrap your XTC tokens back to cycles. Use cycles to power canisters or convert to ICP.
                           </>
                         )}
                       </p>
@@ -422,7 +467,11 @@ export default function BridgePage() {
                     {/* Amount Input */}
                     <div className="space-y-2">
                       <label className="text-sm font-medium text-museum-black">
-                        {cyclesDirection === 'icp-to-cycles' ? 'ICP Amount' : 'Cycles Amount (TC)'}
+                        {cyclesDirection === 'icp-to-cycles'
+                          ? 'ICP Amount'
+                          : cyclesDirection === 'cycles-to-xtc'
+                          ? 'Cycles Amount (TC)'
+                          : 'XTC Amount'}
                       </label>
                       <div className="relative">
                         <input
@@ -437,8 +486,11 @@ export default function BridgePage() {
                             if (cyclesDirection === 'icp-to-cycles') {
                               const max = Number(icpBalance) / 100_000_000 - 0.0001; // Leave for fee
                               setCyclesAmount(max > 0 ? max.toString() : '0');
-                            } else {
+                            } else if (cyclesDirection === 'cycles-to-xtc') {
                               const max = Number(cyclesBalance) / 1_000_000_000_000; // TC
+                              setCyclesAmount(max > 0 ? max.toString() : '0');
+                            } else {
+                              const max = Number(xtcBalance) / 1_000_000_000_000; // XTC
                               setCyclesAmount(max > 0 ? max.toString() : '0');
                             }
                           }}
@@ -456,7 +508,9 @@ export default function BridgePage() {
                         <p className="font-mono font-bold text-2xl text-museum-black">
                           {cyclesDirection === 'icp-to-cycles'
                             ? `${formatCycles(estimatedOutput)} TC`
-                            : `${formatCycles(estimatedOutput)} XTC`}
+                            : cyclesDirection === 'cycles-to-xtc'
+                            ? `${formatCycles(estimatedOutput)} XTC`
+                            : `${formatCycles(estimatedOutput)} TC`}
                         </p>
                       </div>
                     )}
@@ -489,7 +543,9 @@ export default function BridgePage() {
                           <Zap className="h-5 w-5 mr-2" />
                           {cyclesDirection === 'icp-to-cycles'
                             ? 'Convert to Cycles'
-                            : 'Wrap to XTC'}
+                            : cyclesDirection === 'cycles-to-xtc'
+                            ? 'Wrap to XTC'
+                            : 'Unwrap to Cycles'}
                         </>
                       )}
                     </Button>
