@@ -21,6 +21,7 @@ import {
   PenTool,
   Layers,
   CircleDollarSign,
+  Shield, // <--- ADDED THIS LINE
 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -113,6 +114,17 @@ const navigationSections: NavSection[] = [
         href: '/brc20',
         icon: CircleDollarSign,
         description: 'Browse BRC-20 tokens',
+      },
+    ],
+  },
+  {
+    title: 'Advanced Tools',
+    items: [
+      {
+        name: 'Security Center',
+        href: '/security',
+        icon: Shield, // Using Shield icon from lucide-react
+        description: 'DMS, vetKeys & more',
       },
     ],
   },

@@ -62,9 +62,9 @@ pub fn record_query(method: &str, duration_ns: u64) {
             metrics.fastest_query_time_ns = duration_ns;
         } else {
             // Rolling average
-            metrics.avg_query_time_ns =
-                (metrics.avg_query_time_ns * (metrics.total_queries - 1) + duration_ns)
-                    / metrics.total_queries;
+            metrics.avg_query_time_ns = (metrics.avg_query_time_ns * (metrics.total_queries - 1)
+                + duration_ns)
+                / metrics.total_queries;
 
             if duration_ns > metrics.slowest_query_time_ns {
                 metrics.slowest_query_time_ns = duration_ns;
@@ -120,12 +120,7 @@ pub fn get_metrics() -> RegistryMetrics {
     METRICS.with(|m| m.borrow().clone())
 }
 
-/// Reset all metrics (admin function)
-pub fn reset_metrics() {
-    METRICS.with(|m| {
-        *m.borrow_mut() = RegistryMetrics::default();
-    });
-}
+// reset_metrics - Removed (dead code, admin function not exposed)
 
 /// Helper macro to measure query execution time
 #[macro_export]

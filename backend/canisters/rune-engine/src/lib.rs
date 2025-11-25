@@ -1,10 +1,10 @@
 use candid::{CandidType, Deserialize, Principal};
 use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
 use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
-use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap};
+use ic_stable_structures::DefaultMemoryImpl;
 use std::cell::RefCell;
 
-use quri_types::{RuneEtching, RuneKey, RuneMetadata};
+use quri_types::RuneEtching;
 
 mod block_tracker;
 mod config;
@@ -13,6 +13,7 @@ mod cycles_monitor;
 mod dead_man_switch;
 mod encrypted_metadata;
 mod errors;
+mod escrow;
 mod etching_flow;
 mod fee_manager;
 mod idempotency;
@@ -84,6 +85,10 @@ fn init() {
     // Initialize settlement history (MemoryId 11)
     let settlement_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(11)));
     settlement::init_settlement_history(settlement_memory);
+
+    // Initialize escrow storage (MemoryId 12)
+    let escrow_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(12)));
+    escrow::init_escrow_storage(escrow_memory);
 
     // Schedule timer initialization after init completes
     // Timers cannot be set during init/post_upgrade, so we use a one-shot timer
@@ -158,6 +163,14 @@ fn post_upgrade() {
     // Reinitialize virtual rune storage (MemoryId 10)
     let virtual_rune_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(10)));
     state::init_virtual_rune_storage(virtual_rune_memory);
+
+    // Reinitialize settlement history (MemoryId 11)
+    let settlement_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(11)));
+    settlement::reinit_settlement_history(settlement_memory);
+
+    // Reinitialize escrow storage (MemoryId 12)
+    let escrow_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(12)));
+    escrow::reinit_escrow_storage(escrow_memory);
 
     // Schedule timer initialization after post_upgrade completes
     // Timers cannot be set during init/post_upgrade, so we use a one-shot timer
@@ -1044,6 +1057,105 @@ fn get_pending_settlement_count() -> u64 {
                 | settlement::SettlementStatus::Confirming
         ))
         .count() as u64
+}
+
+// ============================================================================
+// Escrow Management APIs
+// ============================================================================
+
+/// Get escrow entry for a specific process
+#[query]
+fn get_escrow_status(process_id: String) -> Option<escrow::EscrowEntry> {
+    escrow::get_escrow_by_string(&process_id)
+}
+
+/// Get all escrow entries for the caller
+#[query]
+fn get_my_escrows() -> Vec<escrow::EscrowEntry> {
+    let caller = ic_cdk::caller();
+    escrow::get_user_escrows(caller)
+}
+
+/// Get escrow statistics (Admin only)
+#[query]
+fn get_escrow_stats() -> Result<escrow::EscrowStats, String> {
+    require_admin!()?;
+    Ok(escrow::get_escrow_stats())
+}
+
+/// Cleanup old escrow entries (Admin only)
+#[update]
+fn cleanup_old_escrows(age_days: u64) -> Result<u64, String> {
+    require_admin!()?;
+
+    let age_nanos = age_days * 24 * 60 * 60 * 1_000_000_000;
+    let count = escrow::cleanup_old_escrows(age_nanos);
+
+    ic_cdk::println!(
+        "Cleaned up {} old escrow entries by {}",
+        count,
+        ic_cdk::caller()
+    );
+
+    Ok(count)
+}
+
+/// Manual refund for failed escrow (Admin only)
+/// Use this when automatic refund fails and manual intervention is needed
+#[update]
+async fn admin_manual_refund(process_id: String) -> Result<u64, String> {
+    require_admin!()?;
+
+    // Get escrow entry
+    let mut escrow_entry = escrow::get_escrow_by_string(&process_id)
+        .ok_or_else(|| format!("Escrow entry not found for process: {}", process_id))?;
+
+    // Check if refund is possible
+    if !escrow_entry.can_refund() {
+        return Err(format!(
+            "Cannot refund escrow in status: {:?}",
+            escrow_entry.status
+        ));
+    }
+
+    // Get bitcoin-integration canister ID
+    let btc_canister_id = crate::get_bitcoin_integration_id()?;
+
+    // Perform refund
+    let memo = format!("Manual refund for process: {}", process_id);
+    let (transfer_result,): (Result<u64, String>,) = ic_cdk::call(
+        btc_canister_id,
+        "transfer_ckbtc",
+        (escrow_entry.payer, escrow_entry.amount, Some(memo.into_bytes())),
+    )
+    .await
+    .map_err(|(code, msg)| {
+        format!("ckBTC transfer call failed: {:?} - {}", code, msg)
+    })?;
+
+    match transfer_result {
+        Ok(block_index) => {
+            // Mark escrow as refunded
+            escrow_entry.mark_refunded(block_index);
+            escrow::update_escrow(&escrow_entry)?;
+
+            ic_cdk::println!(
+                "Manual refund successful for process {}: {} sats refunded to {} (block: {})",
+                process_id,
+                escrow_entry.amount,
+                escrow_entry.payer,
+                block_index
+            );
+
+            Ok(block_index)
+        }
+        Err(e) => {
+            // Mark refund as failed
+            escrow_entry.mark_refund_failed(e.clone());
+            escrow::update_escrow(&escrow_entry)?;
+            Err(format!("Manual refund failed: {}", e))
+        }
+    }
 }
 
 ic_cdk::export_candid!();

@@ -1,4 +1,5 @@
 ---
+name: "Security Audit"
 description: "Expert in security auditing, vulnerability assessment, and smart contract security"
 model: sonnet
 color: red

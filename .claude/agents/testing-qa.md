@@ -1,4 +1,5 @@
 ---
+name: "Testing & QA"
 description: "Expert in testing strategies, QA, and quality assurance for Rust and TypeScript"
 model: sonnet
 color: purple

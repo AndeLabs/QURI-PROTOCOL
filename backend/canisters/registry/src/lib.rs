@@ -1,8 +1,8 @@
 /*!
  * Registry Canister - REDISEÑADO con RuneKey bounded
- * 
+ *
  * ## Cambios Críticos
- * 
+ *
  * 1. ✅ RuneKey (bounded) en lugar de RuneId (unbounded)
  * 2. ✅ Índices secundarios para búsquedas O(log n)
  * 3. ✅ Validación robusta con builder pattern
@@ -18,19 +18,22 @@ use ic_stable_structures::{DefaultMemoryImpl, StableBTreeMap, StableVec};
 use std::cell::RefCell;
 
 use quri_types::{
-    Page, PagedResponse, RegistryEntry, RuneKey, RuneMetadata, RuneSortBy,
-    SortOrder,
+    Page, PagedResponse, RegistryEntry, RuneKey, RuneMetadata, RuneSortBy, SortOrder,
 };
 
+mod admin;
 mod bitcoin_client;
 mod indexer;
+mod metrics;
 mod parser;
 mod rate_limit;
-mod metrics;
+mod staking;
 
+pub use admin::AdminEntry;
+pub use bitcoin_client::{convert_hiro_rune, fetch_runes_from_hiro, HiroEtchingsResponse};
 pub use indexer::{IndexedRune, IndexerConfig, IndexerStats, MintTerms, RuneIdentifier};
 pub use metrics::RegistryMetrics;
-pub use bitcoin_client::{fetch_runes_from_hiro, convert_hiro_rune, HiroEtchingsResponse};
+pub use staking::{RewardCalculation, StakePosition, StakingPool, StakingStats};
 
 // ============================================================================
 // TYPE ALIASES
@@ -52,6 +55,9 @@ type CreatorIndex = StableBTreeMap<CreatorIndexKey, (), Memory>;
 // MEMORIA 3: Índice inverso de RuneId legacy para migración
 type LegacyIndex = StableVec<RuneKey, Memory>;
 
+// MEMORIA 4: Admin storage para RBAC
+// (Se inicializa en el módulo admin)
+
 // ============================================================================
 // THREAD LOCAL STORAGE
 // ============================================================================
@@ -66,21 +72,21 @@ thread_local! {
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)))
         )
     );
-    
+
     /// MEMORIA 1: Índice por nombre
     static NAME_INDEX: RefCell<NameIndex> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(1)))
         )
     );
-    
+
     /// MEMORIA 2: Índice por creator
     static CREATOR_INDEX: RefCell<CreatorIndex> = RefCell::new(
         StableBTreeMap::init(
             MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(2)))
         )
     );
-    
+
     /// MEMORIA 3: Lista de todas las keys (para iteración eficiente)
     static INDEX: RefCell<LegacyIndex> = RefCell::new(
         StableVec::init(
@@ -102,6 +108,13 @@ thread_local! {
 #[init]
 fn init() {
     ic_cdk::println!("Registry canister initialized with RuneKey bounded architecture");
+
+    // Inicializar sistema de administración
+    let caller = ic_cdk::caller();
+    let memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4)));
+    admin::init_admin(memory, caller);
+
+    ic_cdk::println!("🔐 Admin system initialized with owner: {}", caller);
 }
 
 #[pre_upgrade]
@@ -113,18 +126,25 @@ fn pre_upgrade() {
 #[post_upgrade]
 fn post_upgrade() {
     ic_cdk::println!("Registry upgrade completed");
-    
+
+    // Reinicializar admin storage
+    let memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(4)));
+    admin::reinit_admin_storage(memory);
+
+    // Initialize staking stats if not present (safe to call multiple times)
+    staking::init_staking_stats_if_needed();
+
     // Rebuild índices si es necesario
     rebuild_indexes_if_needed();
 }
 
 /// Rebuild índices desde el storage principal
-/// 
+///
 /// Útil después de upgrades o si índices se corrompen
 fn rebuild_indexes_if_needed() {
     let registry_count = REGISTRY.with(|r| r.borrow().len());
     let name_index_count = NAME_INDEX.with(|idx| idx.borrow().len());
-    
+
     // Si los conteos no matchean, rebuild
     if registry_count != name_index_count {
         ic_cdk::println!("⚠️  Index mismatch detected. Rebuilding indexes...");
@@ -141,7 +161,7 @@ fn rebuild_all_indexes() {
             idx_mut.remove(&key);
         }
     });
-    
+
     CREATOR_INDEX.with(|idx| {
         let mut idx_mut = idx.borrow_mut();
         let keys: Vec<_> = idx_mut.iter().map(|(k, _)| k).collect();
@@ -149,25 +169,24 @@ fn rebuild_all_indexes() {
             idx_mut.remove(&key);
         }
     });
-    
+
     // Rebuild from registry
-    let entries: Vec<_> = REGISTRY.with(|r| {
-        r.borrow().iter().collect()
-    });
-    
+    let entries: Vec<_> = REGISTRY.with(|r| r.borrow().iter().collect());
+
     for (key, entry) in entries {
         // Rebuild name index
         let name_key = entry.metadata.name.as_bytes().to_vec();
         NAME_INDEX.with(|idx| {
             idx.borrow_mut().insert(name_key, key.clone());
         });
-        
+
         // Rebuild creator index (composite key)
         CREATOR_INDEX.with(|idx| {
-            idx.borrow_mut().insert((entry.metadata.creator, key.clone()), ());
+            idx.borrow_mut()
+                .insert((entry.metadata.creator, key.clone()), ());
         });
     }
-    
+
     ic_cdk::println!("✅ Indexes rebuilt successfully");
 }
 
@@ -206,33 +225,27 @@ fn rebuild_all_indexes() {
 #[update]
 fn register_rune(metadata: RuneMetadata) -> Result<RuneKey, String> {
     let caller = ic_cdk::caller();
-    
+
     // Validar que caller no es anonymous
     if caller == Principal::anonymous() {
         return Err("Anonymous principals cannot register runes".to_string());
     }
-    
+
     let key = metadata.key.clone();
-    
+
     // 1. Validar que key no existe
     let exists = REGISTRY.with(|r| r.borrow().contains_key(&key));
     if exists {
-        return Err(format!(
-            "Rune {} already registered",
-            key
-        ));
+        return Err(format!("Rune {} already registered", key));
     }
-    
+
     // 2. Validar que nombre es único
     let name_key = metadata.name.as_bytes().to_vec();
     let name_taken = NAME_INDEX.with(|idx| idx.borrow().contains_key(&name_key));
     if name_taken {
-        return Err(format!(
-            "Rune name '{}' already taken",
-            metadata.name
-        ));
+        return Err(format!("Rune name '{}' already taken", metadata.name));
     }
-    
+
     // 3. Crear entry
     let entry = RegistryEntry {
         metadata: metadata.clone(),
@@ -241,18 +254,18 @@ fn register_rune(metadata: RuneMetadata) -> Result<RuneKey, String> {
         holder_count: 1, // Creator cuenta como holder inicial
         indexed_at: ic_cdk::api::time(),
     };
-    
+
     // 4. Insertar en storage principal
     REGISTRY.with(|r| r.borrow_mut().insert(key.clone(), entry));
-    
+
     // 5. Actualizar índice de nombres
     NAME_INDEX.with(|idx| idx.borrow_mut().insert(name_key, key.clone()));
-    
+
     // 6. Actualizar índice de creator (composite key)
     CREATOR_INDEX.with(|idx| {
         idx.borrow_mut().insert((metadata.creator, key.clone()), ());
     });
-    
+
     // 7. Agregar a índice global
     INDEX.with(|index| {
         index
@@ -260,9 +273,9 @@ fn register_rune(metadata: RuneMetadata) -> Result<RuneKey, String> {
             .push(&key)
             .map_err(|e| format!("Failed to update index: {:?}", e))
     })?;
-    
+
     ic_cdk::println!("✅ Rune {} registered successfully", key);
-    
+
     Ok(key)
 }
 
@@ -321,11 +334,11 @@ fn get_rune(key: RuneKey) -> Option<RegistryEntry> {
 #[query]
 fn get_rune_by_name(name: String) -> Option<RegistryEntry> {
     let name_key = name.as_bytes().to_vec();
-    
+
     NAME_INDEX.with(|idx| {
-        idx.borrow().get(&name_key).and_then(|key| {
-            REGISTRY.with(|r| r.borrow().get(&key))
-        })
+        idx.borrow()
+            .get(&name_key)
+            .and_then(|key| REGISTRY.with(|r| r.borrow().get(&key)))
     })
 }
 
@@ -342,28 +355,25 @@ fn get_rune_by_name(name: String) -> Option<RegistryEntry> {
 #[query]
 fn get_my_runes() -> Vec<RegistryEntry> {
     let caller = ic_cdk::caller();
-    
+
     // Scan del índice para encontrar todas las (caller, key) entries
     let rune_keys: Vec<RuneKey> = CREATOR_INDEX.with(|idx| {
         idx.borrow()
             .iter()
-            .filter_map(|((principal, key), _)| {
-                if principal == caller {
-                    Some(key)
-                } else {
-                    None
-                }
-            })
+            .filter_map(
+                |((principal, key), _)| {
+                    if principal == caller {
+                        Some(key)
+                    } else {
+                        None
+                    }
+                },
+            )
             .collect()
     });
-    
+
     // Fetch registry entries
-    REGISTRY.with(|r| {
-        rune_keys
-            .iter()
-            .filter_map(|k| r.borrow().get(k))
-            .collect()
-    })
+    REGISTRY.with(|r| rune_keys.iter().filter_map(|k| r.borrow().get(k)).collect())
 }
 
 /// Validate pagination parameters
@@ -561,8 +571,10 @@ fn search_runes(query: String, offset: u64, limit: u64) -> SearchResult<Registry
                     continue;
                 }
                 // Check if name contains query
-                if name_bytes.windows(query_normalized.len())
-                    .any(|window| window == query_normalized.as_slice()) {
+                if name_bytes
+                    .windows(query_normalized.len())
+                    .any(|window| window == query_normalized.as_slice())
+                {
                     matching_keys.push(rune_key);
                     if matching_keys.len() >= 100 {
                         break;
@@ -585,11 +597,17 @@ fn search_runes(query: String, offset: u64, limit: u64) -> SearchResult<Registry
 
     // Sort by relevance
     results.sort_by(|a, b| {
-        let a_name = a.metadata.name.to_uppercase()
+        let a_name = a
+            .metadata
+            .name
+            .to_uppercase()
             .chars()
             .filter(|c| c.is_alphanumeric())
             .collect::<String>();
-        let b_name = b.metadata.name.to_uppercase()
+        let b_name = b
+            .metadata
+            .name
+            .to_uppercase()
             .chars()
             .filter(|c| c.is_alphanumeric())
             .collect::<String>();
@@ -598,14 +616,22 @@ fn search_runes(query: String, offset: u64, limit: u64) -> SearchResult<Registry
         // Exact match first
         let a_exact = a_name == query_str.as_ref();
         let b_exact = b_name == query_str.as_ref();
-        if a_exact && !b_exact { return std::cmp::Ordering::Less; }
-        if b_exact && !a_exact { return std::cmp::Ordering::Greater; }
+        if a_exact && !b_exact {
+            return std::cmp::Ordering::Less;
+        }
+        if b_exact && !a_exact {
+            return std::cmp::Ordering::Greater;
+        }
 
         // Then starts with
         let a_starts = a_name.starts_with(query_str.as_ref());
         let b_starts = b_name.starts_with(query_str.as_ref());
-        if a_starts && !b_starts { return std::cmp::Ordering::Less; }
-        if b_starts && !a_starts { return std::cmp::Ordering::Greater; }
+        if a_starts && !b_starts {
+            return std::cmp::Ordering::Less;
+        }
+        if b_starts && !a_starts {
+            return std::cmp::Ordering::Greater;
+        }
 
         // Then alphabetically
         a_name.cmp(&b_name)
@@ -630,21 +656,20 @@ fn search_runes(query: String, offset: u64, limit: u64) -> SearchResult<Registry
 #[query]
 fn get_trending(offset: u64, limit: u64) -> PaginatedResult {
     let limit = limit.min(100);
-    
+
     REGISTRY.with(|r| {
-        let mut entries: Vec<RegistryEntry> =
-            r.borrow().iter().map(|(_, entry)| entry).collect();
-        
+        let mut entries: Vec<RegistryEntry> = r.borrow().iter().map(|(_, entry)| entry).collect();
+
         // Sort por volumen descendente
         entries.sort_by(|a, b| b.trading_volume_24h.cmp(&a.trading_volume_24h));
-        
+
         let total_count = entries.len() as u64;
         let results: Vec<_> = entries
             .into_iter()
             .skip(offset as usize)
             .take(limit as usize)
             .collect();
-        
+
         PaginatedResult {
             results,
             total_count,
@@ -664,14 +689,14 @@ fn total_runes() -> u64 {
 #[query]
 fn get_stats() -> RegistryStats {
     let total = REGISTRY.with(|r| r.borrow().len());
-    
+
     let total_volume: u64 = REGISTRY.with(|r| {
         r.borrow()
             .iter()
             .map(|(_, entry)| entry.trading_volume_24h)
             .sum()
     });
-    
+
     RegistryStats {
         total_runes: total,
         total_volume_24h: total_volume,
@@ -729,14 +754,14 @@ fn list_indexed_runes(offset: u64, limit: u64) -> Vec<IndexedRune> {
 fn search_indexed_runes(query: String, offset: u64, limit: u64) -> SearchResult<IndexedRune> {
     let limit = limit.min(100);
     let all_results = indexer::search_runes(query);
-    
+
     let total_matches = all_results.len() as u64;
     let results: Vec<IndexedRune> = all_results
         .into_iter()
         .skip(offset as usize)
         .take(limit as usize)
         .collect();
-    
+
     SearchResult {
         results,
         total_matches,
@@ -828,7 +853,9 @@ async fn sync_runes_from_hiro(offset: u32, limit: u32) -> Result<SyncResponse, S
 
     ic_cdk::println!(
         "✅ Synced {} runes from Hiro API (offset: {}, errors: {})",
-        stored, offset, errors
+        stored,
+        offset,
+        errors
     );
 
     Ok(SyncResponse {
@@ -916,7 +943,10 @@ async fn batch_sync_runes(start_offset: u32, total_to_fetch: u32) -> Result<Sync
     while remaining > 0 {
         // Add delay before each request (except the first one)
         if !is_first_batch {
-            ic_cdk::println!("⏳ Waiting {}s to respect API rate limits...", DELAY_SECONDS);
+            ic_cdk::println!(
+                "⏳ Waiting {}s to respect API rate limits...",
+                DELAY_SECONDS
+            );
             sleep_async(DELAY_SECONDS).await;
         }
         is_first_batch = false;
@@ -948,14 +978,19 @@ async fn batch_sync_runes(start_offset: u32, total_to_fetch: u32) -> Result<Sync
             }
             Err(e) => {
                 ic_cdk::println!("Batch sync error at offset {}: {}", current_offset, e);
-                return Err(format!("Batch sync failed at offset {}: {}", current_offset, e));
+                return Err(format!(
+                    "Batch sync failed at offset {}: {}",
+                    current_offset, e
+                ));
             }
         }
     }
 
     ic_cdk::println!(
         "✅ Batch sync complete: {} fetched, {} stored, {} errors",
-        total_fetched, total_stored, total_errors
+        total_fetched,
+        total_stored,
+        total_errors
     );
 
     Ok(SyncResponse {
@@ -997,28 +1032,30 @@ fn get_canister_metrics() -> RegistryMetrics {
 /// Add principal to rate limit whitelist (admin only)
 #[update]
 fn add_to_whitelist(principal: candid::Principal) -> Result<(), String> {
-    let caller = ic_cdk::caller();
-
-    // Simple admin check - in production, use proper RBAC
-    // For now, only the canister controller can whitelist
-    if caller == candid::Principal::anonymous() {
-        return Err("Anonymous principals cannot modify whitelist".to_string());
-    }
+    // Verificar permisos de admin
+    require_admin!()?;
 
     rate_limit::add_to_whitelist(principal);
+    ic_cdk::println!(
+        "✅ Principal {} added to whitelist by {}",
+        principal,
+        ic_cdk::caller()
+    );
     Ok(())
 }
 
 /// Remove principal from rate limit whitelist (admin only)
 #[update]
 fn remove_from_whitelist(principal: candid::Principal) -> Result<(), String> {
-    let caller = ic_cdk::caller();
-
-    if caller == candid::Principal::anonymous() {
-        return Err("Anonymous principals cannot modify whitelist".to_string());
-    }
+    // Verificar permisos de admin
+    require_admin!()?;
 
     rate_limit::remove_from_whitelist(principal);
+    ic_cdk::println!(
+        "⚠️  Principal {} removed from whitelist by {}",
+        principal,
+        ic_cdk::caller()
+    );
     Ok(())
 }
 
@@ -1031,14 +1068,131 @@ fn is_whitelisted(principal: candid::Principal) -> bool {
 /// Reset rate limit for a principal (admin only)
 #[update]
 fn reset_rate_limit(principal: candid::Principal) -> Result<(), String> {
-    let caller = ic_cdk::caller();
-
-    if caller == candid::Principal::anonymous() {
-        return Err("Anonymous principals cannot reset rate limits".to_string());
-    }
+    // Verificar permisos de admin
+    require_admin!()?;
 
     rate_limit::reset_rate_limit(principal);
+    ic_cdk::println!(
+        "🔄 Rate limit reset for {} by {}",
+        principal,
+        ic_cdk::caller()
+    );
     Ok(())
+}
+
+// ============================================================================
+// STAKING ENDPOINTS
+// ============================================================================
+
+/// Stake Runes to earn ckBTC rewards
+#[update]
+fn stake_runes(rune_id: String, amount: u64) -> Result<StakePosition, String> {
+    let caller = ic_cdk::caller();
+    if caller == Principal::anonymous() {
+        return Err("Anonymous principals cannot stake".to_string());
+    }
+    staking::stake_runes(caller, rune_id, amount)
+}
+
+/// Unstake Runes and claim rewards
+///
+/// Returns: (unstaked_amount, rewards_claimed)
+#[update]
+fn unstake_runes(rune_id: String, amount: u64) -> Result<(u64, u64), String> {
+    let caller = ic_cdk::caller();
+    staking::unstake_runes(caller, rune_id, amount)
+}
+
+/// Claim staking rewards without unstaking
+#[update]
+fn claim_staking_rewards(rune_id: String) -> Result<u64, String> {
+    let caller = ic_cdk::caller();
+    staking::claim_rewards(caller, rune_id)
+}
+
+/// Get my stake position for a specific Rune
+#[query]
+fn get_my_stake(rune_id: String) -> Option<StakePosition> {
+    let caller = ic_cdk::caller();
+    staking::get_stake_position(caller, rune_id)
+}
+
+/// Get all my staking positions
+#[query]
+fn get_all_my_stakes() -> Vec<StakePosition> {
+    let caller = ic_cdk::caller();
+    staking::get_user_stakes(caller)
+}
+
+/// Get staking pool information for a Rune
+#[query]
+fn get_staking_pool_info(rune_id: String) -> Option<StakingPool> {
+    staking::get_staking_pool(rune_id)
+}
+
+/// Get all staking pools
+#[query]
+fn get_all_staking_pools() -> Vec<StakingPool> {
+    staking::get_all_pools()
+}
+
+/// Get global staking statistics
+#[query]
+fn get_staking_statistics() -> StakingStats {
+    staking::get_staking_stats()
+}
+
+/// Calculate pending rewards for a staking position
+#[query]
+fn calculate_pending_rewards(rune_id: String) -> Result<RewardCalculation, String> {
+    let caller = ic_cdk::caller();
+    staking::calculate_rewards(caller, rune_id)
+}
+
+/// Update staking pool APY (admin only)
+#[update]
+fn update_staking_pool_apy(rune_id: String, new_apy_bps: u16) -> Result<(), String> {
+    // Verificar permisos de admin
+    require_admin!()?;
+
+    staking::update_pool_apy(rune_id, new_apy_bps)
+}
+
+// ============================================================================
+// ADMIN MANAGEMENT ENDPOINTS
+// ============================================================================
+
+/// Add a new admin (owner only)
+#[update]
+fn add_admin(new_admin: Principal) -> Result<(), String> {
+    require_owner!()?;
+    admin::add_admin(ic_cdk::caller(), new_admin)
+}
+
+/// Remove an admin (owner only)
+#[update]
+fn remove_admin(admin_to_remove: Principal) -> Result<(), String> {
+    require_owner!()?;
+    admin::remove_admin(ic_cdk::caller(), admin_to_remove)
+}
+
+/// Check if a principal is an admin
+#[query]
+fn is_admin(principal: Principal) -> bool {
+    admin::is_admin(principal)
+}
+
+/// Get the owner principal
+#[query]
+fn get_owner() -> Option<Principal> {
+    admin::get_owner()
+}
+
+/// List all admins (admin only)
+#[query]
+fn list_admins() -> Result<Vec<admin::AdminEntry>, String> {
+    require_admin!()?;
+    admin::list_admins(ic_cdk::caller())
 }
 
 ic_cdk::export_candid!();

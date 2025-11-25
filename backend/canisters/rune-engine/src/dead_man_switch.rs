@@ -20,9 +20,9 @@ use crate::validators::is_valid_bitcoin_address;
 
 // Thread-local storage for Dead Man's Switches
 thread_local! {
-    static DEAD_MAN_SWITCHES: RefCell<BTreeMap<u64, DeadManSwitch>> = RefCell::new(BTreeMap::new());
-    static SWITCH_COUNTER: RefCell<u64> = RefCell::new(0);
-    static USER_SWITCHES: RefCell<BTreeMap<Principal, Vec<u64>>> = RefCell::new(BTreeMap::new());
+    static DEAD_MAN_SWITCHES: RefCell<BTreeMap<u64, DeadManSwitch>> = const { RefCell::new(BTreeMap::new()) };
+    static SWITCH_COUNTER: RefCell<u64> = const { RefCell::new(0) };
+    static USER_SWITCHES: RefCell<BTreeMap<Principal, Vec<u64>>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 /// Create a new Dead Man's Switch
@@ -86,7 +86,7 @@ pub fn create_switch(params: CreateDeadManSwitchParams) -> Result<u64, EngineErr
     // Track user's switches
     USER_SWITCHES.with(|user_switches| {
         let mut us = user_switches.borrow_mut();
-        us.entry(caller).or_insert_with(Vec::new).push(id);
+        us.entry(caller).or_default().push(id);
     });
 
     ic_cdk::println!("Created Dead Man's Switch {} for {}", id, caller);
@@ -410,7 +410,7 @@ async fn execute_transfer(switch: &DeadManSwitch) -> Result<String, String> {
     let mock_txid = format!(
         "{}{}",
         "dms", // Dead Man's Switch prefix
-        hex::encode(&switch.id.to_le_bytes())
+        hex::encode(switch.id.to_le_bytes())
     );
 
     ic_cdk::println!(

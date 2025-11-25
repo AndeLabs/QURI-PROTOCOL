@@ -54,6 +54,7 @@ type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 /// Agregado de métricas de rendimiento
 #[derive(Clone, Debug, CandidType, Deserialize)]
+#[derive(Default)]
 pub struct PerformanceMetrics {
     // Counters - totales acumulados
     pub total_runes_created: u64,
@@ -88,23 +89,6 @@ pub struct ErrorBreakdown {
     pub unknown_errors: u64,
 }
 
-impl Default for PerformanceMetrics {
-    fn default() -> Self {
-        Self {
-            total_runes_created: 0,
-            total_errors: 0,
-            total_retries: 0,
-            total_confirmations_tracked: 0,
-            errors_by_type: ErrorBreakdown::default(),
-            avg_etching_latency_ns: 0,
-            avg_signing_latency_ns: 0,
-            avg_broadcast_latency_ns: 0,
-            active_processes: 0,
-            pending_processes: 0,
-            last_updated: 0,
-        }
-    }
-}
 
 impl Storable for PerformanceMetrics {
     fn to_bytes(&self) -> Cow<[u8]> {

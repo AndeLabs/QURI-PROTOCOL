@@ -54,7 +54,7 @@ pub enum VetKDCurve {
 
 // Thread-local storage for encrypted metadata
 thread_local! {
-    static ENCRYPTED_METADATA: RefCell<BTreeMap<String, EncryptedRuneMetadata>> = RefCell::new(BTreeMap::new());
+    static ENCRYPTED_METADATA: RefCell<BTreeMap<String, EncryptedRuneMetadata>> = const { RefCell::new(BTreeMap::new()) };
 }
 
 // vetKD key configuration

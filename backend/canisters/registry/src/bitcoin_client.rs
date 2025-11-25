@@ -1,6 +1,6 @@
 use ic_cdk::api::management_canister::http_request::{
-    http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse,
-    TransformArgs, TransformContext, TransformFunc,
+    http_request, CanisterHttpRequestArgument, HttpHeader, HttpMethod, HttpResponse, TransformArgs,
+    TransformContext, TransformFunc,
 };
 use num_bigint::BigUint;
 use serde::{Deserialize, Serialize};
@@ -79,7 +79,10 @@ pub struct HiroLocation {
 /// ```rust
 /// let runes = fetch_runes_from_hiro(0, 100).await?;
 /// ```
-pub async fn fetch_runes_from_hiro(offset: u32, limit: u32) -> Result<HiroEtchingsResponse, String> {
+pub async fn fetch_runes_from_hiro(
+    offset: u32,
+    limit: u32,
+) -> Result<HiroEtchingsResponse, String> {
     let url = format!(
         "https://api.hiro.so/runes/v1/etchings?offset={}&limit={}",
         offset,
@@ -136,18 +139,13 @@ pub async fn fetch_runes_from_hiro(offset: u32, limit: u32) -> Result<HiroEtchin
                 ))
             }
         }
-        Err((code, msg)) => {
-            Err(format!("HTTP outcall failed: {:?} - {}", code, msg))
-        }
+        Err((code, msg)) => Err(format!("HTTP outcall failed: {:?} - {}", code, msg)),
     }
 }
 
 /// Fetch a single rune by name from Hiro API
 pub async fn fetch_rune_by_name(name: &str) -> Result<Option<HiroRune>, String> {
-    let url = format!(
-        "https://api.hiro.so/runes/v1/etchings/{}",
-        name
-    );
+    let url = format!("https://api.hiro.so/runes/v1/etchings/{}", name);
 
     let request_headers = vec![
         HttpHeader {
@@ -200,9 +198,7 @@ pub async fn fetch_rune_by_name(name: &str) -> Result<Option<HiroRune>, String> 
                 ))
             }
         }
-        Err((code, msg)) => {
-            Err(format!("HTTP outcall failed: {:?} - {}", code, msg))
-        }
+        Err((code, msg)) => Err(format!("HTTP outcall failed: {:?} - {}", code, msg)),
     }
 }
 
@@ -218,9 +214,11 @@ pub fn convert_hiro_rune(hiro: HiroRune) -> Result<IndexedRune, String> {
         return Err(format!("Invalid rune ID format: {}", hiro.id));
     }
 
-    let block: u64 = parts[0].parse()
+    let block: u64 = parts[0]
+        .parse()
         .map_err(|_| format!("Invalid block number in ID: {}", hiro.id))?;
-    let tx_index: u32 = parts[1].parse()
+    let tx_index: u32 = parts[1]
+        .parse()
         .map_err(|_| format!("Invalid tx index in ID: {}", hiro.id))?;
 
     // Parse supply - handle decimal strings
@@ -229,12 +227,14 @@ pub fn convert_hiro_rune(hiro: HiroRune) -> Result<IndexedRune, String> {
 
     // Convert mint terms if present
     let terms = hiro.mint_terms.map(|mt| {
-        let amount = mt.amount
+        let amount = mt
+            .amount
             .as_ref()
             .map(|a| parse_decimal_string(a, hiro.divisibility).unwrap_or(0))
             .unwrap_or(0);
 
-        let cap: u128 = mt.cap
+        let cap: u128 = mt
+            .cap
             .as_ref()
             .map(|c| {
                 let cap_str = c.trim_start_matches('0').trim_start_matches('.');
@@ -277,7 +277,8 @@ fn parse_decimal_string(s: &str, decimals: u8) -> Result<u128, String> {
     match parts.len() {
         1 => {
             // No decimal point
-            let base: u128 = parts[0].parse()
+            let base: u128 = parts[0]
+                .parse()
                 .map_err(|_| format!("Invalid number: {}", s))?;
             // Scale up by decimals
             let multiplier = 10u128.pow(decimals as u32);
@@ -288,7 +289,8 @@ fn parse_decimal_string(s: &str, decimals: u8) -> Result<u128, String> {
             let integer_part: u128 = if parts[0].is_empty() {
                 0
             } else {
-                parts[0].parse()
+                parts[0]
+                    .parse()
                     .map_err(|_| format!("Invalid integer part: {}", s))?
             };
 
@@ -307,13 +309,16 @@ fn parse_decimal_string(s: &str, decimals: u8) -> Result<u128, String> {
             let decimal_part: u128 = if decimal_str.is_empty() {
                 0
             } else {
-                decimal_str.parse()
+                decimal_str
+                    .parse()
                     .map_err(|_| format!("Invalid decimal part: {}", s))?
             };
 
             // Combine: integer * 10^decimals + decimal
             let multiplier = 10u128.pow(decimals as u32);
-            Ok(integer_part.saturating_mul(multiplier).saturating_add(decimal_part))
+            Ok(integer_part
+                .saturating_mul(multiplier)
+                .saturating_add(decimal_part))
         }
         _ => Err(format!("Invalid decimal format: {}", s)),
     }
@@ -333,15 +338,11 @@ fn transform_hiro_response(args: TransformArgs) -> HttpResponse {
 
     // Remove ALL headers except content-type for maximum determinism
     // This prevents consensus failures due to varying timestamps, dates, etc.
-    response.headers = response
-        .headers
-        .into_iter()
-        .filter(|h| {
+    response.headers.retain(|h| {
             let name = h.name.to_lowercase();
             // Keep ONLY content-type
             name == "content-type"
-        })
-        .collect();
+        });
 
     response
 }
@@ -350,53 +351,63 @@ fn transform_hiro_response(args: TransformArgs) -> HttpResponse {
 // LEGACY COMPATIBILITY (Keep existing functions)
 // ============================================================================
 
-use ic_cdk::api::management_canister::bitcoin::BitcoinNetwork as ICPBitcoinNetwork;
 use quri_types::BitcoinNetwork;
 
 use crate::parser::BitcoinTx;
 
-/// Fetch block headers from Bitcoin network
-/// Note: ICP doesn't expose this API yet
+/// TODO: Fetch block headers from Bitcoin network
+///
+/// Currently not implemented - ICP Bitcoin API doesn't expose block headers yet.
+/// Future implementation should use HTTP outcalls to a Bitcoin explorer API
+/// or wait for ICP to add native block header support.
+///
+/// ## Required for:
+/// - SPV verification
+/// - Block height tracking
+/// - Chain reorganization detection
 pub async fn fetch_block_headers(
     _network: BitcoinNetwork,
     _start_height: u64,
     _count: u32,
 ) -> Result<Vec<Vec<u8>>, String> {
-    Err("Block headers API not available yet".to_string())
+    Err("TODO: Block headers API not available yet. Consider using HTTP outcalls to a Bitcoin explorer.".to_string())
 }
 
-/// Fetch transactions for a specific block
-/// Note: ICP Bitcoin API doesn't provide full blocks yet
+/// TODO: Fetch transactions for a specific block
+///
+/// Currently not implemented - ICP Bitcoin API doesn't provide full block data yet.
+/// Future implementation should use HTTP outcalls to Bitcoin explorer APIs like:
+/// - Blockstream.info API
+/// - Mempool.space API
+/// - Hiro.so API
+///
+/// ## Required for:
+/// - Full block indexing
+/// - Runestone scanning
+/// - Historical data synchronization
 pub async fn fetch_block_transactions(
     _network: BitcoinNetwork,
     _block_height: u64,
 ) -> Result<Vec<BitcoinTx>, String> {
-    Err("Block transactions API not available yet".to_string())
+    Err("TODO: Block transactions API not available yet. Use Hiro API for specific Rune data instead.".to_string())
 }
 
-/// Mock transaction fetch for testing
+/// Mock transaction fetch - TESTING ONLY
+///
+/// Returns empty vector. Only used in index_block_range function.
+/// Should be replaced with real implementation when available.
+#[cfg(not(test))]
 pub fn mock_fetch_transactions(_block_height: u64) -> Vec<BitcoinTx> {
     vec![]
 }
 
-fn convert_network(network: BitcoinNetwork) -> ICPBitcoinNetwork {
-    match network {
-        BitcoinNetwork::Mainnet => ICPBitcoinNetwork::Mainnet,
-        BitcoinNetwork::Testnet => ICPBitcoinNetwork::Testnet,
-        BitcoinNetwork::Regtest => ICPBitcoinNetwork::Regtest,
-    }
+#[cfg(test)]
+pub fn mock_fetch_transactions(_block_height: u64) -> Vec<BitcoinTx> {
+    vec![]
 }
 
-/// HTTP outcall to external Bitcoin explorer (future implementation)
-pub async fn fetch_block_via_http(
-    _block_height: u64,
-    network: BitcoinNetwork,
-) -> Result<Vec<BitcoinTx>, String> {
-    match network {
-        BitcoinNetwork::Regtest => Err("Regtest not supported via HTTP".to_string()),
-        _ => Err("HTTP outcalls not yet implemented".to_string()),
-    }
-}
+// convert_network - Removed (dead code)
+// fetch_block_via_http - Removed (dead code)
 
 #[cfg(test)]
 mod tests {

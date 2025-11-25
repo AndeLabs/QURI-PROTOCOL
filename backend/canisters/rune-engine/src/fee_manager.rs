@@ -216,7 +216,7 @@ async fn update_fee_estimates() -> Result<(), String> {
     let result: Result<(Vec<u64>,), _> = ic_cdk::call(
         bitcoin_canister,
         "get_current_fee_percentiles",
-        (network.clone(),),
+        (network,),
     )
     .await;
 
@@ -277,7 +277,7 @@ pub fn get_cached_fee_estimates() -> Option<FeeEstimatesView> {
                 medium: cached.percentiles[50],
                 high: cached.percentiles[75],
                 age_seconds,
-                network: cached.network.clone(),
+                network: cached.network,
             }
         })
     })

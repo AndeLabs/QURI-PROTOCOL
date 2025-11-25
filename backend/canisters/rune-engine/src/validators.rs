@@ -7,17 +7,17 @@ pub fn is_valid_bitcoin_address(address: &str) -> bool {
     let len = address.len();
 
     // P2PKH (legacy) - starts with 1, 25-34 chars
-    if address.starts_with('1') && len >= 25 && len <= 34 {
+    if address.starts_with('1') && (25..=34).contains(&len) {
         return is_base58_valid(address);
     }
 
     // P2SH (legacy) - starts with 3, 25-35 chars
-    if address.starts_with('3') && len >= 25 && len <= 35 {
+    if address.starts_with('3') && (25..=35).contains(&len) {
         return is_base58_valid(address);
     }
 
     // Bech32 (native segwit) - starts with bc1q or bc1p (taproot)
-    if address.starts_with("bc1q") && len >= 42 && len <= 62 {
+    if address.starts_with("bc1q") && (42..=62).contains(&len) {
         return is_bech32_valid(address);
     }
 
@@ -29,7 +29,7 @@ pub fn is_valid_bitcoin_address(address: &str) -> bool {
     // Testnet addresses (tb1, m, n, 2)
     if address.starts_with("tb1") || address.starts_with('m')
        || address.starts_with('n') || address.starts_with('2') {
-        return len >= 25 && len <= 62;
+        return (25..=62).contains(&len);
     }
 
     false
@@ -55,8 +55,8 @@ fn is_bech32_valid(address: &str) -> bool {
     false
 }
 
-/// Maximum divisibility allowed (same as Bitcoin's 8 decimals)
-const MAX_DIVISIBILITY: u8 = 18;
+/// Maximum divisibility allowed (Runes protocol specification)
+const MAX_DIVISIBILITY: u8 = 38;
 
 /// Minimum rune name length
 const MIN_NAME_LENGTH: usize = 1;
@@ -299,7 +299,8 @@ mod tests {
         assert!(EtchingValidator::validate_divisibility(0).is_ok());
         assert!(EtchingValidator::validate_divisibility(8).is_ok());
         assert!(EtchingValidator::validate_divisibility(18).is_ok());
-        assert!(EtchingValidator::validate_divisibility(19).is_err());
+        assert!(EtchingValidator::validate_divisibility(38).is_ok());
+        assert!(EtchingValidator::validate_divisibility(39).is_err());
     }
 
     #[test]
@@ -368,9 +369,10 @@ mod tests {
         // Valid boundaries
         assert!(EtchingValidator::validate_divisibility(0).is_ok());
         assert!(EtchingValidator::validate_divisibility(18).is_ok());
+        assert!(EtchingValidator::validate_divisibility(38).is_ok());
 
         // Invalid boundaries
-        assert!(EtchingValidator::validate_divisibility(19).is_err());
+        assert!(EtchingValidator::validate_divisibility(39).is_err());
         assert!(EtchingValidator::validate_divisibility(255).is_err());
     }
 
@@ -548,7 +550,7 @@ mod tests {
         let invalid_divisibility = RuneEtching {
             rune_name: "BITCOIN".to_string(),
             symbol: "BTC".to_string(),
-            divisibility: 20, // > 18
+            divisibility: 39, // > 38
             premine: 1000,
             terms: None,
         };

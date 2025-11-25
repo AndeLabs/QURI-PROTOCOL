@@ -245,7 +245,7 @@ async fn update_block_height() -> Result<(), String> {
         Ok(height) => {
             let info = BlockHeightInfo {
                 height,
-                network: network.clone(),
+                network,
                 fetched_at: ic_cdk::api::time(),
             };
 
@@ -280,7 +280,7 @@ async fn fetch_block_height_via_utxo_query(
 
     let args = GetUtxosRequest {
         address: "tb1qw508d6qejxtdg4y5r3zarvary0c5xw7kxpjzsx".to_string(), // Dummy testnet address
-        network: network.clone(),
+        network: *network,
         filter: None,
     };
 

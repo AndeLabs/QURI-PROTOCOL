@@ -3,6 +3,7 @@ use ic_cdk::call;
 
 // ckBTC Ledger Canister IDs
 const CKBTC_LEDGER_MAINNET: &str = "mxzaz-hqaaa-aaaar-qaada-cai";
+#[allow(dead_code)] // TODO: Use when implementing ckBTC minting
 const CKBTC_MINTER_MAINNET: &str = "mqygn-kiaaa-aaaar-qaadq-cai";
 
 // ICRC-1 Standard Types
@@ -34,6 +35,7 @@ pub enum TransferError {
     GenericError { error_code: Nat, message: String },
 }
 
+#[allow(dead_code)] // Used in transfer functions
 pub type TransferResult = Result<Nat, TransferError>;
 
 #[derive(CandidType, Deserialize)]
@@ -86,6 +88,8 @@ pub async fn get_balance(principal: Principal) -> Result<u64, String> {
 }
 
 /// Transfer ckBTC from caller to recipient
+/// TODO: Expose as public endpoint when implementing fee payment system
+#[allow(dead_code)]
 pub async fn transfer(to: Principal, amount: u64, memo: Option<Vec<u8>>) -> Result<u64, String> {
     let ledger = Principal::from_text(CKBTC_LEDGER_MAINNET)
         .map_err(|e| format!("Invalid ledger principal: {}", e))?;
@@ -119,6 +123,8 @@ pub async fn transfer(to: Principal, amount: u64, memo: Option<Vec<u8>>) -> Resu
 }
 
 /// Charge etching fee from user to canister
+/// TODO: Integrate with etching flow when implementing fee system
+#[allow(dead_code)]
 pub async fn charge_etching_fee(from: Principal, amount: u64) -> Result<u64, String> {
     let canister_id = ic_cdk::api::id();
 
@@ -134,6 +140,7 @@ pub async fn charge_etching_fee(from: Principal, amount: u64) -> Result<u64, Str
 }
 
 /// Transfer ckBTC from one account to another (requires approval)
+#[allow(dead_code)]
 async fn transfer_from(
     from: Principal,
     to: Principal,

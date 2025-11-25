@@ -1,12 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { generateNonce, buildCSPDirectives } from './lib/security/csp';
 
 /**
  * Production-grade Next.js middleware
- * Handles security headers, rate limiting, and request filtering
+ * Handles security headers with strict CSP using nonces
  */
 
 export function middleware(request: NextRequest) {
   const response = NextResponse.next();
+
+  // Generate a unique nonce for this request
+  const nonce = generateNonce();
+
+  // Store nonce in header for retrieval in components
+  response.headers.set('x-nonce', nonce);
 
   // Security Headers
   // Prevent clickjacking
@@ -21,27 +28,9 @@ export function middleware(request: NextRequest) {
   // Referrer Policy
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
 
-  // Content Security Policy
-  // Allow ICP domains, Bitcoin explorers, IPFS gateways, and necessary resources
-  // IMPORTANT: https://ic0.app (without wildcard) must be explicit, as wildcards don't match root domains
-  
-  // For local development, allow localhost connections
+  // Content Security Policy with nonces
   const isDev = process.env.NODE_ENV === 'development';
-  const localHosts = isDev ? 'http://localhost:8000 http://127.0.0.1:8000 http://localhost:4943 ws://localhost:8000 ws://127.0.0.1:8000' : '';
-  
-  const cspDirectives = [
-    "default-src 'self'",
-    "script-src 'self' 'unsafe-eval' 'unsafe-inline'", // Next.js requires unsafe-eval/inline
-    "style-src 'self' 'unsafe-inline'", // Tailwind requires unsafe-inline
-    "img-src 'self' data: blob: https:",
-    "font-src 'self' data:",
-    `connect-src 'self' ${localHosts} https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://icp-api.io https://*.icp-api.io https://*.internetcomputer.org https://mempool.space https://api.hiro.so https://api.pinata.cloud https://gateway.pinata.cloud https://ipfs.io https://cloudflare-ipfs.com https://dweb.link https://min-api.cryptocompare.com wss://ic0.app wss://*.ic0.app`,
-    "frame-src 'self' https://ic0.app https://*.ic0.app https://identity.ic0.app",
-    "worker-src 'self' blob:",
-    "frame-ancestors 'none'",
-    "base-uri 'self'",
-    "form-action 'self'",
-  ].join('; ');
+  const cspDirectives = buildCSPDirectives(nonce, isDev);
 
   response.headers.set('Content-Security-Policy', cspDirectives);
 

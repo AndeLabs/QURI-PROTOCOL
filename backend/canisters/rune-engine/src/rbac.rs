@@ -74,7 +74,7 @@ pub struct RoleEntry {
 // Implementación de Storable para RoleEntry
 impl Storable for RoleEntry {
     fn to_bytes(&self) -> Cow<[u8]> {
-        Cow::Owned(candid::encode_one(&self).unwrap_or_else(|e| {
+        Cow::Owned(candid::encode_one(self).unwrap_or_else(|e| {
             ic_cdk::trap(&format!("CRITICAL: Failed to encode RoleEntry: {}", e))
         }))
     }
@@ -323,7 +323,6 @@ pub fn list_all_roles(caller: Principal) -> Result<Vec<(Principal, RoleEntry)>, 
         if let Some(storage) = roles.borrow().as_ref() {
             Ok(storage
                 .iter()
-                .map(|(principal, entry)| (principal, entry))
                 .collect())
         } else {
             Err("RBAC not initialized".to_string())

@@ -130,19 +130,7 @@ fn calculate_total_supply(etching: &runes_utils::EtchingSpec) -> u128 {
     supply
 }
 
-/// Parse block header to extract timestamp
-pub fn parse_block_timestamp(header: &[u8]) -> Option<u64> {
-    // Bitcoin block header is 80 bytes
-    // Timestamp is at bytes 68-71 (little-endian u32)
-    if header.len() < 80 {
-        return None;
-    }
-
-    let timestamp_bytes = &header[68..72];
-    let timestamp = u32::from_le_bytes(timestamp_bytes.try_into().ok()?);
-
-    Some(timestamp as u64)
-}
+// parse_block_timestamp - Removed (dead code)
 
 /// Batch parse multiple transactions
 pub fn parse_block_for_runestones(

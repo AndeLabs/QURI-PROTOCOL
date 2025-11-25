@@ -58,7 +58,7 @@ export function TransactionStatusTracker({
           setError(null);
 
           // Detener polling si está completado o falló
-          if (data.state && ('Completed' in data.state || 'Failed' in data.state || 'RolledBack' in data.state)) {
+          if (data.state && (data.state === 'Completed' || data.state === 'Failed' || data.state === 'RolledBack' || (typeof data.state === 'object' && ('Completed' in data.state || 'Failed' in data.state || 'RolledBack' in data.state)))) {
             setIsPolling(false);
           }
         }
@@ -95,8 +95,10 @@ export function TransactionStatusTracker({
 
   // Obtener número de confirmaciones si está en estado Confirming
   const getConfirmations = () => {
-    if (status?.state && 'Confirming' in status.state) {
-      return (status.state as any).Confirming.confirmations || 0;
+    if (status?.state) {
+      if (typeof status.state === 'object' && 'Confirming' in status.state) {
+        return (status.state as any).Confirming.confirmations || 0;
+      }
     }
     return 0;
   };
@@ -105,8 +107,8 @@ export function TransactionStatusTracker({
   const txid = status?.txid || null;
 
   // Estado de error
-  if (status?.state && 'Failed' in status.state) {
-    const failedState = status.state as any;
+  if (status?.state && (status.state === 'Failed' || (typeof status.state === 'object' && 'Failed' in status.state))) {
+    const failedState = typeof status.state === 'object' ? status.state as any : { Failed: { reason: 'Unknown error', at_state: status.state } };
     return (
       <div className="bg-red-50 border-2 border-red-200 rounded-2xl p-6">
         <div className="flex items-start gap-4">
@@ -130,8 +132,8 @@ export function TransactionStatusTracker({
   }
 
   // Estado completado
-  if (status?.state && 'Completed' in status.state) {
-    const completedState = status.state as any;
+  if (status?.state && (status.state === 'Completed' || (typeof status.state === 'object' && 'Completed' in status.state))) {
+    const completedState = typeof status.state === 'object' ? status.state as any : { Completed: { txid: null } };
     return (
       <motion.div
         initial={{ scale: 0.9, opacity: 0 }}

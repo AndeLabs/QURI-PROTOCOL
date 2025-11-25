@@ -11,7 +11,7 @@
 
 #[cfg(test)]
 mod tests {
-    use crate::{RuneKey, RuneKeyParseError};
+    use crate::RuneKey;
     use ic_stable_structures::Storable;
     use std::cmp::Ordering;
 
@@ -403,13 +403,11 @@ mod tests {
 
     #[test]
     fn test_many_keys_sorting() {
-        let mut keys = vec![
-            RuneKey::new(840002, 5),
+        let mut keys = [RuneKey::new(840002, 5),
             RuneKey::new(840000, 1),
             RuneKey::new(840001, 3),
             RuneKey::new(840000, 2),
-            RuneKey::new(840002, 4),
-        ];
+            RuneKey::new(840002, 4)];
         
         keys.sort();
         

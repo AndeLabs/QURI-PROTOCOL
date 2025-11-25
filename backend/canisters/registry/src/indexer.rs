@@ -7,7 +7,7 @@ use std::collections::BTreeMap;
 type IndexedRuneStorage = RefCell<BTreeMap<Vec<u8>, Vec<u8>>>;
 
 // Secondary indexes for fast search - O(log n) instead of O(n)
-type NameIndex = RefCell<BTreeMap<String, Vec<RuneIdentifier>>>;  // name_normalized -> [ids]
+type NameIndex = RefCell<BTreeMap<String, Vec<RuneIdentifier>>>; // name_normalized -> [ids]
 type SymbolIndex = RefCell<BTreeMap<String, Vec<RuneIdentifier>>>; // symbol -> [ids]
 
 // Keep for legacy compatibility but unused
@@ -62,10 +62,10 @@ pub struct IndexerConfig {
 
 thread_local! {
     static RUNES: RuneStorage = const { RefCell::new(None) };
-    static INDEXED_RUNES: IndexedRuneStorage = RefCell::new(BTreeMap::new());
+    static INDEXED_RUNES: IndexedRuneStorage = const { RefCell::new(BTreeMap::new()) };
     // Secondary indexes for O(log n) search
-    static NAME_INDEX: NameIndex = RefCell::new(BTreeMap::new());
-    static SYMBOL_INDEX: SymbolIndex = RefCell::new(BTreeMap::new());
+    static NAME_INDEX: NameIndex = const { RefCell::new(BTreeMap::new()) };
+    static SYMBOL_INDEX: SymbolIndex = const { RefCell::new(BTreeMap::new()) };
     static STATS: RefCell<IndexerStats> = RefCell::new(IndexerStats::default());
     static CONFIG: RefCell<Option<IndexerConfig>> = const { RefCell::new(None) };
     static INITIALIZED: RefCell<bool> = const { RefCell::new(false) };
@@ -114,7 +114,7 @@ pub fn store_rune(rune: IndexedRune) -> Result<(), String> {
     NAME_INDEX.with(|index| {
         let mut idx = index.borrow_mut();
         idx.entry(normalized_name)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(rune.id.clone());
     });
 
@@ -123,7 +123,7 @@ pub fn store_rune(rune: IndexedRune) -> Result<(), String> {
     SYMBOL_INDEX.with(|index| {
         let mut idx = index.borrow_mut();
         idx.entry(symbol_upper)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(rune.id.clone());
     });
 
@@ -145,7 +145,8 @@ pub fn get_rune(id: &RuneIdentifier) -> Option<IndexedRune> {
     let key = encode_rune_key(id);
 
     INDEXED_RUNES.with(|runes| {
-        runes.borrow()
+        runes
+            .borrow()
             .get(&key)
             .and_then(|bytes| candid::decode_one(bytes).ok())
     })
@@ -232,7 +233,8 @@ pub fn search_runes(query: String) -> Vec<IndexedRune> {
 
     // Fetch the actual runes from storage
     let mut results = Vec::new();
-    for id in matching_ids.iter().take(100) {  // Limit results
+    for id in matching_ids.iter().take(100) {
+        // Limit results
         if let Some(rune) = get_rune(id) {
             results.push(rune);
         }
@@ -302,7 +304,7 @@ pub fn rebuild_indexes() -> u64 {
                 NAME_INDEX.with(|idx| {
                     idx.borrow_mut()
                         .entry(normalized)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(rune.id.clone());
                 });
 
@@ -311,7 +313,7 @@ pub fn rebuild_indexes() -> u64 {
                 SYMBOL_INDEX.with(|idx| {
                     idx.borrow_mut()
                         .entry(symbol_upper)
-                        .or_insert_with(Vec::new)
+                        .or_default()
                         .push(rune.id);
                 });
 
@@ -347,17 +349,7 @@ fn encode_rune_key(id: &RuneIdentifier) -> Vec<u8> {
     key
 }
 
-/// Decode storage key to RuneIdentifier
-fn decode_rune_key(key: &[u8]) -> Option<RuneIdentifier> {
-    if key.len() != 12 {
-        return None;
-    }
-
-    let block = u64::from_be_bytes(key[0..8].try_into().ok()?);
-    let tx_index = u32::from_be_bytes(key[8..12].try_into().ok()?);
-
-    Some(RuneIdentifier { block, tx_index })
-}
+// decode_rune_key - Removed (dead code)
 
 #[cfg(test)]
 mod tests {

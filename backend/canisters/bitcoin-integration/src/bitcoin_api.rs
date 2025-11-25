@@ -17,6 +17,8 @@ fn to_icp_network(network: BitcoinNetwork) -> ICPBitcoinNetwork {
 }
 
 /// Get the balance of a Bitcoin address
+/// TODO: Expose this as a public API endpoint if needed for balance queries
+#[allow(dead_code)]
 pub async fn get_balance(address: String, network: BitcoinNetwork) -> Result<u64, String> {
     let request = GetBalanceRequest {
         address,
@@ -65,6 +67,9 @@ pub async fn get_current_fee_percentiles(network: BitcoinNetwork) -> Result<FeeE
 }
 
 /// Send a signed Bitcoin transaction to the network
+///
+/// After successful broadcast, the transaction is automatically tracked
+/// for confirmations (if required_confirmations > 0).
 pub async fn broadcast_transaction(
     transaction: &[u8],
     network: BitcoinNetwork,
@@ -81,6 +86,40 @@ pub async fn broadcast_transaction(
             calculate_txid(transaction)
         })
         .map_err(|e| format!("Failed to broadcast transaction: {:?}", e))
+}
+
+/// Broadcast transaction and start confirmation tracking
+///
+/// This is a convenience function that broadcasts a transaction and
+/// automatically starts tracking it for confirmations.
+pub async fn broadcast_and_track(
+    transaction: &[u8],
+    network: BitcoinNetwork,
+    required_confirmations: u32,
+) -> Result<String, String> {
+    // Broadcast transaction
+    let txid = broadcast_transaction(transaction, network).await?;
+
+    // Get current block height
+    let current_height = get_block_height(network).await?;
+
+    // Start tracking confirmations
+    if required_confirmations > 0 {
+        crate::confirmation_tracker::track_transaction(
+            txid.clone(),
+            network,
+            current_height,
+            required_confirmations,
+        );
+
+        ic_cdk::println!(
+            "📡 Broadcast tx {} and started tracking (needs {} confirmations)",
+            txid,
+            required_confirmations
+        );
+    }
+
+    Ok(txid)
 }
 
 /// Calculate transaction ID from raw transaction bytes
@@ -101,6 +140,8 @@ pub fn calculate_txid(tx_bytes: &[u8]) -> String {
 /// Wait for transaction confirmations
 /// Note: This is a simplified version that checks once
 /// In production, use a heartbeat timer to poll periodically
+/// TODO: Integrate with confirmation_tracker for production use
+#[allow(dead_code)]
 pub async fn wait_for_confirmations(
     txid: String,
     required_confirmations: u32,
@@ -120,21 +161,18 @@ pub async fn wait_for_confirmations(
 }
 
 /// Get number of confirmations for a transaction
-async fn get_transaction_confirmations(
-    _txid: &str,
-    _network: BitcoinNetwork,
+///
+/// This function uses the confirmation tracker to get real-time confirmations.
+/// The transaction must have been previously tracked via broadcast_and_track()
+/// or track_transaction().
+///
+/// Returns 0 if the transaction is not tracked or has not been confirmed yet.
+pub async fn get_transaction_confirmations(
+    txid: &str,
+    network: BitcoinNetwork,
 ) -> Result<u32, String> {
-    // Note: ICP Bitcoin API doesn't have direct get_transaction
-    // We would need to track this via block height differences
-    // For MVP, we'll use a simplified approach
-
-    // TODO: Implement proper confirmation tracking
-    // Options:
-    // 1. Store tx block height when broadcast
-    // 2. Poll current block height
-    // 3. Calculate confirmations = current_height - tx_height + 1
-
-    Ok(0) // Placeholder
+    // Use the confirmation tracker
+    crate::confirmation_tracker::get_transaction_confirmations(txid, network).await
 }
 
 /// Get current Bitcoin block height
@@ -159,6 +197,8 @@ pub async fn get_block_height(network: BitcoinNetwork) -> Result<u64, String> {
 }
 
 /// Estimate time until N confirmations (in seconds)
+/// TODO: Expose as helper function for UI/frontend estimates
+#[allow(dead_code)]
 pub fn estimate_confirmation_time(confirmations: u32) -> u64 {
     // Bitcoin average: 10 min per block
     (confirmations as u64) * 600

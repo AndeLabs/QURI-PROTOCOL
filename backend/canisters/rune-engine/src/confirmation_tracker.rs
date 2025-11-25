@@ -286,7 +286,7 @@ async fn check_pending_transactions() {
         }
 
         // Get current confirmations
-        match get_transaction_confirmations(&tx.txid, tx.network.clone()).await {
+        match get_transaction_confirmations(&tx.txid, tx.network).await {
             Ok(confirmations) => {
                 ic_cdk::println!(
                     "Transaction {} has {} confirmations (needs {})",

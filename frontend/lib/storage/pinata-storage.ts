@@ -1,17 +1,20 @@
 /**
- * Pinata IPFS Storage Integration
- * 
- * Why Pinata?
- * - Free tier: 1GB storage, 100GB bandwidth/month
- * - Used by top NFT platforms (OpenSea, Foundation, etc.)
- * - Reliable and fast global CDN
- * - Simple HTTP API (no SDK dependencies)
- * - Professional service with great uptime
- * 
- * Setup:
- * 1. Get FREE API key: https://pinata.cloud
- * 2. Add to .env.local: 
- *    NEXT_PUBLIC_PINATA_JWT=your-jwt-token
+ * Pinata IPFS Storage Integration - DEPRECATED
+ *
+ * WARNING: This file is deprecated and should not be used directly.
+ * Use the usePinata hook instead for secure server-side uploads.
+ *
+ * Migration Guide:
+ * - Old: import { uploadToPinata } from '@/lib/storage/pinata-storage'
+ * - New: import { usePinata } from '@/hooks/usePinata'
+ *
+ * Why the change?
+ * - Moved JWT to server-side for security
+ * - API routes handle uploads in /app/api/pinata/*
+ * - Client never sees the JWT token
+ * - Better rate limiting and error handling
+ *
+ * This file is kept for backwards compatibility but now proxies to API routes.
  */
 
 import { logger } from '@/lib/logger';
@@ -43,10 +46,9 @@ export interface RuneMetadata {
   };
 }
 
-const PINATA_API_URL = 'https://api.pinata.cloud';
 const PINATA_GATEWAY = 'https://gateway.pinata.cloud';
 
-// Rate limiting and retry configuration
+// Rate limiting configuration
 const MAX_RETRIES = 3;
 const RETRY_DELAY_MS = 1000;
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -68,7 +70,7 @@ async function withRetry<T>(
     return await fn();
   } catch (error) {
     if (retries <= 0) throw error;
-    
+
     // Check if it's a retriable error (network, 5xx, rate limit)
     const shouldRetry = error instanceof Error && (
       error.message.includes('fetch') ||
@@ -78,9 +80,9 @@ async function withRetry<T>(
       error.message.includes('503') ||
       error.message.includes('429') // Rate limit
     );
-    
+
     if (!shouldRetry) throw error;
-    
+
     logger.warn(`Retrying after error, ${retries} attempts remaining`, {
       error: error instanceof Error ? error.message : String(error),
       retriesLeft: retries,
@@ -91,32 +93,12 @@ async function withRetry<T>(
 }
 
 /**
- * Validate JWT token format
- */
-function validateJWT(jwt: string | undefined): { valid: boolean; error?: string } {
-  if (!jwt) {
-    return { valid: false, error: 'JWT token not found in environment variables' };
-  }
-  
-  if (jwt.includes('your-') || jwt.length < 100) {
-    return { valid: false, error: 'JWT token appears to be a placeholder or invalid' };
-  }
-  
-  // JWT should have 3 parts
-  const parts = jwt.split('.');
-  if (parts.length !== 3) {
-    return { valid: false, error: `Invalid JWT format: expected 3 parts, got ${parts.length}` };
-  }
-  
-  return { valid: true };
-}
-
-/**
- * Upload file to Pinata (IPFS) with retry logic
+ * Upload file to Pinata via secure API route
+ * @deprecated Use usePinata hook instead
  */
 export async function uploadToPinata(file: File): Promise<IPFSUploadResult> {
   try {
-    logger.info('Uploading file to Pinata', {
+    logger.info('Uploading file via API route', {
       name: file.name,
       size: file.size,
       type: file.type,
@@ -127,231 +109,116 @@ export async function uploadToPinata(file: File): Promise<IPFSUploadResult> {
       throw new Error(`Archivo muy grande (${(file.size / 1024 / 1024).toFixed(2)}MB). Máximo permitido: 10MB`);
     }
 
-    const jwt = process.env.NEXT_PUBLIC_PINATA_JWT;
-    
-    // Validate JWT
-    const jwtValidation = validateJWT(jwt);
-    if (!jwtValidation.valid) {
-      logger.warn('Pinata JWT invalid, using free public IPFS', { error: jwtValidation.error });
-      return uploadToPublicIPFS(file);
-    }
-
-    // Upload with retry logic
+    // Upload via API route with retry logic
     const result = await withRetry(async () => {
       // Create FormData for file upload
       const formData = new FormData();
       formData.append('file', file);
 
-      // Add metadata
-      const metadata = JSON.stringify({
-        name: file.name,
-        keyvalues: {
-          uploadedBy: 'QURI-Protocol',
-          timestamp: new Date().toISOString(),
-        }
-      });
-      formData.append('pinataMetadata', metadata);
-
-      // Upload to Pinata
-      const response = await fetch(`${PINATA_API_URL}/pinning/pinFileToIPFS`, {
+      // Upload to our secure API route
+      const response = await fetch('/api/pinata/upload', {
         method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${jwt}`,
-        },
         body: formData,
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        
-        // Parse error for better messaging
-        let errorMessage = `Pinata upload failed: ${response.status}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error?.details || errorJson.message || errorMessage;
-        } catch {
-          errorMessage = `${errorMessage} - ${errorText}`;
-        }
-        
-        throw new Error(errorMessage);
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(errorData.error || `Upload failed: ${response.status}`);
       }
 
-      const data = await response.json();
-
-      // Validate response
-      if (!data.IpfsHash) {
-        throw new Error('Pinata response missing IpfsHash');
-      }
-
-      return {
-        ipfsHash: data.IpfsHash,
-        ipfsUrl: `ipfs://${data.IpfsHash}`,
-        gatewayUrl: `${PINATA_GATEWAY}/ipfs/${data.IpfsHash}`,
-        size: data.PinSize || file.size,
-      };
+      return await response.json();
     });
 
-    logger.info('File uploaded to Pinata successfully', {
+    logger.info('File uploaded successfully via API route', {
       cid: result.ipfsHash,
       size: result.size,
     });
 
-    // Verify upload by checking if it's accessible
-    await verifyIPFSUpload(result.ipfsHash);
-
     return result;
   } catch (error) {
-    logger.error('Failed to upload to Pinata after retries', error instanceof Error ? error : undefined);
-    
+    logger.error('Failed to upload via API route', error instanceof Error ? error : undefined);
+
     // Enhanced error messaging
     if (error instanceof Error) {
       if (error.message.includes('429')) {
         throw new Error('Rate limit alcanzado. Por favor espera un momento e intenta nuevamente.');
       }
       if (error.message.includes('401') || error.message.includes('403')) {
-        throw new Error('Error de autenticación con Pinata. Verifica tu API key.');
+        throw new Error('Error de autenticación. Por favor inicia sesión nuevamente.');
       }
       throw new Error(`Error al subir a IPFS: ${error.message}`);
     }
-    
+
     throw error;
   }
 }
 
 /**
- * Verify IPFS upload by checking gateway accessibility
- */
-async function verifyIPFSUpload(cid: string): Promise<boolean> {
-  try {
-    logger.info('Verifying IPFS upload', { cid });
-    
-    // Try Pinata gateway first (fastest)
-    const response = await fetch(`${PINATA_GATEWAY}/ipfs/${cid}`, {
-      method: 'HEAD',
-      signal: AbortSignal.timeout(5000), // 5 second timeout
-    });
-    
-    if (response.ok) {
-      logger.info('IPFS upload verified successfully', { cid });
-      return true;
-    }
-    
-    logger.warn('IPFS content not immediately accessible, but upload succeeded', { cid });
-    return true; // Upload succeeded even if not immediately accessible
-  } catch (error) {
-    logger.warn('Could not verify IPFS upload, but upload succeeded', { cid, error });
-    return true; // Don't fail the whole upload if verification fails
-  }
-}
-
-/**
- * Upload JSON metadata to Pinata with retry logic
+ * Upload JSON metadata to Pinata via secure API route
+ * @deprecated Use usePinata hook instead
  */
 export async function uploadMetadataToPinata(
   metadata: RuneMetadata
 ): Promise<IPFSUploadResult> {
   try {
-    logger.info('Uploading metadata to Pinata', { name: metadata.name });
+    logger.info('Uploading metadata via API route', { name: metadata.name });
 
-    const jwt = process.env.NEXT_PUBLIC_PINATA_JWT;
-    
-    // Validate JWT
-    const jwtValidation = validateJWT(jwt);
-    if (!jwtValidation.valid) {
-      logger.warn('Pinata JWT invalid, using free public IPFS', { error: jwtValidation.error });
-      return uploadMetadataToPublicIPFS(metadata);
-    }
-
-    // Upload with retry logic
+    // Upload via API route with retry logic
     const result = await withRetry(async () => {
-      // Upload JSON to Pinata
-      const response = await fetch(`${PINATA_API_URL}/pinning/pinJSONToIPFS`, {
+      // Upload JSON to our secure API route
+      const response = await fetch('/api/pinata/pin', {
         method: 'POST',
         headers: {
-          'Authorization': `Bearer ${jwt}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          pinataContent: metadata,
-          pinataMetadata: {
-            name: `${metadata.name}-metadata.json`,
-            keyvalues: {
-              type: 'rune-metadata',
-              rune: metadata.name,
-              symbol: metadata.symbol,
-              uploadedBy: 'QURI-Protocol',
-              timestamp: new Date().toISOString(),
-            }
-          },
+          metadata,
+          name: `${metadata.name}-metadata.json`,
         }),
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        
-        // Parse error for better messaging
-        let errorMessage = `Pinata metadata upload failed: ${response.status}`;
-        try {
-          const errorJson = JSON.parse(errorText);
-          errorMessage = errorJson.error?.details || errorJson.message || errorMessage;
-        } catch {
-          errorMessage = `${errorMessage} - ${errorText}`;
-        }
-        
-        throw new Error(errorMessage);
+        const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+        throw new Error(errorData.error || `Metadata upload failed: ${response.status}`);
       }
 
-      const data = await response.json();
-
-      // Validate response
-      if (!data.IpfsHash) {
-        throw new Error('Pinata response missing IpfsHash');
-      }
-
-      return {
-        ipfsHash: data.IpfsHash,
-        ipfsUrl: `ipfs://${data.IpfsHash}`,
-        gatewayUrl: `${PINATA_GATEWAY}/ipfs/${data.IpfsHash}`,
-        size: data.PinSize || JSON.stringify(metadata).length,
-      };
+      return await response.json();
     });
 
-    logger.info('Metadata uploaded to Pinata successfully', { 
+    logger.info('Metadata uploaded successfully via API route', {
       cid: result.ipfsHash,
       size: result.size,
     });
 
-    // Verify upload
-    await verifyIPFSUpload(result.ipfsHash);
-
     return result;
   } catch (error) {
-    logger.error('Failed to upload metadata to Pinata after retries', error instanceof Error ? error : undefined);
-    
+    logger.error('Failed to upload metadata via API route', error instanceof Error ? error : undefined);
+
     // Enhanced error messaging
     if (error instanceof Error) {
       if (error.message.includes('429')) {
         throw new Error('Rate limit alcanzado. Por favor espera un momento e intenta nuevamente.');
       }
       if (error.message.includes('401') || error.message.includes('403')) {
-        throw new Error('Error de autenticación con Pinata. Verifica tu API key.');
+        throw new Error('Error de autenticación. Por favor inicia sesión nuevamente.');
       }
       throw new Error(`Error al subir metadata a IPFS: ${error.message}`);
     }
-    
+
     throw error;
   }
 }
 
 /**
- * Upload image and metadata together
+ * Upload image and metadata together via secure API route
+ * @deprecated Use usePinata hook instead
  */
 export async function uploadRuneAssets(
   imageFile: File,
   metadata: Omit<RuneMetadata, 'image'>
 ): Promise<{ imageUpload: IPFSUploadResult; metadataUpload: IPFSUploadResult }> {
   try {
-    logger.info('Starting Rune assets upload to IPFS', {
+    logger.info('Starting Rune assets upload via API route', {
       imageName: imageFile.name,
       runeName: metadata.name,
     });
@@ -368,65 +235,14 @@ export async function uploadRuneAssets(
     // Step 3: Upload metadata
     const metadataUpload = await uploadMetadataToPinata(fullMetadata);
 
-    logger.info('Rune assets uploaded successfully', {
+    logger.info('Rune assets uploaded successfully via API route', {
       imageHash: imageUpload.ipfsHash,
       metadataHash: metadataUpload.ipfsHash,
     });
 
     return { imageUpload, metadataUpload };
   } catch (error) {
-    logger.error('Failed to upload rune assets', error instanceof Error ? error : undefined);
-    throw error;
-  }
-}
-
-/**
- * Fallback: Upload to free public IPFS gateway
- * Uses ipfs.io public gateway
- */
-async function uploadToPublicIPFS(file: File): Promise<IPFSUploadResult> {
-  try {
-    logger.info('Using free public IPFS upload', { file: file.name });
-
-    // Use ipfs.io public API
-    const formData = new FormData();
-    formData.append('file', file);
-
-    const response = await fetch('https://ipfs.io/api/v0/add', {
-      method: 'POST',
-      body: formData,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Public IPFS upload failed: ${response.status}`);
-    }
-
-    const data = await response.json();
-
-    return {
-      ipfsHash: data.Hash,
-      ipfsUrl: `ipfs://${data.Hash}`,
-      gatewayUrl: `https://ipfs.io/ipfs/${data.Hash}`,
-      size: file.size,
-    };
-  } catch (error) {
-    logger.error('Public IPFS upload failed', error instanceof Error ? error : undefined);
-    throw new Error('No se pudo subir a IPFS. Por favor configura Pinata o intenta más tarde.');
-  }
-}
-
-/**
- * Fallback: Upload metadata to public IPFS
- */
-async function uploadMetadataToPublicIPFS(metadata: RuneMetadata): Promise<IPFSUploadResult> {
-  try {
-    const jsonString = JSON.stringify(metadata);
-    const blob = new Blob([jsonString], { type: 'application/json' });
-    const file = new File([blob], 'metadata.json', { type: 'application/json' });
-
-    return await uploadToPublicIPFS(file);
-  } catch (error) {
-    logger.error('Public IPFS metadata upload failed', error instanceof Error ? error : undefined);
+    logger.error('Failed to upload rune assets via API route', error instanceof Error ? error : undefined);
     throw error;
   }
 }
@@ -436,7 +252,7 @@ async function uploadMetadataToPublicIPFS(metadata: RuneMetadata): Promise<IPFSU
  */
 export function getMultipleGatewayUrls(ipfsUrl: string): string[] {
   const hash = ipfsUrl.replace('ipfs://', '');
-  
+
   return [
     `${PINATA_GATEWAY}/ipfs/${hash}`,           // Primary: Pinata
     `https://ipfs.io/ipfs/${hash}`,              // Backup 1: Public IPFS
@@ -480,7 +296,7 @@ export function validateImageFile(file: File): { valid: boolean; error?: string 
     'image/webp',
     'image/svg+xml',
   ];
-  
+
   if (!validTypes.includes(file.type)) {
     return {
       valid: false,

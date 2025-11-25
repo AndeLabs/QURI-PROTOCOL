@@ -95,16 +95,6 @@ impl RuneKey {
         Ok(Self { block, tx })
     }
     
-    /// Convierte a formato string "block:tx"
-    ///
-    /// Este es el formato estándar usado en:
-    /// - Bitcoin explorers (mempool.space)
-    /// - Ordinals protocol
-    /// - Runes protocol
-    pub fn to_string(&self) -> String {
-        format!("{}:{}", self.block, self.tx)
-    }
-    
     /// Genera RuneKey desde bytes raw
     pub fn from_bytes_raw(bytes: &[u8]) -> Result<Self, ParseError> {
         if bytes.len() != 12 {
@@ -315,6 +305,7 @@ mod tests {
     #[test]
     fn test_rune_key_to_string() {
         let key = RuneKey::new(840000, 1);
+        // to_string() viene del trait Display
         assert_eq!(key.to_string(), "840000:1");
     }
     

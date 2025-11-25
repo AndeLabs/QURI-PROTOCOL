@@ -14,12 +14,8 @@ const nextConfig = {
 
   // TypeScript configuration
   typescript: {
-    // !! WARN !!
-    // Dangerously allow production builds to successfully complete even if
-    // your project has type errors.
-    // !! WARN !!
-    // TODO: Set back to false after fixing all type errors
-    ignoreBuildErrors: true,
+    // Type checking is now enabled - all TypeScript errors have been fixed!
+    ignoreBuildErrors: false,
   },
 
   // Image optimization for Vercel
@@ -94,36 +90,9 @@ const nextConfig = {
     return config;
   },
 
-  // Security headers with CSP
-  // NOTE: Disabled for local development to allow localhost connections
-  async headers() {
-    // In development, allow all connections for local testing
-    if (process.env.NODE_ENV === 'development') {
-      return [];
-    }
-    
-    // Production CSP
-    return [
-      {
-        source: '/:path*',
-        headers: [
-          {
-            key: 'Content-Security-Policy',
-            value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: blob: https:",
-              "font-src 'self' data:",
-              "connect-src 'self' https://ic0.app https://*.ic0.app https://icp0.io https://*.icp0.io https://icp-api.io https://*.icp-api.io https: wss:",
-              "frame-src 'self' https://ic0.app https://*.ic0.app https:",
-              "worker-src 'self' blob:",
-            ].join('; '),
-          },
-        ],
-      },
-    ];
-  },
+  // Security headers are now handled by middleware.ts
+  // This provides better control over CSP with nonces
+  // See: frontend/middleware.ts and frontend/lib/security/csp.ts
 };
 
 module.exports = nextConfig;

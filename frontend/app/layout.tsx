@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 import '../styles/dex.css';
 import { Providers } from './providers';
+import { getNonce } from '@/lib/security/csp';
 
 /**
  * Production-ready font configuration using system fonts
@@ -51,13 +52,20 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  // Get the nonce for CSP script execution
+  const nonce = getNonce();
+
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        {/* CSP nonce is automatically applied to Next.js scripts */}
+        {nonce && <meta name="csp-nonce" content={nonce} />}
+      </head>
       <body
         className="font-sans antialiased"
         suppressHydrationWarning
       >
-        <Providers>{children}</Providers>
+        <Providers nonce={nonce}>{children}</Providers>
       </body>
     </html>
   );

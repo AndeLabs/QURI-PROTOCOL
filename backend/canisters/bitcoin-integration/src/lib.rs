@@ -1,17 +1,22 @@
 use candid::{CandidType, Deserialize, Principal};
-use ic_cdk_macros::{init, post_upgrade, update};
+use ic_cdk_macros::{init, post_upgrade, pre_upgrade, query, update};
+use ic_stable_structures::memory_manager::{MemoryId, MemoryManager, VirtualMemory};
+use ic_stable_structures::DefaultMemoryImpl;
 use std::cell::RefCell;
 use std::str::FromStr;
 
 mod bitcoin_api;
 mod ckbtc;
 mod config;
+mod confirmation_tracker;
 mod schnorr;
 mod transaction;
 mod utxo;
 
 use bitcoin_utils::address::derive_p2tr_address;
 use quri_types::{BitcoinAddress, BitcoinNetwork, FeeEstimates, RuneEtching, UtxoSelection};
+
+type Memory = VirtualMemory<DefaultMemoryImpl>;
 
 #[derive(CandidType, Deserialize, Clone, Debug)]
 pub struct Config {
@@ -21,6 +26,9 @@ pub struct Config {
 
 thread_local! {
     static CONFIG: RefCell<Option<Config>> = const { RefCell::new(None) };
+
+    static MEMORY_MANAGER: RefCell<MemoryManager<DefaultMemoryImpl>> =
+        RefCell::new(MemoryManager::init(DefaultMemoryImpl::default()));
 }
 
 #[init]
@@ -31,15 +39,43 @@ fn init(network: BitcoinNetwork, ckbtc_ledger_id: Principal) {
             ckbtc_ledger_id,
         });
     });
+
+    // Initialize confirmation tracker storage (MemoryId 0)
+    let confirmation_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)));
+    confirmation_tracker::init_confirmation_storage(confirmation_memory);
+
     ic_cdk::println!("Bitcoin Integration canister initialized");
     config::log_config();
+
+    // Schedule timer initialization after init completes
+    // Timers cannot be set during init, so we use a one-shot timer
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(1), || {
+        confirmation_tracker::init_confirmation_tracker();
+    });
+}
+
+#[pre_upgrade]
+fn pre_upgrade() {
+    ic_cdk::println!("Preparing for upgrade");
+
+    // Stop timers before upgrade
+    confirmation_tracker::stop_confirmation_tracker();
 }
 
 #[post_upgrade]
 fn post_upgrade() {
+    // Reinitialize confirmation tracker storage (MemoryId 0)
+    let confirmation_memory = MEMORY_MANAGER.with(|m| m.borrow().get(MemoryId::new(0)));
+    confirmation_tracker::reinit_confirmation_storage(confirmation_memory);
+
     // Config needs to be re-initialized after upgrade
     // Call configure() after upgrade to set the config
     ic_cdk::println!("Bitcoin Integration canister upgraded - call configure() to set network");
+
+    // Schedule timer initialization after upgrade completes
+    ic_cdk_timers::set_timer(std::time::Duration::from_secs(1), || {
+        confirmation_tracker::init_confirmation_tracker();
+    });
 }
 
 /// Admin function to configure/reconfigure the canister
@@ -167,6 +203,22 @@ async fn broadcast_transaction(tx_bytes: Vec<u8>) -> Result<String, String> {
         .map_err(|e| format!("Failed to broadcast transaction: {}", e))
 }
 
+/// Broadcast a signed Bitcoin transaction and start confirmation tracking
+///
+/// This function broadcasts the transaction and automatically starts tracking
+/// it for confirmations. Use this instead of broadcast_transaction() when you
+/// need to wait for confirmations.
+#[update]
+async fn broadcast_and_track(
+    tx_bytes: Vec<u8>,
+    required_confirmations: u32,
+) -> Result<String, String> {
+    let network = get_network()?;
+    bitcoin_api::broadcast_and_track(&tx_bytes, network, required_confirmations)
+        .await
+        .map_err(|e| format!("Failed to broadcast transaction: {}", e))
+}
+
 /// Get current Bitcoin block height
 #[update]
 async fn get_block_height() -> Result<u64, String> {
@@ -183,6 +235,73 @@ async fn get_ckbtc_balance(principal: Principal) -> Result<u64, String> {
     ckbtc::get_balance(principal)
         .await
         .map_err(|e| format!("Failed to get ckBTC balance: {}", e))
+}
+
+/// Transfer ckBTC to a recipient
+/// Used for refunds and other transfers
+#[update]
+async fn transfer_ckbtc(
+    to: Principal,
+    amount: u64,
+    memo: Option<Vec<u8>>,
+) -> Result<u64, String> {
+    ckbtc::transfer(to, amount, memo)
+        .await
+        .map_err(|e| format!("Failed to transfer ckBTC: {}", e))
+}
+
+// ============================================================================
+// Confirmation Tracking APIs
+// ============================================================================
+
+/// Get confirmations for a specific transaction
+///
+/// Returns the number of confirmations for a transaction that is being tracked.
+/// The transaction must have been broadcasted using broadcast_and_track() or
+/// manually added to tracking.
+#[update]
+async fn get_confirmations(txid: String) -> Result<u32, String> {
+    let network = get_network()?;
+    bitcoin_api::get_transaction_confirmations(&txid, network)
+        .await
+        .map_err(|e| format!("Failed to get confirmations: {}", e))
+}
+
+/// Get all tracked transactions (for debugging/monitoring)
+#[query]
+fn get_all_tracked_transactions() -> Vec<confirmation_tracker::ConfirmationEntry> {
+    confirmation_tracker::get_all_tracked_transactions()
+}
+
+/// Get pending confirmations (transactions that haven't reached required confirmations)
+#[query]
+fn get_pending_confirmations() -> Vec<confirmation_tracker::ConfirmationEntry> {
+    confirmation_tracker::get_pending_confirmations()
+}
+
+/// Get confirmed transactions (transactions that have reached required confirmations)
+#[query]
+fn get_confirmed_transactions() -> Vec<confirmation_tracker::ConfirmationEntry> {
+    confirmation_tracker::get_confirmed_transactions()
+}
+
+/// Get tracked transaction count
+#[query]
+fn get_tracked_transaction_count() -> usize {
+    confirmation_tracker::get_tracked_transaction_count()
+}
+
+/// Get tracking info for a specific transaction
+#[query]
+fn get_confirmation_entry(txid: String) -> Option<confirmation_tracker::ConfirmationEntry> {
+    confirmation_tracker::get_confirmation_entry(&txid)
+}
+
+/// Manually untrack a transaction (admin function)
+#[update]
+fn untrack_transaction(txid: String) -> Result<(), String> {
+    confirmation_tracker::untrack_transaction(&txid);
+    Ok(())
 }
 
 // Helper functions

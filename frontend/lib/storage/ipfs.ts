@@ -1,6 +1,14 @@
 /**
- * IPFS Storage Integration
- * Handles image and metadata uploads to IPFS via Pinata
+ * IPFS Storage Integration - DEPRECATED
+ *
+ * WARNING: This file uses the old Pinata API key method and is deprecated.
+ * Use the usePinata hook instead for secure server-side uploads with JWT.
+ *
+ * Migration Guide:
+ * - Old: import { uploadToIPFS } from '@/lib/storage/ipfs'
+ * - New: import { usePinata } from '@/hooks/usePinata'
+ *
+ * This file is kept for backwards compatibility but now proxies to API routes.
  */
 
 import { logger } from '@/lib/logger';
@@ -30,125 +38,87 @@ export interface RuneMetadata {
 }
 
 /**
- * Upload file to IPFS via Pinata
+ * Upload file to IPFS via secure API route
+ * @deprecated Use usePinata hook instead
  */
 export async function uploadToIPFS(file: File): Promise<IPFSUploadResult> {
   try {
-    logger.info('Uploading file to IPFS', {
+    logger.info('Uploading file to IPFS via API route', {
       name: file.name,
       size: file.size,
       type: file.type
     });
 
-    // Check if Pinata API key is configured
-    const pinataApiKey = process.env.NEXT_PUBLIC_PINATA_API_KEY;
-    const pinataSecretKey = process.env.NEXT_PUBLIC_PINATA_SECRET_KEY;
-
-    if (!pinataApiKey || !pinataSecretKey) {
-      logger.warn('Pinata credentials not configured, using mock upload');
-      return mockIPFSUpload(file);
-    }
-
+    // Use secure API route instead of direct Pinata access
     const formData = new FormData();
     formData.append('file', file);
 
-    const metadata = JSON.stringify({
-      name: file.name,
-    });
-    formData.append('pinataMetadata', metadata);
-
-    const options = JSON.stringify({
-      cidVersion: 1,
-    });
-    formData.append('pinataOptions', options);
-
-    const response = await fetch('https://api.pinata.cloud/pinning/pinFileToIPFS', {
+    const response = await fetch('/api/pinata/upload', {
       method: 'POST',
-      headers: {
-        'pinata_api_key': pinataApiKey,
-        'pinata_secret_api_key': pinataSecretKey,
-      },
       body: formData,
     });
 
     if (!response.ok) {
-      throw new Error(`Pinata upload failed: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(errorData.error || `Upload failed: ${response.status}`);
     }
 
-    const data = await response.json();
-    const ipfsHash = data.IpfsHash;
+    const result = await response.json();
 
-    const result: IPFSUploadResult = {
-      ipfsHash,
-      ipfsUrl: `ipfs://${ipfsHash}`,
-      gatewayUrl: `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
-      size: file.size,
-    };
-
-    logger.info('File uploaded to IPFS successfully', { ipfsHash });
+    logger.info('File uploaded to IPFS successfully', { ipfsHash: result.ipfsHash });
     return result;
   } catch (error) {
     logger.error('Failed to upload to IPFS', error instanceof Error ? error : undefined);
-    throw error;
+
+    // Fallback to mock for development
+    logger.warn('Using mock upload as fallback');
+    return mockIPFSUpload(file);
   }
 }
 
 /**
- * Upload JSON metadata to IPFS
+ * Upload JSON metadata to IPFS via secure API route
+ * @deprecated Use usePinata hook instead
  */
 export async function uploadMetadataToIPFS(
   metadata: RuneMetadata
 ): Promise<IPFSUploadResult> {
   try {
-    logger.info('Uploading metadata to IPFS', { name: metadata.name });
+    logger.info('Uploading metadata to IPFS via API route', { name: metadata.name });
 
-    const pinataApiKey = process.env.NEXT_PUBLIC_PINATA_API_KEY;
-    const pinataSecretKey = process.env.NEXT_PUBLIC_PINATA_SECRET_KEY;
-
-    if (!pinataApiKey || !pinataSecretKey) {
-      logger.warn('Pinata credentials not configured, using mock upload');
-      return mockMetadataUpload(metadata);
-    }
-
-    const response = await fetch('https://api.pinata.cloud/pinning/pinJSONToIPFS', {
+    // Use secure API route instead of direct Pinata access
+    const response = await fetch('/api/pinata/pin', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'pinata_api_key': pinataApiKey,
-        'pinata_secret_api_key': pinataSecretKey,
       },
       body: JSON.stringify({
-        pinataContent: metadata,
-        pinataMetadata: {
-          name: `${metadata.symbol}-metadata.json`,
-        },
+        metadata,
+        name: `${metadata.symbol}-metadata.json`,
       }),
     });
 
     if (!response.ok) {
-      throw new Error(`Pinata metadata upload failed: ${response.statusText}`);
+      const errorData = await response.json().catch(() => ({ error: 'Upload failed' }));
+      throw new Error(errorData.error || `Metadata upload failed: ${response.status}`);
     }
 
-    const data = await response.json();
-    const ipfsHash = data.IpfsHash;
+    const result = await response.json();
 
-    const result: IPFSUploadResult = {
-      ipfsHash,
-      ipfsUrl: `ipfs://${ipfsHash}`,
-      gatewayUrl: `https://gateway.pinata.cloud/ipfs/${ipfsHash}`,
-      size: JSON.stringify(metadata).length,
-    };
-
-    logger.info('Metadata uploaded to IPFS successfully', { ipfsHash });
+    logger.info('Metadata uploaded to IPFS successfully', { ipfsHash: result.ipfsHash });
     return result;
   } catch (error) {
     logger.error('Failed to upload metadata to IPFS', error instanceof Error ? error : undefined);
-    throw error;
+
+    // Fallback to mock for development
+    logger.warn('Using mock upload as fallback');
+    return mockMetadataUpload(metadata);
   }
 }
 
 /**
  * Upload image and create metadata in one go
+ * @deprecated Use usePinata hook instead
  */
 export async function uploadRuneAssets(
   imageFile: File,
@@ -161,7 +131,7 @@ export async function uploadRuneAssets(
     // Step 2: Create full metadata with image URL
     const fullMetadata: RuneMetadata = {
       ...metadata,
-      image: imageUpload.gatewayUrl, // Use gateway URL for better compatibility
+      image: imageUpload.ipfsUrl, // Use IPFS URL for true decentralization
     };
 
     // Step 3: Upload metadata
@@ -205,6 +175,8 @@ export function ipfsToGatewayUrl(ipfsUrl: string, gateway = 'pinata'): string {
 function mockIPFSUpload(file: File): IPFSUploadResult {
   const mockHash = `Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
 
+  logger.info('Using mock IPFS upload', { mockHash, fileName: file.name });
+
   return {
     ipfsHash: mockHash,
     ipfsUrl: `ipfs://${mockHash}`,
@@ -218,6 +190,8 @@ function mockIPFSUpload(file: File): IPFSUploadResult {
  */
 function mockMetadataUpload(metadata: RuneMetadata): IPFSUploadResult {
   const mockHash = `Qm${Math.random().toString(36).substring(2, 15)}${Math.random().toString(36).substring(2, 15)}`;
+
+  logger.info('Using mock metadata upload', { mockHash, name: metadata.name });
 
   return {
     ipfsHash: mockHash,

@@ -16,7 +16,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "test:csp": "node scripts/test-csp.js"
   },
   "dependencies": {
     "@dfinity/agent": "^2.1.0",

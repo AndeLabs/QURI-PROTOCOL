@@ -107,7 +107,7 @@ pub struct CyclesMetrics {
 thread_local! {
     /// Recent balance snapshots (last 24)
     /// Stored in memory (ephemeral), resets on upgrade
-    static BALANCE_HISTORY: RefCell<Vec<CyclesSnapshot>> = RefCell::new(Vec::new());
+    static BALANCE_HISTORY: RefCell<Vec<CyclesSnapshot>> = const { RefCell::new(Vec::new()) };
 
     /// Monitor timer
     static MONITOR_TIMER: RefCell<Option<TimerId>> = const { RefCell::new(None) };

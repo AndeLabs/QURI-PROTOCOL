@@ -136,6 +136,37 @@ type SyncResponse = record {
   fetched : nat32;
 };
 type TransformArgs = record { context : blob; response : HttpResponse };
+type StakePosition = record {
+  rune_id : text;
+  amount : nat64;
+  staked_at : nat64;
+  last_claim : nat64;
+  total_rewards_claimed : nat64;
+};
+type StakingPool = record {
+  rune_id : text;
+  total_staked : nat64;
+  total_stakers : nat64;
+  apy_rate : nat16;
+  rewards_distributed : nat64;
+  created_at : nat64;
+};
+type StakingStats = record {
+  total_value_locked : nat64;
+  total_pools : nat64;
+  total_stakers : nat64;
+  total_rewards_distributed : nat64;
+};
+type RewardCalculation = record {
+  principal_amount : nat64;
+  reward_amount : nat64;
+  time_staked_seconds : nat64;
+  apy_rate : nat16;
+};
+type Result_5 = variant { Ok : StakePosition; Err : text };
+type Result_6 = variant { Ok : record { nat64; nat64 }; Err : text };
+type Result_7 = variant { Ok : nat64; Err : text };
+type Result_8 = variant { Ok : RewardCalculation; Err : text };
 service : () -> {
   // Add principal to rate limit whitelist (admin only)
   add_to_whitelist : (principal) -> (Result);
@@ -292,4 +323,26 @@ service : () -> {
   update_holder_count : (RuneKey, nat64) -> (Result);
   // Actualiza volumen de trading de un Rune
   update_volume : (RuneKey, nat64) -> (Result);
+  // === STAKING ENDPOINTS ===
+  // Stake Runes to earn ckBTC rewards
+  stake_runes : (text, nat64) -> (Result_5);
+  // Unstake Runes and claim rewards
+  // Returns: (unstaked_amount, rewards_claimed)
+  unstake_runes : (text, nat64) -> (Result_6);
+  // Claim staking rewards without unstaking
+  claim_staking_rewards : (text) -> (Result_7);
+  // Get my stake position for a specific Rune
+  get_my_stake : (text) -> (opt StakePosition) query;
+  // Get all my staking positions
+  get_all_my_stakes : () -> (vec StakePosition) query;
+  // Get staking pool information for a Rune
+  get_staking_pool_info : (text) -> (opt StakingPool) query;
+  // Get all staking pools
+  get_all_staking_pools : () -> (vec StakingPool) query;
+  // Get global staking statistics
+  get_staking_statistics : () -> (StakingStats) query;
+  // Calculate pending rewards for a staking position
+  calculate_pending_rewards : (text) -> (Result_8) query;
+  // Update staking pool APY (admin only)
+  update_staking_pool_apy : (text, nat16) -> (Result);
 }

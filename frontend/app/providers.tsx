@@ -13,7 +13,12 @@ import { Toaster } from 'sonner';
 // SIWB canister ID - update this when deployed
 const SIWB_CANISTER_ID = process.env.NEXT_PUBLIC_SIWB_CANISTER_ID;
 
-export function Providers({ children }: { children: ReactNode }) {
+interface ProvidersProps {
+  children: ReactNode;
+  nonce?: string;
+}
+
+export function Providers({ children, nonce }: ProvidersProps) {
   // Create optimized QueryClient
   const [queryClient] = useState(() => createQueryClient());
 

@@ -84,29 +84,29 @@ pub fn generate_request_id(caller: &Principal, etching: &RuneEtching) -> String 
     // Hash rune details
     hasher.update(etching.rune_name.as_bytes());
     hasher.update(etching.symbol.as_bytes());
-    hasher.update(&etching.divisibility.to_le_bytes());
+    hasher.update(etching.divisibility.to_le_bytes());
 
     // Hash premine
     hasher.update(b"premine:");
-    hasher.update(&etching.premine.to_le_bytes());
+    hasher.update(etching.premine.to_le_bytes());
 
     // Hash minting terms if present
     if let Some(ref terms) = etching.terms {
         hasher.update(b"terms:");
-        hasher.update(&terms.amount.to_le_bytes());
-        hasher.update(&terms.cap.to_le_bytes());
+        hasher.update(terms.amount.to_le_bytes());
+        hasher.update(terms.cap.to_le_bytes());
 
         if let Some(height_start) = terms.height_start {
-            hasher.update(&height_start.to_le_bytes());
+            hasher.update(height_start.to_le_bytes());
         }
         if let Some(height_end) = terms.height_end {
-            hasher.update(&height_end.to_le_bytes());
+            hasher.update(height_end.to_le_bytes());
         }
         if let Some(offset_start) = terms.offset_start {
-            hasher.update(&offset_start.to_le_bytes());
+            hasher.update(offset_start.to_le_bytes());
         }
         if let Some(offset_end) = terms.offset_end {
-            hasher.update(&offset_end.to_le_bytes());
+            hasher.update(offset_end.to_le_bytes());
         }
     }
 

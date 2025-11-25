@@ -1,0 +1,203 @@
+# ============================================================================
+# QURI Protocol - Crontab Example for Automated Backups and Monitoring
+# ============================================================================
+#
+# This file contains example crontab entries for automating QURI Protocol
+# canister backups, cycles monitoring, and maintenance tasks.
+#
+# Installation:
+#   1. Copy this file: cp scripts/crontab.example scripts/crontab.local
+#   2. Edit paths in crontab.local to match your system
+#   3. Install: crontab scripts/crontab.local
+#   4. Verify: crontab -l
+#
+# Notes:
+#   - All times are in UTC
+#   - Adjust paths to match your installation
+#   - Ensure scripts are executable (chmod +x scripts/*.sh)
+#   - Check logs regularly for errors
+#   - Consider using absolute paths for reliability
+#
+# Cron Format:
+#   * * * * *  command to execute
+#   │ │ │ │ │
+#   │ │ │ │ └─── day of week (0 - 7) (Sunday = 0 or 7)
+#   │ │ │ └───── month (1 - 12)
+#   │ │ └─────── day of month (1 - 31)
+#   │ └───────── hour (0 - 23)
+#   └─────────── minute (0 - 59)
+#
+# ============================================================================
+
+# ============================================================================
+# Environment Variables
+# ============================================================================
+
+# Set PATH to include dfx
+PATH=/usr/local/bin:/usr/bin:/bin:/home/user/.local/share/dfx/bin
+
+# Project directory (CHANGE THIS TO YOUR PATH)
+QURI_HOME=/Users/munay/dev/QURI-PROTOCOL
+
+# Backup directory (CHANGE THIS TO YOUR PATH)
+BACKUP_DIR=/var/backups/quri
+
+# Log directory (CHANGE THIS TO YOUR PATH)
+LOG_DIR=/var/log/quri
+
+# Slack webhook for alerts (CHANGE THIS TO YOUR WEBHOOK)
+SLACK_WEBHOOK=https://hooks.slack.com/services/YOUR/WEBHOOK/URL
+
+# ============================================================================
+# Daily Backups
+# ============================================================================
+
+# Full backup at 2:00 AM UTC every day
+# Recommended: Run during low-traffic hours
+0 2 * * * cd $QURI_HOME && ./scripts/backup-canisters.sh --output-dir $BACKUP_DIR --verbose >> $LOG_DIR/backup.log 2>&1
+
+# Alternative: Backup at multiple times for redundancy
+# 0 2,14 * * * cd $QURI_HOME && ./scripts/backup-canisters.sh --output-dir $BACKUP_DIR >> $LOG_DIR/backup.log 2>&1
+
+# ============================================================================
+# Cycles Monitoring
+# ============================================================================
+
+# Monitor cycles every hour
+# Alerts only if thresholds are breached (--quiet mode)
+0 * * * * cd $QURI_HOME && ./scripts/monitor-cycles.sh --quiet --webhook $SLACK_WEBHOOK --webhook-type slack >> $LOG_DIR/cycles.log 2>&1
+
+# Alternative: More frequent monitoring during business hours
+# 0 8-18 * * 1-5 cd $QURI_HOME && ./scripts/monitor-cycles.sh --quiet --webhook $SLACK_WEBHOOK >> $LOG_DIR/cycles.log 2>&1
+
+# Critical monitoring every 15 minutes with stricter thresholds
+# */15 * * * * cd $QURI_HOME && ./scripts/monitor-cycles.sh --critical 500B --warning 50B --quiet --webhook $SLACK_WEBHOOK >> $LOG_DIR/cycles-critical.log 2>&1
+
+# ============================================================================
+# Backup Maintenance
+# ============================================================================
+
+# Compress backups older than 7 days - runs weekly on Sunday at 3 AM
+0 3 * * 0 cd $QURI_HOME && ./scripts/backup-canisters.sh --compress-age 7 --no-compress --output-dir $BACKUP_DIR >> $LOG_DIR/compress.log 2>&1
+
+# Delete very old backups (> 90 days) - runs monthly on 1st at 4 AM
+0 4 1 * * find $BACKUP_DIR -name "*.tar.gz" -mtime +90 -delete >> $LOG_DIR/cleanup.log 2>&1
+
+# ============================================================================
+# Log Rotation
+# ============================================================================
+
+# Rotate logs monthly to prevent disk space issues
+0 0 1 * * gzip $LOG_DIR/backup.log && mv $LOG_DIR/backup.log.gz $LOG_DIR/backup-$(date +\%Y\%m).log.gz && touch $LOG_DIR/backup.log
+
+0 0 1 * * gzip $LOG_DIR/cycles.log && mv $LOG_DIR/cycles.log.gz $LOG_DIR/cycles-$(date +\%Y\%m).log.gz && touch $LOG_DIR/cycles.log
+
+# ============================================================================
+# Health Checks
+# ============================================================================
+
+# Daily health check report at 9 AM UTC
+0 9 * * * cd $QURI_HOME && ./scripts/monitor-cycles.sh --json > $LOG_DIR/health-report-$(date +\%Y\%m\%d).json 2>&1
+
+# Weekly summary report on Monday at 8 AM
+0 8 * * 1 cd $QURI_HOME && ./scripts/monitor-cycles.sh --verbose > $LOG_DIR/weekly-summary.txt 2>&1
+
+# ============================================================================
+# Pre-Deployment Backups (Optional)
+# ============================================================================
+
+# If you have scheduled deployments, create backups before them
+# Example: Every Friday at 11:55 PM (before midnight deployment)
+# 55 23 * * 5 cd $QURI_HOME && ./scripts/backup-canisters.sh --output-dir $BACKUP_DIR/pre-deploy >> $LOG_DIR/pre-deploy.log 2>&1
+
+# ============================================================================
+# Monitoring and Alerting Examples
+# ============================================================================
+
+# High-frequency critical monitoring (every 5 minutes)
+# Use only if you need aggressive monitoring
+# */5 * * * * cd $QURI_HOME && ./scripts/monitor-cycles.sh --critical 100B --quiet --webhook $SLACK_WEBHOOK >> $LOG_DIR/critical.log 2>&1
+
+# Discord webhook example
+# 0 * * * * cd $QURI_HOME && ./scripts/monitor-cycles.sh --quiet --webhook https://discord.com/api/webhooks/YOUR/WEBHOOK --webhook-type discord >> $LOG_DIR/cycles.log 2>&1
+
+# Generic webhook with JSON output
+# 0 */6 * * * cd $QURI_HOME && ./scripts/monitor-cycles.sh --json --webhook https://your-monitoring-system.com/webhook >> $LOG_DIR/monitoring.log 2>&1
+
+# ============================================================================
+# Backup Verification (Recommended)
+# ============================================================================
+
+# Monthly backup verification on 15th at 3 AM
+# This ensures backups are actually restorable
+# 0 3 15 * * cd $QURI_HOME && for backup in $(ls -td $BACKUP_DIR/2* | head -1); do ./scripts/restore-canister.sh --canister rune-engine --backup-dir $backup --network local --dry-run >> $LOG_DIR/verify.log 2>&1; done
+
+# ============================================================================
+# Custom Maintenance Tasks
+# ============================================================================
+
+# Example: Check disk space before backups
+# 50 1 * * * df -h | grep -E '(Filesystem|/var/backups)' >> $LOG_DIR/disk-space.log 2>&1
+
+# Example: Email notification of backup completion
+# 10 2 * * * test -f $BACKUP_DIR/$(date +\%Y\%m\%d)*/MANIFEST.txt && echo "Backup completed successfully" | mail -s "QURI Backup Success" admin@example.com
+
+# ============================================================================
+# Development/Testing (Disabled by default)
+# ============================================================================
+
+# Uncomment for testing cron job execution
+# * * * * * echo "Cron test: $(date)" >> $LOG_DIR/cron-test.log
+
+# Test backup script execution
+# */5 * * * * cd $QURI_HOME && ./scripts/backup-canisters.sh --help >> $LOG_DIR/test.log 2>&1
+
+# ============================================================================
+# Notes and Recommendations
+# ============================================================================
+#
+# 1. ALWAYS test cron jobs manually before scheduling:
+#    cd $QURI_HOME && ./scripts/backup-canisters.sh --output-dir $BACKUP_DIR
+#
+# 2. Monitor cron execution:
+#    tail -f /var/log/quri/backup.log
+#    tail -f /var/log/quri/cycles.log
+#
+# 3. Check cron daemon status:
+#    systemctl status cron  # Ubuntu/Debian
+#    systemctl status crond # CentOS/RHEL
+#
+# 4. View cron logs:
+#    grep CRON /var/log/syslog  # Ubuntu/Debian
+#    tail -f /var/log/cron      # CentOS/RHEL
+#
+# 5. Email notifications:
+#    - Cron emails output to MAILTO (set at top of crontab)
+#    - Example: MAILTO=admin@example.com
+#
+# 6. Timezone considerations:
+#    - Cron uses system timezone
+#    - Check with: timedatectl
+#    - Scripts should handle UTC internally
+#
+# 7. Resource considerations:
+#    - Don't schedule too many jobs simultaneously
+#    - Stagger backup and monitoring times
+#    - Monitor system load during cron execution
+#
+# 8. Security:
+#    - Protect webhook URLs (don't commit to git)
+#    - Secure backup directories (chmod 700)
+#    - Encrypt sensitive backups
+#
+# 9. Disaster Recovery:
+#    - Test restore procedures monthly
+#    - Keep off-site backup copies
+#    - Document recovery procedures
+#
+# 10. Monitoring the monitors:
+#     - Set up dead man's switch for cron jobs
+#     - Alert if backups haven't run in 24h
+#     - Monitor log file sizes
+#
+# ============================================================================

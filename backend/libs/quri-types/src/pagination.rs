@@ -255,7 +255,7 @@ impl<T> PagedResponse<T> {
         if self.limit == 0 {
             0
         } else {
-            (self.total + self.limit - 1) / self.limit
+            self.total.div_ceil(self.limit)
         }
     }
 }

@@ -181,7 +181,7 @@ pub fn get_canister_config() -> Option<CanisterConfig> {
     CANISTER_CONFIG.with(|c| {
         c.borrow()
             .as_ref()
-            .map(|cell| {
+            .and_then(|cell| {
                 let config = cell.get().clone();
                 // Return None if not configured (anonymous principals)
                 if config.bitcoin_integration_id == Principal::anonymous() {
@@ -190,7 +190,6 @@ pub fn get_canister_config() -> Option<CanisterConfig> {
                     Some(config)
                 }
             })
-            .flatten()
     })
 }
 

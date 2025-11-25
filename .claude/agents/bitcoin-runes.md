@@ -1,4 +1,5 @@
 ---
+name: "Bitcoin & Runes"
 description: "Expert in Bitcoin protocol, Runes protocol, UTXO management, and cryptography"
 model: sonnet
 color: yellow

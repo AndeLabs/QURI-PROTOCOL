@@ -130,9 +130,3 @@ pub async fn sign_message(
     Ok(result.signature)
 }
 
-/// Firma una transacción Bitcoin (placeholder)
-pub async fn sign_transaction(tx: Vec<u8>) -> Result<Vec<u8>, String> {
-    let derivation_path = vec![ic_cdk::api::id().as_slice().to_vec()];
-    let _ = sign_message(tx.clone(), derivation_path).await?;
-    Ok(tx)
-}

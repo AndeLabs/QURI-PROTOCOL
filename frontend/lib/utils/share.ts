@@ -1,12 +1,18 @@
 'use client';
 
 import { logger } from '@/lib/logger';
-import { RuneData } from '@/components/RuneCard';
 
 /**
  * Share Utilities with Web Share API
  * Elegant sharing for museum-grade art pieces
  */
+
+export interface RuneData {
+  id: string;
+  name: string;
+  symbol: string;
+  description?: string;
+}
 
 export interface ShareData {
   title: string;

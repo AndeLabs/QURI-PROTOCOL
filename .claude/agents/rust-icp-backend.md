@@ -1,4 +1,5 @@
 ---
+name: "Rust ICP Backend"
 description: "Expert in Rust, Internet Computer Protocol (ICP), and canister development"
 model: sonnet
 color: orange

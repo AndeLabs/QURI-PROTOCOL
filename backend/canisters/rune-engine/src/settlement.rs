@@ -95,6 +95,11 @@ pub fn init_settlement_history(memory: Memory) {
     });
 }
 
+/// Reinitialize settlement history storage after upgrade
+pub fn reinit_settlement_history(memory: Memory) {
+    init_settlement_history(memory);
+}
+
 /// Generate unique settlement ID
 fn generate_settlement_id(principal: Principal) -> String {
     let counter = SETTLEMENT_COUNTER.with(|c| {

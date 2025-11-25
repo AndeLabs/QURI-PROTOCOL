@@ -41,7 +41,7 @@ pub fn derive_p2tr_address(public_key: &[u8], network: BitcoinNetwork) -> Result
 
 /// Encode a witness program as bech32m address
 fn encode_bech32m(witness_program: &[u8], network: BitcoinNetwork) -> Result<String> {
-    use bitcoin::address::{Address, NetworkUnchecked};
+    use bitcoin::address::Address;
     use bitcoin::key::TweakedPublicKey;
     use bitcoin::secp256k1::XOnlyPublicKey;
 

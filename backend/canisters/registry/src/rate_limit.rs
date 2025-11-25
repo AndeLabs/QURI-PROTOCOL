@@ -22,7 +22,7 @@ thread_local! {
     static RATE_LIMITS: RefCell<HashMap<Principal, RateLimitState>> =
         RefCell::new(HashMap::new());
 
-    static WHITELIST: RefCell<Vec<Principal>> = RefCell::new(Vec::new());
+    static WHITELIST: RefCell<Vec<Principal>> = const { RefCell::new(Vec::new()) };
 }
 
 /// Check if principal is whitelisted (bypasses rate limiting)

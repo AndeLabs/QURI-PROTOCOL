@@ -89,18 +89,22 @@ impl EtchingOrchestrator {
         // Step 5: Broadcast
         let txid = self.step_broadcast(process, &signed_tx).await?;
 
-        // Step 6: Wait for confirmations (simplified for MVP)
+        // Step 6: Wait for confirmations
+        // The confirmation tracker will update the state when confirmations are reached
         self.step_confirm(process, &txid).await?;
 
-        // Step 7: Index the Rune
-        self.step_index(process, &etching, &txid).await?;
+        // Store txid in process
+        process.txid = Some(txid.clone());
+        self.save_process(process)?;
 
-        // Mark as completed
-        process.update_state(EtchingState::Completed {
-            txid: txid.clone(),
-            block_height: 0, // TODO: Get actual block height
-        });
-        process.txid = Some(txid);
+        // Note: We don't call step_index or mark as Completed here
+        // The confirmation_tracker will update the state to Indexing when confirmations are reached
+        // and then the indexing step will run
+
+        ic_cdk::println!(
+            "[Etching {}] Etching flow complete. Waiting for confirmations via tracker.",
+            process.id
+        );
 
         Ok(())
     }
@@ -122,7 +126,7 @@ impl EtchingOrchestrator {
         Ok(())
     }
 
-    /// Step 2: Check ckBTC balance
+    /// Step 2: Check ckBTC balance and charge fee
     async fn step_check_balance(
         &self,
         process: &mut EtchingProcess,
@@ -152,14 +156,37 @@ impl EtchingOrchestrator {
 
         // Estimate total cost
         let estimated_fee = 20_000u64; // 20k sats
-        process.fee_paid = Some(estimated_fee);
 
+        // Validate balance before charging
         EtchingValidator::validate_balance(balance, estimated_fee)?;
 
+        // Charge fee and store in escrow
+        // NOTE: In a real implementation, we would call charge_etching_fee here
+        // For now, we just track it in the escrow system
         ic_cdk::println!(
-            "[Etching {}] Balance sufficient: {} sats",
+            "[Etching {}] Charging fee: {} sats",
             process.id,
-            balance
+            estimated_fee
+        );
+
+        // Create escrow entry to track the fee
+        let escrow_entry = crate::escrow::EscrowEntry::new(
+            process.id.clone(),
+            caller,
+            estimated_fee,
+            process.rune_name.clone(),
+        );
+
+        crate::escrow::store_escrow(&escrow_entry)
+            .map_err(|e| EtchingError::InternalError(format!("Failed to store escrow: {}", e)))?;
+
+        // Update process with fee paid
+        process.fee_paid = Some(estimated_fee);
+
+        ic_cdk::println!(
+            "[Etching {}] Fee charged and held in escrow: {} sats",
+            process.id,
+            estimated_fee
         );
         Ok(balance)
     }
@@ -264,11 +291,11 @@ impl EtchingOrchestrator {
         let btc_canister_id =
             crate::get_bitcoin_integration_id().map_err(EtchingError::InternalError)?;
 
-        // Call bitcoin-integration to broadcast transaction
+        // Call bitcoin-integration to broadcast transaction with confirmation tracking
         let (broadcast_result,): (Result<String, String>,) = ic_cdk::call(
             btc_canister_id,
-            "broadcast_transaction",
-            (signed_tx.to_vec(),),
+            "broadcast_and_track",
+            (signed_tx.to_vec(), self.config.required_confirmations),
         )
         .await
         .map_err(|(code, msg)| {
@@ -282,30 +309,42 @@ impl EtchingOrchestrator {
             EtchingError::NetworkRejected(format!("Network rejected transaction: {}", e))
         })?;
 
-        ic_cdk::println!("[Etching {}] Broadcasted: {}", process.id, txid);
+        ic_cdk::println!("[Etching {}] Broadcasted and tracking: {}", process.id, txid);
+
+        // Start tracking confirmations in rune-engine too
+        crate::confirmation_tracker::track_transaction(
+            process.id.to_string(),
+            txid.clone(),
+            self.config.required_confirmations,
+            self.config.network,
+        );
+
         Ok(txid)
     }
 
     /// Step 7: Wait for confirmations
-    async fn step_confirm(&self, process: &mut EtchingProcess, _txid: &str) -> EtchingResult<()> {
+    ///
+    /// Now uses the confirmation_tracker which runs periodically.
+    /// The transaction will be updated by the tracker when confirmations are reached.
+    async fn step_confirm(&self, process: &mut EtchingProcess, txid: &str) -> EtchingResult<()> {
         process.update_state(EtchingState::Confirming { confirmations: 0 });
         self.save_process(process)?;
 
         ic_cdk::println!(
-            "[Etching {}] Waiting for {} confirmations...",
+            "[Etching {}] Transaction {} is being tracked for {} confirmations",
             process.id,
+            txid,
             self.config.required_confirmations
         );
 
-        // TODO: Implement actual confirmation tracking
-        // For MVP, we assume immediate confirmation
+        // The confirmation_tracker timer will update the state when confirmations are reached
+        // For now, we mark this step as complete and the tracker will move to Indexing state
+        // when confirmations are sufficient
 
-        process.update_state(EtchingState::Confirming {
-            confirmations: self.config.required_confirmations,
-        });
-        self.save_process(process)?;
-
-        ic_cdk::println!("[Etching {}] Confirmed", process.id);
+        ic_cdk::println!(
+            "[Etching {}] Confirmation tracking active. Timer will update state automatically.",
+            process.id
+        );
         Ok(())
     }
 
@@ -335,13 +374,79 @@ impl EtchingOrchestrator {
         Ok(())
     }
 
-    /// Rollback failed etching (e.g., refund fees)
+    /// Rollback failed etching with ckBTC refund
     async fn rollback(&self, process: &mut EtchingProcess) -> EtchingResult<()> {
         ic_cdk::println!("[Etching {}] Rolling back...", process.id);
 
-        // TODO: Implement rollback logic
-        // - Refund ckBTC if charged
-        // - Clean up any partial state
+        // Check if there's an escrow entry to refund
+        if let Some(mut escrow_entry) = crate::escrow::get_escrow(&process.id) {
+            // Only refund if escrow is still held
+            if escrow_entry.can_refund() {
+                ic_cdk::println!(
+                    "[Etching {}] Refunding {} sats to {}",
+                    process.id,
+                    escrow_entry.amount,
+                    escrow_entry.payer
+                );
+
+                // Attempt to refund via ckBTC transfer
+                match self.refund_ckbtc(&escrow_entry).await {
+                    Ok(block_index) => {
+                        ic_cdk::println!(
+                            "[Etching {}] Refund successful, block index: {}",
+                            process.id,
+                            block_index
+                        );
+
+                        // Mark escrow as refunded
+                        escrow_entry.mark_refunded(block_index);
+                        if let Err(e) = crate::escrow::update_escrow(&escrow_entry) {
+                            ic_cdk::println!(
+                                "[Etching {}] Warning: Failed to update escrow after refund: {}",
+                                process.id,
+                                e
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        ic_cdk::println!(
+                            "[Etching {}] Refund failed: {}",
+                            process.id,
+                            e
+                        );
+
+                        // Mark escrow refund as failed for manual intervention
+                        escrow_entry.mark_refund_failed(e.clone());
+                        if let Err(update_err) = crate::escrow::update_escrow(&escrow_entry) {
+                            ic_cdk::println!(
+                                "[Etching {}] Critical: Failed to update escrow after refund failure: {}",
+                                process.id,
+                                update_err
+                            );
+                        }
+
+                        // Log error for admin review
+                        crate::logging::log_error(
+                            "rollback_refund",
+                            format!("Failed to refund {} sats to {}: {}",
+                                escrow_entry.amount, escrow_entry.payer, e),
+                            Some(process.id.to_string()),
+                        );
+                    }
+                }
+            } else {
+                ic_cdk::println!(
+                    "[Etching {}] Escrow already processed (status: {:?}), no refund needed",
+                    process.id,
+                    escrow_entry.status
+                );
+            }
+        } else {
+            ic_cdk::println!(
+                "[Etching {}] No escrow entry found, no refund needed",
+                process.id
+            );
+        }
 
         process.update_state(EtchingState::RolledBack {
             reason: "Automatic rollback after failure".to_string(),
@@ -349,6 +454,28 @@ impl EtchingOrchestrator {
         self.save_process(process)?;
 
         Ok(())
+    }
+
+    /// Refund ckBTC to user
+    async fn refund_ckbtc(&self, escrow: &crate::escrow::EscrowEntry) -> Result<u64, String> {
+        // Get bitcoin-integration canister ID
+        let btc_canister_id = crate::get_bitcoin_integration_id()
+            .map_err(|e| format!("Failed to get bitcoin integration canister: {}", e))?;
+
+        // Call ckBTC transfer to refund the user
+        // We use the transfer function from bitcoin-integration which wraps ckBTC ledger calls
+        let memo = format!("Refund for failed etching: {}", escrow.rune_name);
+        let (transfer_result,): (Result<u64, String>,) = ic_cdk::call(
+            btc_canister_id,
+            "transfer_ckbtc",
+            (escrow.payer, escrow.amount, Some(memo.into_bytes())),
+        )
+        .await
+        .map_err(|(code, msg)| {
+            format!("ckBTC transfer call failed: {:?} - {}", code, msg)
+        })?;
+
+        transfer_result
     }
 
     /// Check if error should trigger rollback

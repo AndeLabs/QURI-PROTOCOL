@@ -10,7 +10,7 @@ pub enum EtchingError {
     #[error("Invalid symbol: {0}")]
     InvalidSymbol(String),
 
-    #[error("Invalid divisibility: {0} (must be 0-18)")]
+    #[error("Invalid divisibility: {0} (must be 0-38)")]
     InvalidDivisibility(u8),
 
     #[error("Invalid supply: {0}")]

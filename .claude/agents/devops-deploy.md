@@ -1,4 +1,5 @@
 ---
+name: "DevOps & Deploy"
 description: "Expert in ICP deployment, CI/CD, infrastructure, and canister operations"
 model: sonnet
 color: green

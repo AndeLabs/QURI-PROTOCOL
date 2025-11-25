@@ -24,6 +24,7 @@ import { ButtonPremium } from '@/components/ui/ButtonPremium';
 import { TransactionStatusTracker } from '@/components/settlement/TransactionStatusTracker';
 import type { VirtualRuneView, EtchingProcessView } from '@/types/canisters';
 import { cn } from '@/lib/utils';
+import Link from 'next/link';
 
 type TabValue = 'virtual' | 'settling' | 'settled';
 
@@ -485,9 +486,11 @@ function EmptyState({
         {description}
       </p>
       {actionLabel && actionHref && (
-        <ButtonPremium href={actionHref} variant="gold" size="lg">
-          {actionLabel}
-        </ButtonPremium>
+        <Link href={actionHref}>
+          <ButtonPremium variant="gold" size="lg">
+            {actionLabel}
+          </ButtonPremium>
+        </Link>
       )}
     </div>
   );
