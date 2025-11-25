@@ -46,10 +46,12 @@ export interface EtchingProcessView {
 
 export interface VirtualRuneView {
   id: string;
+  rune_id: string;  // Alias for id for V2 compatibility
   rune_name: string;
   symbol: string;
   divisibility: number;
   premine: bigint;
+  total_supply: bigint;
   status: string;
   created_at: bigint;
   updated_at: bigint;
@@ -73,6 +75,8 @@ export interface PublicVirtualRuneView {
 // TRADING TYPES
 // ============================================================================
 
+export type PoolStatus = 'Active' | 'Graduated' | 'Paused';
+
 export interface TradingPoolView {
   rune_id: string;
   rune_name: string;
@@ -89,6 +93,7 @@ export interface TradingPoolView {
   total_trades: bigint;
   fees_collected: bigint;
   is_active: boolean;
+  status: PoolStatus;
 }
 
 export interface TradeQuoteView {
@@ -118,6 +123,13 @@ export interface TradeRecordView {
 
 /** User's rune balance */
 export interface RuneBalanceView {
+  available: bigint;
+  locked: bigint;
+  total: bigint;
+}
+
+/** User's ICP balance */
+export interface IcpBalanceView {
   available: bigint;
   locked: bigint;
   total: bigint;
@@ -408,7 +420,7 @@ export interface RuneEngineService {
   list_all_virtual_runes: (offset: bigint, limit: bigint) => Promise<PublicVirtualRuneView[]>;
   get_all_virtual_runes_count: () => Promise<bigint>;
 
-  // Trading operations
+  // Trading operations (V1 - deprecated)
   create_trading_pool: (rune_id: string, initial_icp: bigint, initial_runes: bigint) => Promise<Result<TradingPoolView>>;
   get_buy_quote: (rune_id: string, icp_amount: bigint, slippage_bps: bigint) => Promise<Result<TradeQuoteView>>;
   get_sell_quote: (rune_id: string, rune_amount: bigint, slippage_bps: bigint) => Promise<Result<TradeQuoteView>>;
@@ -422,7 +434,23 @@ export interface RuneEngineService {
   get_rune_trade_history: (rune_id: string, limit: bigint) => Promise<TradeRecordView[]>;
   get_my_trade_history: (limit: bigint) => Promise<TradeRecordView[]>;
 
-  // ICP Balance & Deposits
+  // Trading operations (V2 - with stable storage)
+  create_trading_pool_v2: (rune_id: string, initial_icp: bigint, initial_runes: bigint) => Promise<Result<TradingPoolView>>;
+  get_buy_quote_v2: (rune_id: string, icp_amount: bigint, slippage_bps: bigint) => Promise<Result<TradeQuoteView>>;
+  get_sell_quote_v2: (rune_id: string, rune_amount: bigint, slippage_bps: bigint) => Promise<Result<TradeQuoteView>>;
+  buy_virtual_rune_v2: (rune_id: string, icp_amount: bigint, min_runes_out: bigint) => Promise<Result<TradeRecordView>>;
+  sell_virtual_rune_v2: (rune_id: string, rune_amount: bigint, min_icp_out: bigint) => Promise<Result<TradeRecordView>>;
+  get_trading_pool_v2: (rune_id: string) => Promise<[] | [TradingPoolView]>;
+  list_trading_pools_v2: (offset: bigint, limit: bigint) => Promise<TradingPoolView[]>;
+  get_trading_pool_count_v2: () => Promise<bigint>;
+  get_rune_trade_history_v2: (rune_id: string, limit: bigint) => Promise<TradeRecordView[]>;
+  get_my_trade_history_v2: (limit: bigint) => Promise<TradeRecordView[]>;
+
+  // ICP Balance & Deposits (V2 - with stable storage)
+  get_my_icp_balance_v2: () => Promise<IcpBalanceView>;
+  get_my_rune_balance_v2: (rune_id: string) => Promise<RuneBalanceView | null>;
+
+  // ICP Balance & Deposits (shared)
   get_my_icp_balance: () => Promise<bigint>;
   get_my_rune_balance: (rune_id: string) => Promise<RuneBalanceView>;
   get_my_all_rune_balances: () => Promise<Array<[string, RuneBalanceView]>>;

@@ -459,7 +459,7 @@ export default function ExplorerPagePremium() {
                         <div className="flex-1 min-w-0">
                           <p className="font-bold text-museum-black truncate">{rune.rune_name}</p>
                           <p className="text-xs text-museum-dark-gray truncate">
-                            by {rune.creator.slice(0, 8)}...{rune.creator.slice(-4)}
+                            by {String(rune.creator).slice(0, 8)}...{String(rune.creator).slice(-4)}
                           </p>
                         </div>
                         <span className={`px-2 py-1 text-xs font-medium rounded-full ${
@@ -497,7 +497,7 @@ export default function ExplorerPagePremium() {
                         </div>
                       </div>
                       <div className="mt-4 pt-4 border-t border-museum-light-gray">
-                        <Link href={`/swap?rune=${rune.id}`}>
+                        <Link href={`/trade?rune=${rune.id}`}>
                           <ButtonPremium
                             variant="gold"
                             size="sm"

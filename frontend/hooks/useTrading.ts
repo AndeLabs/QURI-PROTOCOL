@@ -62,7 +62,7 @@ export function useTrading() {
       // Convert ICP to e8s
       const icpE8s = BigInt(Math.floor(initialIcp * Number(E8S_PER_ICP)));
 
-      const result = await actor.create_trading_pool(runeId, icpE8s, BigInt(initialRunes));
+      const result = await actor.create_trading_pool_v2(runeId, icpE8s, BigInt(initialRunes));
 
       if ('Ok' in result) {
         return result.Ok;
@@ -86,7 +86,7 @@ export function useTrading() {
     try {
       setError(null);
       const actor = await getRuneEngineActor();
-      const result = await actor.get_trading_pool(runeId);
+      const result = await actor.get_trading_pool_v2(runeId);
       return result.length > 0 ? (result[0] ?? null) : null;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to get pool';
@@ -105,7 +105,7 @@ export function useTrading() {
     try {
       setError(null);
       const actor = await getRuneEngineActor();
-      const pools = await actor.list_trading_pools(offset, limit);
+      const pools = await actor.list_trading_pools_v2(offset, limit);
       return pools;
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to list pools';
@@ -120,7 +120,7 @@ export function useTrading() {
   const getPoolCount = useCallback(async (): Promise<bigint> => {
     try {
       const actor = await getRuneEngineActor();
-      return await actor.get_trading_pool_count();
+      return await actor.get_trading_pool_count_v2();
     } catch {
       return 0n;
     }
@@ -151,7 +151,7 @@ export function useTrading() {
       // Convert percent to basis points (0.5% = 50 bps)
       const slippageBps = BigInt(Math.floor(slippagePercent * 100));
 
-      const result = await actor.get_buy_quote(runeId, icpE8s, slippageBps);
+      const result = await actor.get_buy_quote_v2(runeId, icpE8s, slippageBps);
 
       if ('Ok' in result) {
         return result.Ok;
@@ -185,7 +185,7 @@ export function useTrading() {
       // Convert percent to basis points
       const slippageBps = BigInt(Math.floor(slippagePercent * 100));
 
-      const result = await actor.get_sell_quote(runeId, BigInt(runeAmount), slippageBps);
+      const result = await actor.get_sell_quote_v2(runeId, BigInt(runeAmount), slippageBps);
 
       if ('Ok' in result) {
         return result.Ok;
@@ -224,7 +224,7 @@ export function useTrading() {
       // Convert ICP to e8s
       const icpE8s = BigInt(Math.floor(icpAmount * Number(E8S_PER_ICP)));
 
-      const result = await actor.buy_virtual_rune(runeId, icpE8s, minRunesOut);
+      const result = await actor.buy_virtual_rune_v2(runeId, icpE8s, minRunesOut);
 
       if ('Ok' in result) {
         return { success: true, trade: result.Ok };
@@ -258,7 +258,7 @@ export function useTrading() {
       setError(null);
       const actor = await getRuneEngineActor();
 
-      const result = await actor.sell_virtual_rune(runeId, BigInt(runeAmount), minIcpOut);
+      const result = await actor.sell_virtual_rune_v2(runeId, BigInt(runeAmount), minIcpOut);
 
       if ('Ok' in result) {
         return { success: true, trade: result.Ok };
@@ -330,7 +330,7 @@ export function useTrading() {
   ): Promise<TradeRecordView[]> => {
     try {
       const actor = await getRuneEngineActor();
-      return await actor.get_rune_trade_history(runeId, BigInt(limit));
+      return await actor.get_rune_trade_history_v2(runeId, BigInt(limit));
     } catch {
       return [];
     }
@@ -342,7 +342,7 @@ export function useTrading() {
   const getMyTradeHistory = useCallback(async (limit: number = 50): Promise<TradeRecordView[]> => {
     try {
       const actor = await getRuneEngineActor();
-      return await actor.get_my_trade_history(BigInt(limit));
+      return await actor.get_my_trade_history_v2(BigInt(limit));
     } catch {
       return [];
     }
@@ -383,7 +383,8 @@ export function useTrading() {
   const getMyIcpBalance = useCallback(async (): Promise<bigint> => {
     try {
       const actor = await getRuneEngineActor();
-      return await actor.get_my_icp_balance();
+      const balance = await actor.get_my_icp_balance_v2();
+      return balance.available;
     } catch {
       return 0n;
     }
@@ -395,7 +396,7 @@ export function useTrading() {
   const getMyRuneBalance = useCallback(async (runeId: string): Promise<RuneBalanceView | null> => {
     try {
       const actor = await getRuneEngineActor();
-      return await actor.get_my_rune_balance(runeId);
+      return await actor.get_my_rune_balance_v2(runeId);
     } catch {
       return null;
     }
