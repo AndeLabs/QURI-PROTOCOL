@@ -14,20 +14,27 @@
 import { useState, useCallback } from 'react';
 import { getRuneEngineActor } from '@/lib/icp/actors';
 import type {
-  TradingPoolView,
-  TradeQuoteView,
-  TradeRecordView,
-  RuneBalanceView,
+  TradingPoolV2View,
+  TradeQuoteV2View,
+  TradeEventView,
+  UserBalanceV2View,
   BalanceChangeView,
+  RuneBalanceView as RuneBalanceViewV1,
 } from '@/types/canisters';
 
 // ICP has 8 decimals (1 ICP = 100,000,000 e8s)
 const ICP_DECIMALS = 8;
 const E8S_PER_ICP = 100_000_000n;
 
+// Re-export V2 types as the default types for backwards compatibility
+export type TradingPoolView = TradingPoolV2View;
+export type TradeQuoteView = TradeQuoteV2View;
+export type TradeRecordView = TradeEventView;
+export type RuneBalanceView = UserBalanceV2View;
+
 export interface TradeResult {
   success: boolean;
-  trade?: TradeRecordView;
+  trade?: TradeEventView;
   error?: string;
 }
 
@@ -404,8 +411,9 @@ export function useTrading() {
 
   /**
    * Get all rune balances for the user
+   * Note: Uses V1 endpoint which returns V1 balance type
    */
-  const getMyAllRuneBalances = useCallback(async (): Promise<Array<[string, RuneBalanceView]>> => {
+  const getMyAllRuneBalances = useCallback(async (): Promise<Array<[string, RuneBalanceViewV1]>> => {
     try {
       const actor = await getRuneEngineActor();
       return await actor.get_my_all_rune_balances();

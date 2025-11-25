@@ -282,6 +282,18 @@ async fn create_rune(etching: RuneEtching) -> Result<String, String> {
     // Store virtual rune
     state::store_virtual_rune(&virtual_rune)?;
 
+    // Credit the premine to the creator immediately
+    // This allows the creator to transfer/sell runes so others can create pools
+    let premine = etching.premine;
+    if premine > 0 {
+        if let Err(e) = trading_v2::credit_user_runes(caller, &rune_id, premine) {
+            ic_cdk::println!("⚠️  Failed to credit premine to creator: {}", e);
+            // Don't fail the rune creation, just log the error
+        } else {
+            ic_cdk::println!("💰 Credited {} premine to creator {}", premine, caller);
+        }
+    }
+
     // Record successful request
     if let Err(e) = idempotency::record_request_success(request_id, caller, rune_id.clone()) {
         ic_cdk::println!("⚠️  Failed to record idempotency: {}", e);
@@ -1739,9 +1751,13 @@ async fn admin_manual_refund(process_id: String) -> Result<u64, String> {
 /// Creates a pool that starts with bonding curve pricing and graduates to AMM
 /// after reaching the market cap threshold (~$69k equivalent in ICP).
 ///
+/// DECENTRALIZED: Anyone can create a pool if they have the runes and ICP.
+/// The premine is credited to the rune creator when the rune is created,
+/// so they can sell/transfer runes to allow others to create pools.
+///
 /// @param rune_id - The Virtual Rune ID
 /// @param initial_icp - Initial ICP liquidity (in e8s)
-/// @param initial_runes - Initial rune liquidity
+/// @param initial_runes - Initial rune liquidity (caller must own these)
 #[update]
 fn create_trading_pool_v2(
     rune_id: String,
@@ -1750,20 +1766,30 @@ fn create_trading_pool_v2(
 ) -> Result<TradingPoolV2View, String> {
     let caller = ic_cdk::caller();
 
+    // Validate caller is not anonymous
+    if caller == Principal::anonymous() {
+        return Err("Anonymous principals cannot create pools".to_string());
+    }
+
     // Get the virtual rune
     let rune = state::get_virtual_rune(&rune_id)
         .ok_or("Virtual Rune not found")?;
 
-    // Verify caller is the creator
-    if rune.caller != caller {
-        return Err("Only the rune creator can create a trading pool".to_string());
+    // Check if pool already exists
+    if trading_v2::get_pool_by_rune_id(&rune_id).is_some() {
+        return Err("A trading pool already exists for this rune".to_string());
     }
 
-    // Credit the premine to the creator first
-    let premine = rune.etching.premine;
-    trading_v2::credit_user_runes(caller, &rune_id, premine)?;
+    // Validate minimum liquidity
+    if initial_icp < 100_000 {
+        return Err("Minimum initial ICP is 0.001 (100,000 e8s)".to_string());
+    }
+    if initial_runes < 1 {
+        return Err("Minimum initial runes is 1".to_string());
+    }
 
-    // Debit the runes going into the pool
+    // Debit the runes from the caller (they must own these runes)
+    // This will fail if the caller doesn't have enough runes
     trading_v2::debit_user_runes(caller, &rune_id, initial_runes)?;
 
     // Create the pool
@@ -1772,11 +1798,19 @@ fn create_trading_pool_v2(
         &rune.etching.rune_name,
         &rune.etching.symbol,
         rune.etching.divisibility,
-        premine,
+        rune.etching.premine, // Total supply for market cap calculation
         initial_icp,
         initial_runes,
-        caller,
+        caller, // Pool creator (not necessarily the rune creator)
     )?;
+
+    ic_cdk::println!(
+        "✅ Trading pool created for {} by {} with {} ICP and {} runes",
+        rune.etching.rune_name,
+        caller,
+        initial_icp,
+        initial_runes
+    );
 
     Ok(TradingPoolV2View::from(pool))
 }

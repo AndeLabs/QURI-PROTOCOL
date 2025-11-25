@@ -3,18 +3,17 @@
  * Trade Virtual Runes using ICP with bonding curve AMM
  *
  * UX Flow:
- * 1. Connect Wallet
- * 2. Deposit ICP (if needed)
- * 3. Select a Rune to trade
- * 4. Buy or Sell
+ * 1. Search for a rune or select from existing pools
+ * 2. If no pool exists, creator can create one
+ * 3. Trade with bonding curve pricing
  */
 
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import {
   ArrowDownUp,
   Settings,
@@ -44,15 +43,26 @@ import {
   ExternalLink,
   Copy,
   Check,
+  AlertCircle,
 } from 'lucide-react';
 import { ButtonPremium } from '@/components/ui/ButtonPremium';
 import { useDualAuth } from '@/lib/auth';
 import { WalletButton } from '@/components/wallet';
 import useTrading from '@/hooks/useTrading';
 import { useRuneEngine } from '@/hooks/useRuneEngine';
-import type { TradingPoolView, TradeQuoteView, VirtualRuneView } from '@/types/canisters';
+import type {
+  TradingPoolV2View,
+  TradeQuoteV2View,
+  VirtualRuneView,
+  PublicVirtualRuneView,
+} from '@/types/canisters';
+
+// Use V2 types for the trading page
+type TradingPoolView = TradingPoolV2View;
+type TradeQuoteView = TradeQuoteV2View;
 
 export default function TradePage() {
+  const router = useRouter();
   const { isConnected, getPrimaryPrincipal } = useDualAuth();
   const principal = getPrimaryPrincipal();
   const searchParams = useSearchParams();
@@ -77,15 +87,26 @@ export default function TradePage() {
     E8S_PER_ICP,
   } = useTrading();
 
-  const { getVirtualRune } = useRuneEngine();
+  const { getVirtualRune, getAllVirtualRunes } = useRuneEngine();
+
+  // Search state
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState<PublicVirtualRuneView[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [showSearchResults, setShowSearchResults] = useState(false);
+
+  // All virtual runes for search
+  const [allRunes, setAllRunes] = useState<PublicVirtualRuneView[]>([]);
+  const [loadingRunes, setLoadingRunes] = useState(true);
 
   // Available pools
   const [pools, setPools] = useState<TradingPoolView[]>([]);
   const [loadingPools, setLoadingPools] = useState(true);
 
-  // Selected pool
+  // Selected rune/pool state
+  const [selectedRune, setSelectedRune] = useState<PublicVirtualRuneView | null>(null);
   const [selectedPool, setSelectedPool] = useState<TradingPoolView | null>(null);
-  const [showPoolSelector, setShowPoolSelector] = useState(false);
+  const [checkingPool, setCheckingPool] = useState(false);
 
   // Trade mode
   const [tradeMode, setTradeMode] = useState<'buy' | 'sell'>('buy');
@@ -118,50 +139,39 @@ export default function TradePage() {
     runeSymbol: string;
   } | null>(null);
 
-  // Show help
-  const [showHowItWorks, setShowHowItWorks] = useState(false);
-
-  // Pending rune (from URL, no pool yet)
-  const [pendingRune, setPendingRune] = useState<VirtualRuneView | null>(null);
+  // Create pool modal
   const [showCreatePoolModal, setShowCreatePoolModal] = useState(false);
   const [createPoolIcp, setCreatePoolIcp] = useState('1');
   const [createPoolRunes, setCreatePoolRunes] = useState('1000000');
   const [creatingPool, setCreatingPool] = useState(false);
 
+  // Load all runes for search
+  const loadAllRunes = useCallback(async () => {
+    setLoadingRunes(true);
+    try {
+      const runes = await getAllVirtualRunes(0n, 100n);
+      setAllRunes(runes);
+    } catch (err) {
+      console.error('Failed to load runes:', err);
+    } finally {
+      setLoadingRunes(false);
+    }
+  }, [getAllVirtualRunes]);
+
   // Load pools
   const loadPools = useCallback(async () => {
     setLoadingPools(true);
-    setPendingRune(null);
     try {
       const fetchedPools = await listPools(0n, 50n);
       setPools(fetchedPools);
-
-      // If there's a rune ID in the URL, select that pool or fetch rune details
-      if (runeIdFromUrl) {
-        const poolFromUrl = fetchedPools.find(p => p.rune_id === runeIdFromUrl);
-        if (poolFromUrl) {
-          setSelectedPool(poolFromUrl);
-        } else {
-          // No pool exists - try to fetch rune details to enable pool creation
-          try {
-            const rune = await getVirtualRune(runeIdFromUrl);
-            if (rune) {
-              setPendingRune(rune);
-              setShowCreatePoolModal(true);
-            }
-          } catch (e) {
-            console.error('Failed to fetch rune:', e);
-          }
-        }
-      } else if (fetchedPools.length > 0 && !selectedPool) {
-        setSelectedPool(fetchedPools[0]);
-      }
+      return fetchedPools;
     } catch (err) {
       console.error('Failed to load pools:', err);
+      return [];
     } finally {
       setLoadingPools(false);
     }
-  }, [listPools, runeIdFromUrl, getVirtualRune]);
+  }, [listPools]);
 
   // Load balances
   const loadBalances = useCallback(async () => {
@@ -195,14 +205,82 @@ export default function TradePage() {
 
   // Initial load
   useEffect(() => {
+    loadAllRunes();
     loadPools();
-  }, [loadPools]);
+  }, [loadAllRunes, loadPools]);
 
-  // Load balances and deposit address when connected
+  // Load balances when connected or pool changes
   useEffect(() => {
     loadBalances();
     loadDepositAddress();
   }, [loadBalances, loadDepositAddress]);
+
+  // Handle URL rune parameter
+  useEffect(() => {
+    if (runeIdFromUrl && allRunes.length > 0) {
+      const rune = allRunes.find(r => r.id === runeIdFromUrl);
+      if (rune) {
+        handleSelectRune(rune);
+      }
+    }
+  }, [runeIdFromUrl, allRunes]);
+
+  // Filter search results
+  const filteredRunes = useMemo(() => {
+    if (!searchQuery.trim()) return [];
+    const query = searchQuery.toLowerCase();
+    return allRunes.filter(
+      rune =>
+        rune.rune_name.toLowerCase().includes(query) ||
+        rune.symbol.toLowerCase().includes(query) ||
+        rune.id.toLowerCase().includes(query)
+    ).slice(0, 10);
+  }, [searchQuery, allRunes]);
+
+  // Handle selecting a rune (check if pool exists)
+  const handleSelectRune = async (rune: PublicVirtualRuneView) => {
+    setSelectedRune(rune);
+    setShowSearchResults(false);
+    setSearchQuery(rune.rune_name);
+    setCheckingPool(true);
+
+    try {
+      // Check if pool exists
+      const pool = await getPool(rune.id);
+      if (pool) {
+        setSelectedPool(pool);
+      } else {
+        setSelectedPool(null);
+      }
+    } catch (err) {
+      console.error('Failed to check pool:', err);
+      setSelectedPool(null);
+    } finally {
+      setCheckingPool(false);
+    }
+  };
+
+  // Handle selecting a pool directly
+  const handleSelectPool = (pool: TradingPoolView) => {
+    setSelectedPool(pool);
+    setSearchQuery(pool.rune_name);
+    // Find the corresponding rune
+    const rune = allRunes.find(r => r.id === pool.rune_id);
+    if (rune) {
+      setSelectedRune(rune);
+    }
+    setShowSearchResults(false);
+  };
+
+  // Clear selection
+  const handleClearSelection = () => {
+    setSelectedRune(null);
+    setSelectedPool(null);
+    setSearchQuery('');
+    setInputAmount('');
+    setQuote(null);
+    router.push('/trade');
+  };
 
   // Fetch quote when input changes
   useEffect(() => {
@@ -254,7 +332,6 @@ export default function TradePage() {
   // Handle max amount
   const handleMaxAmount = () => {
     if (tradeMode === 'buy') {
-      // Leave some for fees
       const maxIcp = icpBalance > 100000n ? icpBalance - 100000n : 0n;
       const icpAmount = Number(maxIcp) / Number(E8S_PER_ICP);
       setInputAmount(icpAmount.toString());
@@ -317,25 +394,33 @@ export default function TradePage() {
 
   // Handle create pool
   const handleCreatePool = async () => {
-    if (!pendingRune) return;
+    if (!selectedRune) return;
 
     setCreatingPool(true);
+    clearError();
     try {
       const icpAmount = parseFloat(createPoolIcp);
       const runeAmount = parseInt(createPoolRunes);
 
       if (icpAmount < 0.001) {
         alert('Minimum ICP is 0.001');
+        setCreatingPool(false);
         return;
       }
 
-      const pool = await createPool(pendingRune.rune_id, icpAmount, runeAmount);
+      if (runeAmount < 1) {
+        alert('Minimum runes is 1');
+        setCreatingPool(false);
+        return;
+      }
+
+      console.log('Creating pool for:', selectedRune.id, 'ICP:', icpAmount, 'Runes:', runeAmount);
+      const pool = await createPool(selectedRune.id, icpAmount, runeAmount);
 
       if (pool) {
         setShowCreatePoolModal(false);
-        setPendingRune(null);
         setSelectedPool(pool);
-        // Reload pools to update the list
+        // Reload pools
         await loadPools();
       }
     } catch (err) {
@@ -344,6 +429,9 @@ export default function TradePage() {
       setCreatingPool(false);
     }
   };
+
+  // Anyone can create a pool if they have the runes (decentralized)
+  const canCreatePool = selectedRune && isConnected;
 
   // Check if trade is valid
   const canTrade = (): boolean => {
@@ -413,7 +501,7 @@ export default function TradePage() {
               </div>
               <h4 className="font-semibold text-museum-black mb-1">Select a Rune</h4>
               <p className="text-sm text-museum-dark-gray">
-                Choose from available Virtual Runes with active trading pools
+                Search and choose from available Virtual Runes
               </p>
             </div>
             <div className="bg-white/60 rounded-xl p-4">
@@ -422,7 +510,7 @@ export default function TradePage() {
               </div>
               <h4 className="font-semibold text-museum-black mb-1">Buy or Sell</h4>
               <p className="text-sm text-museum-dark-gray">
-                Trade instantly with bonding curve pricing - no order book needed
+                Trade instantly with bonding curve pricing
               </p>
             </div>
           </div>
@@ -444,127 +532,6 @@ export default function TradePage() {
   }
 
   // ============================================================================
-  // RENDER: No pools available - Empty State
-  // ============================================================================
-  if (!loadingPools && pools.length === 0) {
-    return (
-      <div className="space-y-8 max-w-3xl mx-auto">
-        <div>
-          <h1 className="font-serif text-4xl font-bold text-museum-black mb-2">
-            Trade Virtual Runes
-          </h1>
-          <p className="text-museum-dark-gray">
-            Buy and sell Virtual Runes with ICP using bonding curve AMM
-          </p>
-        </div>
-
-        {/* Empty State */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-museum-white border-2 border-museum-light-gray rounded-2xl p-12 text-center"
-        >
-          <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gold-100 to-gold-200 flex items-center justify-center mx-auto mb-6">
-            <Coins className="h-10 w-10 text-gold-600" />
-          </div>
-          <h2 className="font-serif text-2xl font-bold text-museum-black mb-3">
-            No Trading Pools Yet
-          </h2>
-          <p className="text-museum-dark-gray mb-6 max-w-md mx-auto">
-            Virtual Rune trading pools are created when users mint new runes in the Explorer.
-            Be the first to create a rune and start trading!
-          </p>
-
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link href="/explorer">
-              <ButtonPremium variant="gold" size="lg" icon={<Plus className="h-5 w-5" />}>
-                Create a Virtual Rune
-              </ButtonPremium>
-            </Link>
-            <button
-              onClick={loadPools}
-              className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl border-2 border-museum-light-gray hover:border-gold-300 hover:bg-gold-50 transition-all font-semibold"
-            >
-              <RefreshCw className="h-5 w-5" />
-              Refresh
-            </button>
-          </div>
-        </motion.div>
-
-        {/* How It Works Section */}
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-museum-cream to-museum-white border border-museum-light-gray rounded-2xl p-6"
-        >
-          <h3 className="font-serif text-xl font-bold text-museum-black mb-6 flex items-center gap-2">
-            <BookOpen className="h-5 w-5 text-gold-600" />
-            How Trading Pools Work
-          </h3>
-
-          <div className="grid md:grid-cols-2 gap-6">
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center flex-shrink-0">
-                  <TrendingUp className="h-4 w-4 text-green-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-museum-black">Bonding Curve Pricing</h4>
-                  <p className="text-sm text-museum-dark-gray">
-                    Prices automatically adjust based on supply and demand.
-                    Buy pressure increases price, sell pressure decreases it.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <Zap className="h-4 w-4 text-blue-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-museum-black">Instant Trading</h4>
-                  <p className="text-sm text-museum-dark-gray">
-                    No waiting for orders to match. Trade immediately at the current market price.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-4">
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
-                  <BarChart3 className="h-4 w-4 text-purple-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-museum-black">Graduation Mechanism</h4>
-                  <p className="text-sm text-museum-dark-gray">
-                    When a pool reaches 85 ICP market cap, it "graduates" to full DEX listing
-                    with LP tokens.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-3">
-                <div className="w-8 h-8 rounded-full bg-gold-100 flex items-center justify-center flex-shrink-0">
-                  <Sparkles className="h-4 w-4 text-gold-600" />
-                </div>
-                <div>
-                  <h4 className="font-semibold text-museum-black">Fair Launch</h4>
-                  <p className="text-sm text-museum-dark-gray">
-                    Everyone buys at the same curve. No pre-sales, no insiders,
-                    just fair market pricing.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </motion.div>
-      </div>
-    );
-  }
-
-  // ============================================================================
   // RENDER: Main Trading Interface
   // ============================================================================
   return (
@@ -574,623 +541,607 @@ export default function TradePage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
       >
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-3">
-            <h1 className="font-serif text-3xl font-bold text-museum-black">
-              Trade Virtual Runes
-            </h1>
-            <span className="text-xs font-semibold text-gold-600 bg-gold-100 px-2 py-1 rounded-full">
-              AMM
-            </span>
-          </div>
-          <button
-            onClick={() => setShowHowItWorks(!showHowItWorks)}
-            className="flex items-center gap-1 text-sm text-museum-dark-gray hover:text-gold-600 transition-colors"
-          >
-            <HelpCircle className="h-4 w-4" />
-            How it works
-          </button>
-        </div>
+        <h1 className="font-serif text-3xl font-bold text-museum-black mb-2">
+          Trade Virtual Runes
+        </h1>
         <p className="text-museum-dark-gray text-sm">
-          Buy and sell Virtual Runes instantly with bonding curve pricing
+          Search for a rune to trade or create a new trading pool
         </p>
       </motion.div>
 
-      {/* How It Works Expandable */}
-      <AnimatePresence>
-        {showHowItWorks && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: 'auto' }}
-            exit={{ opacity: 0, height: 0 }}
-            className="overflow-hidden"
-          >
-            <div className="bg-gradient-to-br from-gold-50 to-amber-50 border border-gold-200 rounded-2xl p-5">
-              <div className="grid grid-cols-3 gap-4 text-center">
-                <div>
-                  <div className="w-10 h-10 rounded-full bg-gold-100 flex items-center justify-center mx-auto mb-2">
-                    <DollarSign className="h-5 w-5 text-gold-600" />
-                  </div>
-                  <h4 className="font-semibold text-museum-black text-sm">1. Deposit ICP</h4>
-                  <p className="text-xs text-museum-dark-gray">Send ICP to trade</p>
-                </div>
-                <div>
-                  <div className="w-10 h-10 rounded-full bg-gold-100 flex items-center justify-center mx-auto mb-2">
-                    <Coins className="h-5 w-5 text-gold-600" />
-                  </div>
-                  <h4 className="font-semibold text-museum-black text-sm">2. Select Rune</h4>
-                  <p className="text-xs text-museum-dark-gray">Choose a pool</p>
-                </div>
-                <div>
-                  <div className="w-10 h-10 rounded-full bg-gold-100 flex items-center justify-center mx-auto mb-2">
-                    <ArrowDownUp className="h-5 w-5 text-gold-600" />
-                  </div>
-                  <h4 className="font-semibold text-museum-black text-sm">3. Trade</h4>
-                  <p className="text-xs text-museum-dark-gray">Buy or sell instantly</p>
-                </div>
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Balances & Deposit Card */}
+      {/* Search Bar */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.05 }}
-        className="bg-gradient-to-br from-gold-50 to-gold-100 border border-gold-200 rounded-2xl p-5"
+        className="relative"
       >
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="font-semibold text-gold-900">Your Trading Balance</h3>
-          <div className="flex items-center gap-2">
+        <div className="relative">
+          <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-museum-dark-gray" />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => {
+              setSearchQuery(e.target.value);
+              setShowSearchResults(true);
+              if (!e.target.value) {
+                setSelectedRune(null);
+                setSelectedPool(null);
+              }
+            }}
+            onFocus={() => setShowSearchResults(true)}
+            placeholder="Search runes by name, symbol, or ID..."
+            className="w-full pl-12 pr-12 py-4 bg-museum-white border-2 border-museum-light-gray rounded-2xl focus:border-gold-400 focus:ring-2 focus:ring-gold-100 outline-none transition-all text-lg text-museum-black placeholder:text-museum-dark-gray"
+          />
+          {searchQuery && (
             <button
-              onClick={() => setShowDepositModal(true)}
-              className="flex items-center gap-1 px-3 py-1.5 bg-gold-500 text-white rounded-lg text-sm font-semibold hover:bg-gold-600 transition-colors"
+              onClick={handleClearSelection}
+              className="absolute right-4 top-1/2 -translate-y-1/2 p-1 hover:bg-museum-cream rounded-full"
             >
-              <Plus className="h-4 w-4" />
-              Deposit ICP
+              <X className="h-5 w-5 text-museum-dark-gray" />
             </button>
-            <button
-              onClick={loadBalances}
-              disabled={loadingBalances}
-              className="p-2 hover:bg-gold-200/50 rounded-lg transition-colors"
-            >
-              <RefreshCw
-                className={`h-4 w-4 text-gold-700 ${loadingBalances ? 'animate-spin' : ''}`}
-              />
-            </button>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="bg-white/60 rounded-xl p-4">
-            <p className="text-sm text-gold-700 mb-1">ICP Balance</p>
-            <p className="text-2xl font-bold font-mono text-gold-900">
-              {loadingBalances ? '...' : formatIcp(icpBalance)}
-            </p>
-            {icpBalance === 0n && !loadingBalances && (
-              <p className="text-xs text-gold-600 mt-1">
-                Deposit ICP to start trading
-              </p>
-            )}
-          </div>
-          {selectedPool && (
-            <div className="bg-white/60 rounded-xl p-4">
-              <p className="text-sm text-gold-700 mb-1">{selectedPool.symbol} Balance</p>
-              <p className="text-2xl font-bold font-mono text-gold-900">
-                {loadingBalances ? '...' : runeBalance.toString()}
-              </p>
-            </div>
           )}
         </div>
-      </motion.div>
 
-      {/* Trading Card */}
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.1 }}
-        className="bg-museum-white border-2 border-museum-light-gray rounded-2xl p-5 shadow-lg"
-      >
-        {/* Header with Settings */}
-        <div className="flex justify-between items-center mb-4">
-          <div className="flex gap-2">
-            <button
-              onClick={() => {
-                setTradeMode('buy');
-                setInputAmount('');
-                setQuote(null);
-              }}
-              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                tradeMode === 'buy'
-                  ? 'bg-green-500 text-white'
-                  : 'bg-museum-cream text-museum-dark-gray hover:bg-museum-light-gray'
-              }`}
-            >
-              <TrendingUp className="h-4 w-4 inline mr-2" />
-              Buy
-            </button>
-            <button
-              onClick={() => {
-                setTradeMode('sell');
-                setInputAmount('');
-                setQuote(null);
-              }}
-              className={`px-4 py-2 rounded-lg font-semibold transition-all ${
-                tradeMode === 'sell'
-                  ? 'bg-red-500 text-white'
-                  : 'bg-museum-cream text-museum-dark-gray hover:bg-museum-light-gray'
-              }`}
-            >
-              <TrendingDown className="h-4 w-4 inline mr-2" />
-              Sell
-            </button>
-          </div>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className={`p-2 rounded-lg transition-colors ${
-              showSettings ? 'bg-gold-100 text-gold-600' : 'hover:bg-museum-cream text-museum-dark-gray'
-            }`}
-          >
-            <Settings className="h-5 w-5" />
-          </button>
-        </div>
-
-        {/* Settings Panel */}
+        {/* Search Results Dropdown */}
         <AnimatePresence>
-          {showSettings && (
+          {showSearchResults && searchQuery && filteredRunes.length > 0 && (
             <motion.div
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: 'auto' }}
-              exit={{ opacity: 0, height: 0 }}
-              className="mb-4 p-4 bg-museum-cream rounded-xl"
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -10 }}
+              className="absolute z-50 w-full mt-2 bg-museum-white border-2 border-museum-light-gray rounded-2xl shadow-xl overflow-hidden"
             >
-              <div>
-                <label className="flex items-center text-sm font-semibold text-museum-black mb-2">
-                  <Percent className="h-4 w-4 mr-2" />
-                  Slippage Tolerance
-                </label>
-                <div className="flex gap-2">
-                  {['0.5', '1.0', '2.0', '5.0'].map(val => (
+              <div className="max-h-80 overflow-y-auto">
+                {filteredRunes.map((rune) => {
+                  const hasPool = pools.some(p => p.rune_id === rune.id);
+                  return (
                     <button
-                      key={val}
-                      onClick={() => setSlippage(val)}
-                      className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                        slippage === val
-                          ? 'bg-gold-500 text-white'
-                          : 'bg-museum-white border border-museum-light-gray hover:border-gold-300'
-                      }`}
+                      key={rune.id}
+                      onClick={() => handleSelectRune(rune)}
+                      className="w-full flex items-center gap-4 p-4 hover:bg-gold-50 transition-colors border-b border-museum-light-gray last:border-b-0"
                     >
-                      {val}%
+                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center flex-shrink-0">
+                        <span className="text-white font-bold text-sm">
+                          {rune.symbol || rune.rune_name.slice(0, 2)}
+                        </span>
+                      </div>
+                      <div className="flex-1 text-left">
+                        <p className="font-semibold text-museum-black">{rune.rune_name}</p>
+                        <p className="text-sm text-museum-dark-gray">{rune.symbol}</p>
+                      </div>
+                      {hasPool ? (
+                        <span className="text-xs font-medium text-green-600 bg-green-100 px-2 py-1 rounded-full">
+                          Pool Active
+                        </span>
+                      ) : (
+                        <span className="text-xs font-medium text-yellow-600 bg-yellow-100 px-2 py-1 rounded-full">
+                          No Pool
+                        </span>
+                      )}
                     </button>
-                  ))}
-                </div>
+                  );
+                })}
               </div>
             </motion.div>
           )}
         </AnimatePresence>
 
-        {/* Pool Selector */}
-        <div className="mb-4">
-          <label className="text-sm text-museum-dark-gray mb-2 block">Select Rune to Trade</label>
-          <button
-            onClick={() => setShowPoolSelector(true)}
-            className="w-full flex items-center gap-3 p-4 bg-museum-cream rounded-xl border border-museum-light-gray hover:border-gold-300 transition-colors"
-          >
-            {selectedPool ? (
-              <>
-                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                  <span className="text-white font-bold text-sm">
-                    {selectedPool.symbol.slice(0, 2)}
-                  </span>
-                </div>
-                <div className="text-left flex-1">
-                  <p className="font-bold text-museum-black">{selectedPool.rune_name}</p>
-                  <p className="text-sm text-museum-dark-gray">
-                    {selectedPool.symbol} • {formatIcp(selectedPool.price_per_rune)}/rune
-                  </p>
-                </div>
-                <ChevronDown className="h-5 w-5 text-museum-dark-gray" />
-              </>
-            ) : (
-              <>
-                <div className="w-10 h-10 rounded-full bg-museum-light-gray flex items-center justify-center">
-                  <Coins className="h-5 w-5 text-museum-dark-gray" />
-                </div>
-                <span className="text-museum-dark-gray">Select a rune to trade</span>
-                <ChevronDown className="h-5 w-5 text-museum-dark-gray ml-auto" />
-              </>
-            )}
-          </button>
-        </div>
-
-        {/* Input Section */}
-        <div className="bg-museum-cream rounded-xl p-4 mb-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-museum-dark-gray">
-              {tradeMode === 'buy' ? 'You pay (ICP)' : `You sell (${selectedPool?.symbol || 'Runes'})`}
-            </span>
-            <span className="text-sm text-museum-dark-gray">
-              Balance:{' '}
-              <span className="font-mono">
-                {tradeMode === 'buy'
-                  ? formatIcp(icpBalance)
-                  : `${runeBalance} ${selectedPool?.symbol || ''}`}
-              </span>
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-3 bg-museum-white rounded-xl">
-              {tradeMode === 'buy' ? (
-                <>
-                  <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">ICP</span>
-                  </div>
-                  <span className="font-bold text-museum-black">ICP</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                    <span className="text-white font-bold text-xs">
-                      {selectedPool?.symbol.slice(0, 2) || '??'}
-                    </span>
-                  </div>
-                  <span className="font-bold text-museum-black">{selectedPool?.symbol || '---'}</span>
-                </>
-              )}
-            </div>
-            <input
-              type="number"
-              value={inputAmount}
-              onChange={e => setInputAmount(e.target.value)}
-              placeholder="0.0"
-              className="flex-1 text-right text-2xl font-mono font-bold bg-transparent outline-none text-museum-black placeholder:text-museum-dark-gray/50"
-            />
-          </div>
-          <div className="flex justify-end mt-2">
-            <button
-              onClick={handleMaxAmount}
-              className="text-xs font-medium text-gold-600 hover:text-gold-700"
-            >
-              MAX
-            </button>
-          </div>
-        </div>
-
-        {/* Swap Direction Button */}
-        <div className="flex justify-center -my-3 relative z-10">
-          <button
-            onClick={handleSwapDirection}
-            className="p-3 bg-museum-white border-2 border-museum-light-gray rounded-xl hover:border-gold-300 hover:bg-gold-50 transition-all shadow-md"
-          >
-            <ArrowDownUp className="h-5 w-5 text-museum-dark-gray" />
-          </button>
-        </div>
-
-        {/* Output Section */}
-        <div className="bg-museum-cream rounded-xl p-4 mt-2">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-sm text-museum-dark-gray">
-              {tradeMode === 'buy' ? `You receive (${selectedPool?.symbol || 'Runes'})` : 'You receive (ICP)'}
-            </span>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2 px-4 py-3 bg-museum-white rounded-xl">
-              {tradeMode === 'buy' ? (
-                <>
-                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                    <span className="text-white font-bold text-xs">
-                      {selectedPool?.symbol.slice(0, 2) || '??'}
-                    </span>
-                  </div>
-                  <span className="font-bold text-museum-black">{selectedPool?.symbol || '---'}</span>
-                </>
-              ) : (
-                <>
-                  <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
-                    <span className="text-white font-bold text-sm">ICP</span>
-                  </div>
-                  <span className="font-bold text-museum-black">ICP</span>
-                </>
-              )}
-            </div>
-            <div className="flex-1 text-right">
-              {quoteLoading ? (
-                <Loader className="h-6 w-6 animate-spin text-museum-dark-gray ml-auto" />
-              ) : (
-                <span className="text-2xl font-mono font-bold text-museum-black">
-                  {getOutputAmount()}
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Quote Details */}
-        {quote && (
+        {/* No results */}
+        {showSearchResults && searchQuery && filteredRunes.length === 0 && !loadingRunes && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            className="mt-4 p-4 bg-museum-cream rounded-xl space-y-2"
+            className="absolute z-50 w-full mt-2 bg-museum-white border-2 border-museum-light-gray rounded-2xl p-6 text-center"
           >
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-museum-dark-gray">Rate</span>
-              <span className="font-mono text-museum-black">
-                1 {selectedPool?.symbol} = {formatIcp(quote.price_per_rune)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="flex items-center text-museum-dark-gray">
-                Price Impact
-                <Info className="h-3 w-3 ml-1" />
-              </span>
-              <span
-                className={`font-mono ${
-                  quote.price_impact_percent > 5
-                    ? 'text-red-600'
-                    : quote.price_impact_percent > 2
-                    ? 'text-yellow-600'
-                    : 'text-green-600'
-                }`}
-              >
-                {quote.price_impact_percent.toFixed(2)}%
-              </span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-museum-dark-gray">Fee (0.3%)</span>
-              <span className="font-mono text-museum-black">{formatIcp(quote.fee)}</span>
-            </div>
-            <div className="flex items-center justify-between text-sm">
-              <span className="text-museum-dark-gray">Min. Received</span>
-              <span className="font-mono text-museum-black">
-                {tradeMode === 'buy'
-                  ? quote.minimum_output.toString()
-                  : formatIcp(quote.minimum_output)}{' '}
-                {tradeMode === 'buy' ? selectedPool?.symbol : 'ICP'}
-              </span>
-            </div>
+            <p className="text-museum-dark-gray">No runes found for "{searchQuery}"</p>
+            <Link href="/create" className="text-gold-600 hover:text-gold-700 text-sm font-medium mt-2 inline-block">
+              Create a new rune →
+            </Link>
           </motion.div>
         )}
-
-        {/* Price Impact Warning */}
-        {quote && quote.price_impact_percent > 2 && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-            className={`mt-4 p-4 rounded-xl flex items-start gap-3 ${
-              quote.price_impact_percent > 10
-                ? 'bg-red-100 border-2 border-red-300'
-                : quote.price_impact_percent > 5
-                ? 'bg-orange-100 border-2 border-orange-300'
-                : 'bg-yellow-50 border border-yellow-200'
-            }`}
-          >
-            <AlertTriangle
-              className={`h-5 w-5 flex-shrink-0 mt-0.5 ${
-                quote.price_impact_percent > 10
-                  ? 'text-red-600'
-                  : quote.price_impact_percent > 5
-                  ? 'text-orange-600'
-                  : 'text-yellow-600'
-              }`}
-            />
-            <div>
-              <p
-                className={`font-semibold text-sm ${
-                  quote.price_impact_percent > 10
-                    ? 'text-red-800'
-                    : quote.price_impact_percent > 5
-                    ? 'text-orange-800'
-                    : 'text-yellow-800'
-                }`}
-              >
-                {quote.price_impact_percent > 10
-                  ? 'Very High Price Impact!'
-                  : quote.price_impact_percent > 5
-                  ? 'High Price Impact'
-                  : 'Moderate Price Impact'}
-              </p>
-              <p
-                className={`text-xs ${
-                  quote.price_impact_percent > 10
-                    ? 'text-red-700'
-                    : quote.price_impact_percent > 5
-                    ? 'text-orange-700'
-                    : 'text-yellow-700'
-                }`}
-              >
-                Trade a smaller amount for better rates
-              </p>
-            </div>
-          </motion.div>
-        )}
-
-        {/* Error Display */}
-        {error && (
-          <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
-            <p className="text-sm text-red-700">{error}</p>
-          </div>
-        )}
-
-        {/* Trade Button */}
-        <div className="mt-6">
-          {icpBalance === 0n && tradeMode === 'buy' ? (
-            <ButtonPremium
-              onClick={() => setShowDepositModal(true)}
-              variant="gold"
-              size="lg"
-              className="w-full"
-              icon={<Plus className="h-5 w-5" />}
-            >
-              Deposit ICP to Start Trading
-            </ButtonPremium>
-          ) : (
-            <ButtonPremium
-              onClick={handleTrade}
-              disabled={!canTrade() || loading || !selectedPool}
-              variant="gold"
-              size="lg"
-              className="w-full"
-              icon={
-                loading ? (
-                  <Loader className="h-5 w-5 animate-spin" />
-                ) : tradeMode === 'buy' ? (
-                  <ArrowUpRight className="h-5 w-5" />
-                ) : (
-                  <ArrowDownRight className="h-5 w-5" />
-                )
-              }
-            >
-              {getButtonText()}
-            </ButtonPremium>
-          )}
-        </div>
       </motion.div>
 
-      {/* Pool Info */}
-      {selectedPool && (
+      {/* Click outside to close search results */}
+      {showSearchResults && (
+        <div
+          className="fixed inset-0 z-40"
+          onClick={() => setShowSearchResults(false)}
+        />
+      )}
+
+      {/* Selected Rune Status */}
+      {selectedRune && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-          className="bg-museum-white border border-museum-light-gray rounded-2xl p-5"
+          className="space-y-4"
         >
-          <h3 className="font-serif text-lg font-bold text-museum-black mb-4">Pool Info</h3>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <div>
-              <p className="text-sm text-museum-dark-gray mb-1">Price</p>
-              <p className="font-mono font-bold text-museum-black">
-                {formatIcp(selectedPool.price_per_rune)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-museum-dark-gray mb-1">Market Cap</p>
-              <p className="font-mono font-bold text-museum-black">
-                {formatIcp(selectedPool.market_cap)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-museum-dark-gray mb-1">Liquidity</p>
-              <p className="font-mono font-bold text-museum-black">
-                {formatIcp(selectedPool.icp_reserve)}
-              </p>
-            </div>
-            <div>
-              <p className="text-sm text-museum-dark-gray mb-1">Trades</p>
-              <p className="font-mono font-bold text-museum-black">
-                {selectedPool.total_trades.toString()}
-              </p>
+          {/* Rune Info Card */}
+          <div className="bg-gradient-to-br from-gold-50 to-amber-50 border border-gold-200 rounded-2xl p-5">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
+                  <span className="text-white font-bold text-lg">
+                    {selectedRune.symbol || selectedRune.rune_name.slice(0, 2)}
+                  </span>
+                </div>
+                <div>
+                  <h3 className="font-serif text-xl font-bold text-museum-black">
+                    {selectedRune.rune_name}
+                  </h3>
+                  <p className="text-sm text-museum-dark-gray">
+                    {selectedRune.symbol} &bull; Supply: {Number(selectedRune.premine).toLocaleString()}
+                  </p>
+                </div>
+              </div>
+              {checkingPool ? (
+                <Loader className="h-6 w-6 animate-spin text-gold-500" />
+              ) : selectedPool ? (
+                <span className="text-sm font-medium text-green-600 bg-green-100 px-3 py-1.5 rounded-full flex items-center gap-1">
+                  <CheckCircle className="h-4 w-4" />
+                  Pool Active
+                </span>
+              ) : (
+                <span className="text-sm font-medium text-yellow-600 bg-yellow-100 px-3 py-1.5 rounded-full flex items-center gap-1">
+                  <AlertCircle className="h-4 w-4" />
+                  No Pool
+                </span>
+              )}
             </div>
           </div>
 
-          {/* Graduation Progress */}
-          {selectedPool.status === 'Active' && (
-            <div className="mt-4 pt-4 border-t border-museum-light-gray">
-              <div className="flex items-center justify-between mb-2">
-                <span className="text-sm text-museum-dark-gray">Graduation Progress</span>
-                <span className="text-sm font-mono text-gold-600">
-                  {formatIcp(selectedPool.market_cap)} / 85 ICP
-                </span>
+          {/* No Pool - Create Pool Option (Decentralized - Anyone can create) */}
+          {!checkingPool && !selectedPool && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="bg-museum-white border-2 border-museum-light-gray rounded-2xl p-6"
+            >
+              <div className="text-center">
+                <div className="w-16 h-16 rounded-full bg-yellow-100 flex items-center justify-center mx-auto mb-4">
+                  <Coins className="h-8 w-8 text-yellow-600" />
+                </div>
+                <h3 className="font-serif text-xl font-bold text-museum-black mb-2">
+                  No Trading Pool Yet
+                </h3>
+                <p className="text-museum-dark-gray mb-6 max-w-md mx-auto">
+                  This rune doesn't have a trading pool yet.
+                  Anyone with runes can create a pool to enable trading.
+                </p>
+
+                {canCreatePool ? (
+                  <ButtonPremium
+                    onClick={() => setShowCreatePoolModal(true)}
+                    variant="gold"
+                    size="lg"
+                    icon={<Plus className="h-5 w-5" />}
+                  >
+                    Create Trading Pool
+                  </ButtonPremium>
+                ) : (
+                  <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 text-left">
+                    <div className="flex items-start gap-3">
+                      <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                      <div className="text-sm text-blue-800">
+                        <p className="font-semibold mb-1">Connect Wallet</p>
+                        <p className="text-blue-700">
+                          Connect your wallet to create a trading pool for this rune.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
-              <div className="w-full h-2 bg-museum-light-gray rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-gold-400 to-gold-600 rounded-full transition-all"
-                  style={{
-                    width: `${Math.min(100, (Number(selectedPool.market_cap) / Number(85_00000000n)) * 100)}%`
-                  }}
-                />
+            </motion.div>
+          )}
+
+          {/* Pool exists - Trading Interface */}
+          {selectedPool && (
+            <>
+              {/* Balances & Deposit Card */}
+              <div className="bg-gradient-to-br from-purple-50 to-indigo-50 border border-purple-200 rounded-2xl p-5">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-purple-900">Your Trading Balance</h3>
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => setShowDepositModal(true)}
+                      className="flex items-center gap-1 px-3 py-1.5 bg-purple-500 text-white rounded-lg text-sm font-semibold hover:bg-purple-600 transition-colors"
+                    >
+                      <Plus className="h-4 w-4" />
+                      Deposit ICP
+                    </button>
+                    <button
+                      onClick={loadBalances}
+                      disabled={loadingBalances}
+                      className="p-2 hover:bg-purple-200/50 rounded-lg transition-colors"
+                    >
+                      <RefreshCw
+                        className={`h-4 w-4 text-purple-700 ${loadingBalances ? 'animate-spin' : ''}`}
+                      />
+                    </button>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="bg-white/60 rounded-xl p-4">
+                    <p className="text-sm text-purple-700 mb-1">ICP Balance</p>
+                    <p className="text-2xl font-bold font-mono text-purple-900">
+                      {loadingBalances ? '...' : formatIcp(icpBalance)}
+                    </p>
+                  </div>
+                  <div className="bg-white/60 rounded-xl p-4">
+                    <p className="text-sm text-purple-700 mb-1">{selectedPool.symbol} Balance</p>
+                    <p className="text-2xl font-bold font-mono text-purple-900">
+                      {loadingBalances ? '...' : runeBalance.toString()}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <p className="text-xs text-museum-dark-gray mt-2">
-                At 85 ICP, this pool graduates to full DEX listing with LP tokens
-              </p>
-            </div>
+
+              {/* Trading Card */}
+              <div className="bg-museum-white border-2 border-museum-light-gray rounded-2xl p-5 shadow-lg">
+                {/* Buy/Sell Toggle & Settings */}
+                <div className="flex justify-between items-center mb-4">
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => {
+                        setTradeMode('buy');
+                        setInputAmount('');
+                        setQuote(null);
+                      }}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        tradeMode === 'buy'
+                          ? 'bg-green-500 text-white'
+                          : 'bg-museum-cream text-museum-dark-gray hover:bg-museum-light-gray'
+                      }`}
+                    >
+                      <TrendingUp className="h-4 w-4 inline mr-2" />
+                      Buy
+                    </button>
+                    <button
+                      onClick={() => {
+                        setTradeMode('sell');
+                        setInputAmount('');
+                        setQuote(null);
+                      }}
+                      className={`px-4 py-2 rounded-lg font-semibold transition-all ${
+                        tradeMode === 'sell'
+                          ? 'bg-red-500 text-white'
+                          : 'bg-museum-cream text-museum-dark-gray hover:bg-museum-light-gray'
+                      }`}
+                    >
+                      <TrendingDown className="h-4 w-4 inline mr-2" />
+                      Sell
+                    </button>
+                  </div>
+                  <button
+                    onClick={() => setShowSettings(!showSettings)}
+                    className={`p-2 rounded-lg transition-colors ${
+                      showSettings ? 'bg-gold-100 text-gold-600' : 'hover:bg-museum-cream text-museum-dark-gray'
+                    }`}
+                  >
+                    <Settings className="h-5 w-5" />
+                  </button>
+                </div>
+
+                {/* Settings Panel */}
+                <AnimatePresence>
+                  {showSettings && (
+                    <motion.div
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      className="mb-4 p-4 bg-museum-cream rounded-xl"
+                    >
+                      <label className="flex items-center text-sm font-semibold text-museum-black mb-2">
+                        <Percent className="h-4 w-4 mr-2" />
+                        Slippage Tolerance
+                      </label>
+                      <div className="flex gap-2">
+                        {['0.5', '1.0', '2.0', '5.0'].map(val => (
+                          <button
+                            key={val}
+                            onClick={() => setSlippage(val)}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                              slippage === val
+                                ? 'bg-gold-500 text-white'
+                                : 'bg-museum-white border border-museum-light-gray hover:border-gold-300'
+                            }`}
+                          >
+                            {val}%
+                          </button>
+                        ))}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+
+                {/* Input Section */}
+                <div className="bg-museum-cream rounded-xl p-4 mb-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-museum-dark-gray">
+                      {tradeMode === 'buy' ? 'You pay (ICP)' : `You sell (${selectedPool.symbol})`}
+                    </span>
+                    <span className="text-sm text-museum-dark-gray">
+                      Balance:{' '}
+                      <span className="font-mono">
+                        {tradeMode === 'buy'
+                          ? formatIcp(icpBalance)
+                          : `${runeBalance} ${selectedPool.symbol}`}
+                      </span>
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-museum-white rounded-xl">
+                      {tradeMode === 'buy' ? (
+                        <>
+                          <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">ICP</span>
+                          </div>
+                          <span className="font-bold text-museum-black">ICP</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
+                            <span className="text-white font-bold text-xs">
+                              {selectedPool.symbol.slice(0, 2)}
+                            </span>
+                          </div>
+                          <span className="font-bold text-museum-black">{selectedPool.symbol}</span>
+                        </>
+                      )}
+                    </div>
+                    <input
+                      type="number"
+                      value={inputAmount}
+                      onChange={e => setInputAmount(e.target.value)}
+                      placeholder="0.0"
+                      className="flex-1 text-right text-2xl font-mono font-bold bg-transparent outline-none text-museum-black placeholder:text-museum-dark-gray [color-scheme:light]"
+                    />
+                  </div>
+                  <div className="flex justify-end mt-2">
+                    <button
+                      onClick={handleMaxAmount}
+                      className="text-xs font-medium text-gold-600 hover:text-gold-700"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                </div>
+
+                {/* Swap Direction Button */}
+                <div className="flex justify-center -my-3 relative z-10">
+                  <button
+                    onClick={handleSwapDirection}
+                    className="p-3 bg-museum-white border-2 border-museum-light-gray rounded-xl hover:border-gold-300 hover:bg-gold-50 transition-all shadow-md"
+                  >
+                    <ArrowDownUp className="h-5 w-5 text-museum-dark-gray" />
+                  </button>
+                </div>
+
+                {/* Output Section */}
+                <div className="bg-museum-cream rounded-xl p-4 mt-2">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-sm text-museum-dark-gray">
+                      {tradeMode === 'buy' ? `You receive (${selectedPool.symbol})` : 'You receive (ICP)'}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 px-4 py-3 bg-museum-white rounded-xl">
+                      {tradeMode === 'buy' ? (
+                        <>
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
+                            <span className="text-white font-bold text-xs">
+                              {selectedPool.symbol.slice(0, 2)}
+                            </span>
+                          </div>
+                          <span className="font-bold text-museum-black">{selectedPool.symbol}</span>
+                        </>
+                      ) : (
+                        <>
+                          <div className="w-8 h-8 rounded-full bg-purple-500 flex items-center justify-center">
+                            <span className="text-white font-bold text-sm">ICP</span>
+                          </div>
+                          <span className="font-bold text-museum-black">ICP</span>
+                        </>
+                      )}
+                    </div>
+                    <div className="flex-1 text-right">
+                      {quoteLoading ? (
+                        <Loader className="h-6 w-6 animate-spin text-museum-dark-gray ml-auto" />
+                      ) : (
+                        <span className="text-2xl font-mono font-bold text-museum-black">
+                          {getOutputAmount()}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Quote Details */}
+                {quote && (
+                  <motion.div
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    className="mt-4 p-4 bg-museum-cream rounded-xl space-y-2"
+                  >
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-museum-dark-gray">Rate</span>
+                      <span className="font-mono text-museum-black">
+                        1 {selectedPool.symbol} = {formatIcp(quote.price_per_rune)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-museum-dark-gray">Price Impact</span>
+                      <span
+                        className={`font-mono ${
+                          quote.price_impact_bps > 500
+                            ? 'text-red-600'
+                            : quote.price_impact_bps > 200
+                            ? 'text-yellow-600'
+                            : 'text-green-600'
+                        }`}
+                      >
+                        {(quote.price_impact_bps / 100).toFixed(2)}%
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-museum-dark-gray">Fee (0.3%)</span>
+                      <span className="font-mono text-museum-black">{formatIcp(quote.fee)}</span>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* Error Display */}
+                {error && (
+                  <div className="mt-4 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <p className="text-sm text-red-700">{error}</p>
+                  </div>
+                )}
+
+                {/* Trade Button */}
+                <div className="mt-6">
+                  {icpBalance === 0n && tradeMode === 'buy' ? (
+                    <ButtonPremium
+                      onClick={() => setShowDepositModal(true)}
+                      variant="gold"
+                      size="lg"
+                      className="w-full"
+                      icon={<Plus className="h-5 w-5" />}
+                    >
+                      Deposit ICP to Start Trading
+                    </ButtonPremium>
+                  ) : (
+                    <ButtonPremium
+                      onClick={handleTrade}
+                      disabled={!canTrade() || loading}
+                      variant="gold"
+                      size="lg"
+                      className="w-full"
+                      icon={
+                        loading ? (
+                          <Loader className="h-5 w-5 animate-spin" />
+                        ) : tradeMode === 'buy' ? (
+                          <ArrowUpRight className="h-5 w-5" />
+                        ) : (
+                          <ArrowDownRight className="h-5 w-5" />
+                        )
+                      }
+                    >
+                      {getButtonText()}
+                    </ButtonPremium>
+                  )}
+                </div>
+              </div>
+
+              {/* Pool Info */}
+              <div className="bg-museum-white border border-museum-light-gray rounded-2xl p-5">
+                <h3 className="font-serif text-lg font-bold text-museum-black mb-4">Pool Info</h3>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-museum-dark-gray mb-1">Price</p>
+                    <p className="font-mono font-bold text-museum-black">
+                      {formatIcp(selectedPool.price_per_rune)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-museum-dark-gray mb-1">Market Cap</p>
+                    <p className="font-mono font-bold text-museum-black">
+                      {formatIcp(selectedPool.market_cap)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-museum-dark-gray mb-1">Liquidity</p>
+                    <p className="font-mono font-bold text-museum-black">
+                      {formatIcp(selectedPool.icp_reserve)}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-museum-dark-gray mb-1">Trades</p>
+                    <p className="font-mono font-bold text-museum-black">
+                      {selectedPool.total_trades.toString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </>
           )}
         </motion.div>
       )}
 
-      {/* Pool Selector Modal */}
-      <AnimatePresence>
-        {showPoolSelector && (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4"
-            onClick={() => setShowPoolSelector(false)}
-          >
-            <motion.div
-              initial={{ opacity: 0, scale: 0.95, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.95, y: 20 }}
-              className="bg-museum-white rounded-2xl p-6 w-full max-w-md shadow-2xl max-h-[80vh] overflow-hidden"
-              onClick={e => e.stopPropagation()}
+      {/* Quick Access: Existing Pools */}
+      {!selectedRune && pools.length > 0 && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="bg-museum-white border-2 border-museum-light-gray rounded-2xl p-5"
+        >
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-serif text-lg font-bold text-museum-black">
+              Active Trading Pools
+            </h3>
+            <button
+              onClick={loadPools}
+              disabled={loadingPools}
+              className="p-2 hover:bg-museum-cream rounded-lg transition-colors"
             >
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="font-serif text-xl font-bold text-museum-black">Select Rune</h3>
-                <button
-                  onClick={() => setShowPoolSelector(false)}
-                  className="p-2 hover:bg-museum-cream rounded-lg"
-                >
-                  <X className="h-5 w-5 text-museum-dark-gray" />
-                </button>
-              </div>
+              <RefreshCw className={`h-4 w-4 ${loadingPools ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
+          <div className="space-y-2">
+            {pools.slice(0, 5).map((pool) => (
+              <button
+                key={pool.rune_id}
+                onClick={() => handleSelectPool(pool)}
+                className="w-full flex items-center gap-4 p-4 rounded-xl border border-museum-light-gray hover:border-gold-300 hover:bg-gold-50 transition-all"
+              >
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
+                  <span className="text-white font-bold text-sm">{pool.symbol.slice(0, 2)}</span>
+                </div>
+                <div className="flex-1 text-left">
+                  <p className="font-semibold text-museum-black">{pool.rune_name}</p>
+                  <p className="text-sm text-museum-dark-gray">{pool.symbol}</p>
+                </div>
+                <div className="text-right">
+                  <p className="font-mono text-sm text-museum-black">{formatIcp(pool.price_per_rune)}</p>
+                  <p className="text-xs text-museum-dark-gray">per rune</p>
+                </div>
+              </button>
+            ))}
+          </div>
+          {pools.length > 5 && (
+            <p className="text-center text-sm text-museum-dark-gray mt-4">
+              Showing {Math.min(5, pools.length)} of {pools.length} pools. Use search to find more.
+            </p>
+          )}
+        </motion.div>
+      )}
 
-              <p className="text-sm text-museum-dark-gray mb-4">
-                Choose a Virtual Rune to trade. Each rune has its own bonding curve pool.
-              </p>
-
-              <div className="space-y-2 overflow-y-auto max-h-[50vh]">
-                {loadingPools ? (
-                  <div className="flex items-center justify-center py-8">
-                    <Loader className="h-8 w-8 animate-spin text-gold-500" />
-                  </div>
-                ) : pools.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Coins className="h-12 w-12 text-museum-dark-gray mx-auto mb-3" />
-                    <p className="text-museum-dark-gray mb-4">No trading pools available</p>
-                    <Link href="/explorer">
-                      <ButtonPremium variant="gold" size="sm" icon={<Plus className="h-4 w-4" />}>
-                        Create a Rune
-                      </ButtonPremium>
-                    </Link>
-                  </div>
-                ) : (
-                  pools.map(pool => (
-                    <button
-                      key={pool.rune_id}
-                      onClick={() => {
-                        setSelectedPool(pool);
-                        setShowPoolSelector(false);
-                        setInputAmount('');
-                        setQuote(null);
-                      }}
-                      className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${
-                        selectedPool?.rune_id === pool.rune_id
-                          ? 'border-gold-400 bg-gold-50'
-                          : 'border-museum-light-gray hover:border-gold-200 hover:bg-museum-cream'
-                      }`}
-                    >
-                      <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                        <span className="text-white font-bold text-sm">{pool.symbol.slice(0, 2)}</span>
-                      </div>
-                      <div className="text-left flex-1">
-                        <p className="font-bold text-museum-black">{pool.rune_name}</p>
-                        <p className="text-sm text-museum-dark-gray">{pool.symbol}</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="font-mono text-sm text-museum-black">
-                          {formatIcp(pool.price_per_rune)}
-                        </p>
-                        <p className="text-xs text-museum-dark-gray">per rune</p>
-                      </div>
-                    </button>
-                  ))
-                )}
-              </div>
-            </motion.div>
-          </motion.div>
-        )}
-      </AnimatePresence>
+      {/* No Selection - Show Instructions */}
+      {!selectedRune && pools.length === 0 && !loadingPools && (
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-6 text-center"
+        >
+          <div className="w-16 h-16 rounded-full bg-blue-100 flex items-center justify-center mx-auto mb-4">
+            <Search className="h-8 w-8 text-blue-600" />
+          </div>
+          <h3 className="font-serif text-xl font-bold text-museum-black mb-2">
+            Search for a Rune to Trade
+          </h3>
+          <p className="text-museum-dark-gray mb-4 max-w-md mx-auto">
+            Use the search bar above to find Virtual Runes. If a rune doesn't have a trading pool yet,
+            the creator can create one to enable trading.
+          </p>
+          <Link href="/create">
+            <ButtonPremium variant="gold" size="sm" icon={<Plus className="h-4 w-4" />}>
+              Create New Virtual Rune
+            </ButtonPremium>
+          </Link>
+        </motion.div>
+      )}
 
       {/* Deposit Modal */}
       <AnimatePresence>
@@ -1357,7 +1308,7 @@ export default function TradePage() {
 
       {/* Create Pool Modal */}
       <AnimatePresence>
-        {showCreatePoolModal && pendingRune && (
+        {showCreatePoolModal && selectedRune && (
           <motion.div
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
@@ -1387,12 +1338,14 @@ export default function TradePage() {
                 <div className="bg-gradient-to-br from-gold-50 to-amber-50 border border-gold-200 rounded-xl p-4">
                   <div className="flex items-center gap-3">
                     <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gold-400 to-gold-600 flex items-center justify-center">
-                      <span className="text-white font-bold">{pendingRune.symbol.slice(0, 2)}</span>
+                      <span className="text-white font-bold">
+                        {selectedRune.symbol || selectedRune.rune_name.slice(0, 2)}
+                      </span>
                     </div>
                     <div>
-                      <p className="font-bold text-museum-black">{pendingRune.rune_name}</p>
+                      <p className="font-bold text-museum-black">{selectedRune.rune_name}</p>
                       <p className="text-sm text-museum-dark-gray">
-                        {pendingRune.symbol} • Supply: {pendingRune.total_supply.toLocaleString()}
+                        {selectedRune.symbol} &bull; Supply: {Number(selectedRune.premine).toLocaleString()}
                       </p>
                     </div>
                   </div>
@@ -1402,10 +1355,11 @@ export default function TradePage() {
                   <div className="flex items-start gap-3">
                     <Info className="h-5 w-5 text-blue-600 flex-shrink-0 mt-0.5" />
                     <div className="text-sm text-blue-800">
-                      <p className="font-semibold mb-1">Create a Trading Pool</p>
+                      <p className="font-semibold mb-1">Decentralized Pool Creation</p>
                       <p className="text-blue-700">
-                        This rune doesn&apos;t have a trading pool yet. As the creator, you can enable trading
-                        by providing initial liquidity.
+                        Anyone can create a trading pool by providing ICP and runes.
+                        You must own the runes you want to add as liquidity.
+                        The initial price is determined by the ratio of ICP to runes.
                       </p>
                     </div>
                   </div>
@@ -1424,7 +1378,7 @@ export default function TradePage() {
                       placeholder="1.0"
                       min="0.001"
                       step="0.1"
-                      className="w-full px-4 py-3 pr-16 bg-museum-cream rounded-xl border border-museum-light-gray focus:border-gold-400 focus:ring-2 focus:ring-gold-100 outline-none transition-all font-mono"
+                      className="w-full px-4 py-3 pr-16 bg-museum-cream rounded-xl border border-museum-light-gray focus:border-gold-400 focus:ring-2 focus:ring-gold-100 outline-none transition-all font-mono text-museum-black placeholder:text-museum-dark-gray [color-scheme:light]"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-museum-dark-gray font-semibold">
                       ICP
@@ -1445,10 +1399,10 @@ export default function TradePage() {
                       onChange={e => setCreatePoolRunes(e.target.value)}
                       placeholder="1000000"
                       min="1"
-                      className="w-full px-4 py-3 pr-24 bg-museum-cream rounded-xl border border-museum-light-gray focus:border-gold-400 focus:ring-2 focus:ring-gold-100 outline-none transition-all font-mono"
+                      className="w-full px-4 py-3 pr-24 bg-museum-cream rounded-xl border border-museum-light-gray focus:border-gold-400 focus:ring-2 focus:ring-gold-100 outline-none transition-all font-mono text-museum-black placeholder:text-museum-dark-gray [color-scheme:light]"
                     />
                     <span className="absolute right-4 top-1/2 -translate-y-1/2 text-museum-dark-gray font-semibold">
-                      {pendingRune.symbol}
+                      {selectedRune.symbol || 'RUNES'}
                     </span>
                   </div>
                 </div>
@@ -1457,7 +1411,7 @@ export default function TradePage() {
                 <div className="bg-museum-cream rounded-xl p-4">
                   <p className="text-sm text-museum-dark-gray mb-1">Starting Price</p>
                   <p className="font-mono font-bold text-museum-black">
-                    {(parseFloat(createPoolIcp || '0') / parseInt(createPoolRunes || '1') * 100000000).toFixed(8)} ICP per {pendingRune.symbol}
+                    {(parseFloat(createPoolIcp || '0') / parseInt(createPoolRunes || '1')).toFixed(8)} ICP per {selectedRune.symbol || 'rune'}
                   </p>
                   <p className="text-xs text-museum-dark-gray mt-1">
                     Price will adjust automatically based on trading activity

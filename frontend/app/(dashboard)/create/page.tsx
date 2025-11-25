@@ -278,7 +278,7 @@ function StepBasicInfo({ form, onNext, onBack }: StepProps) {
         <input
           {...register('rune_name')}
           placeholder="MYTOKEN or MY•TOKEN"
-          className={`w-full px-4 py-3 border-2 rounded-xl text-lg font-mono uppercase
+          className={`w-full px-4 py-3 border-2 rounded-xl text-lg font-mono uppercase [color-scheme:light]
             focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition-all
             ${errors.rune_name ? 'border-red-300 bg-red-50 text-red-900' : 'border-museum-light-gray hover:border-gold-200 bg-white text-museum-black'}`}
           onChange={(e) => {
@@ -304,7 +304,7 @@ function StepBasicInfo({ form, onNext, onBack }: StepProps) {
           {...register('symbol')}
           placeholder="T"
           maxLength={1}
-          className={`w-full px-4 py-3 border-2 rounded-xl text-2xl text-center font-mono uppercase
+          className={`w-full px-4 py-3 border-2 rounded-xl text-2xl text-center font-mono uppercase [color-scheme:light]
             focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition-all
             ${errors.symbol ? 'border-red-300 bg-red-50 text-red-900' : 'border-museum-light-gray hover:border-gold-200 bg-white text-museum-black'}`}
           onChange={(e) => {
@@ -402,7 +402,7 @@ function StepSupply({ form, onNext, onBack }: StepProps) {
           min={0}
           max={38}
           placeholder="0"
-          className={`w-full px-4 py-3 border-2 rounded-xl text-lg
+          className={`w-full px-4 py-3 border-2 rounded-xl text-lg [color-scheme:light]
             focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition-all
             ${errors.divisibility ? 'border-red-300 bg-red-50 text-red-900' : 'border-museum-light-gray hover:border-gold-200 bg-white text-museum-black'}`}
         />
@@ -422,7 +422,7 @@ function StepSupply({ form, onNext, onBack }: StepProps) {
         <input
           {...register('premine')}
           placeholder="1000000"
-          className={`w-full px-4 py-3 border-2 rounded-xl text-lg
+          className={`w-full px-4 py-3 border-2 rounded-xl text-lg [color-scheme:light]
             focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition-all
             ${errors.premine ? 'border-red-300 bg-red-50 text-red-900' : 'border-museum-light-gray hover:border-gold-200 bg-white text-museum-black'}`}
           onChange={(e) => {
@@ -542,7 +542,7 @@ function StepMintTerms({ form, onNext, onBack }: StepProps) {
             <input
               {...register('mint_amount')}
               placeholder="100"
-              className="w-full px-4 py-3 border-2 border-museum-light-gray rounded-xl
+              className="w-full px-4 py-3 border-2 border-museum-light-gray rounded-xl [color-scheme:light]
                 focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition-all
                 hover:border-gold-200 bg-white text-museum-black"
               onChange={(e) => {
@@ -564,7 +564,7 @@ function StepMintTerms({ form, onNext, onBack }: StepProps) {
             <input
               {...register('mint_cap')}
               placeholder="10000"
-              className="w-full px-4 py-3 border-2 border-museum-light-gray rounded-xl
+              className="w-full px-4 py-3 border-2 border-museum-light-gray rounded-xl [color-scheme:light]
                 focus:ring-2 focus:ring-gold-400 focus:border-gold-400 outline-none transition-all
                 hover:border-gold-200 bg-white text-museum-black"
               onChange={(e) => {
