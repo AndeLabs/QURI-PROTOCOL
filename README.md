@@ -63,16 +63,18 @@ sh -ci "$(curl -fsSL https://internetcomputer.org/install.sh)"
 cd backend && cargo build --target wasm32-unknown-unknown --release
 ```
 
-### Local Development
+### Development (Mainnet Only)
+
+> **Important:** QURI Protocol is developed directly on ICP mainnet. There is no local development or testnet (ICP playground expires in 20 minutes).
 
 ```bash
-# Start local replica
-dfx start --background --clean
+# Build canisters for mainnet
+cd backend && dfx build --network ic
 
-# Deploy canisters
-cd backend && dfx deploy
+# Deploy/upgrade to mainnet
+dfx canister install rune-engine --mode upgrade --network ic
 
-# Start frontend
+# Start frontend (connects to mainnet)
 cd frontend && npm install && npm run dev
 ```
 
@@ -102,16 +104,27 @@ cd frontend && npm install && npm run dev
 
 QURI Protocol includes a bonding curve AMM for trading Virtual Runes before they settle to Bitcoin:
 
+**Features:**
+- Instant trades with bonding curve pricing
+- Create trading pools with initial ICP/Rune liquidity
+- Graduation mechanism at 85 ICP market cap
+- 0.3% trading fee
+
 ```bash
-# Get trading pool count
-dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai get_trading_pool_count '()'
+# List trading pools (V2 API with stable storage)
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai list_trading_pools_v2 '(0 : nat64, 50 : nat64)'
+
+# Get buy quote (rune_id, icp_amount_e8s, slippage_bps)
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai get_buy_quote_v2 '("rune-id", 100000000 : nat64, 50 : nat64)'
+
+# Get sell quote (rune_id, rune_amount, slippage_bps)
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai get_sell_quote_v2 '("rune-id", 1000 : nat64, 50 : nat64)'
 
 # List all virtual runes
-dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai list_all_virtual_runes '(0, 10)'
-
-# Get buy quote (rune_id, amount, slippage_bps)
-dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai get_buy_quote '("rune-id", 1000, 100)'
+dfx canister --network ic call pkrpq-5qaaa-aaaah-aroda-cai list_all_virtual_runes '(0 : nat64, 10 : nat64)'
 ```
+
+> **Note:** ICP amounts are in e8s (1 ICP = 100,000,000 e8s). Slippage is in basis points (50 = 0.5%).
 
 ## API Examples
 
