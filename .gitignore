@@ -64,3 +64,4 @@ validate-nft-storage-key.sh
 
 # Documentation (local only, not for GitHub)
 /docs/
+.claude/
