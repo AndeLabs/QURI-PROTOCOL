@@ -479,7 +479,7 @@ impl EtchingOrchestrator {
     }
 
     /// Check if error should trigger rollback
-    fn should_rollback(&self, error: &EtchingError) -> bool {
+    pub(crate) fn should_rollback(&self, error: &EtchingError) -> bool {
         matches!(
             error,
             EtchingError::BroadcastFailed(_)
@@ -497,7 +497,7 @@ impl EtchingOrchestrator {
 
     /// Generate deterministic process ID for testing
     #[cfg(test)]
-    fn generate_process_id_for_test(seed: u64) -> ProcessId {
+    pub(crate) fn generate_process_id_for_test(seed: u64) -> ProcessId {
         ProcessId::from_seed(seed)
     }
 

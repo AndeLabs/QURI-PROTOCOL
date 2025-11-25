@@ -25,6 +25,9 @@ mod settlement;
 mod state;
 mod validators;
 
+#[cfg(test)]
+mod etching_flow_tests;
+
 use etching_flow::EtchingOrchestrator;
 use rbac::Role;
 

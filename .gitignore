@@ -61,3 +61,6 @@ deploy-fix.sh
 deploy-mainnet.sh
 quick-playground-deploy.sh
 validate-nft-storage-key.sh
+
+# Documentation (local only, not for GitHub)
+/docs/

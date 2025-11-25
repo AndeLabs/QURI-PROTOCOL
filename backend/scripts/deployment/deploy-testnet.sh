@@ -6,6 +6,9 @@
 #
 # Deployment rápido para testnet (testing y desarrollo).
 #
+# NOTA: Este script está DEPRECADO. Usa el script maestro:
+#   ./scripts/deploy.sh testnet
+#
 # ============================================================================
 
 set -e
@@ -14,7 +17,7 @@ echo "🧪 QURI Protocol - Testnet Deployment"
 echo "======================================"
 echo ""
 
-NETWORK="ic"  # or "playground" if using playground
+NETWORK="testnet"  # Using testnet network from dfx.json
 BITCOIN_CANISTER="ghsi2-tqaaa-aaaan-aaaca-cai"  # Bitcoin testnet integration
 
 echo "📦 Building canisters..."
